@@ -16,18 +16,21 @@
 		style.textContent = [
 			"html.mcast-guest,html.mcast-guest body{background:#0b0f16!important;}",
 			"html.mcast-guest #header,html.mcast-guest #mainmenu,html.mcast-guest #head1,html.mcast-guest #head1a,html.mcast-guest #head3,html.mcast-guest #head3a,html.mcast-guest #dropButton,html.mcast-guest #container-1,html.mcast-guest #container-2,html.mcast-guest #container-4,html.mcast-guest #container-5,html.mcast-guest #container-6,html.mcast-guest #container-7,html.mcast-guest #container-8,html.mcast-guest #container-9,html.mcast-guest #credits,html.mcast-guest #legal{display:none!important;}",
-			"html.mcast-guest #mcastJoining{position:fixed;inset:0;display:grid;place-items:center;color:#d7e3f3;font:500 16px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0;text-align:center;padding:24px;z-index:1;}",
+			"html.mcast-guest #mcastJoining{position:fixed;inset:0;display:grid;place-items:center;color:#d7e3f3;font:500 16px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0;text-align:center;padding:24px;z-index:1;pointer-events:none;}",
 			"html.mcast-guest .prompt,html.mcast-guest [role='dialog'],html.mcast-guest .modal,html.mcast-guest #passwordPrompt{z-index:10000!important;}"
 		].join("");
 		document.head.appendChild(style);
 		document.addEventListener("DOMContentLoaded", function () {
 			if (document.getElementById("mcastJoining")) {
+				startGuestJoinStatusMonitor();
 				return;
 			}
 			var status = document.createElement("div");
 			status.id = "mcastJoining";
+			status.setAttribute("aria-live", "polite");
 			status.textContent = "Joining secure MCast Studio room...";
 			document.body.appendChild(status);
+			startGuestJoinStatusMonitor();
 		});
 	}
 
@@ -95,6 +98,54 @@
 			}
 		});
 		return parts.join("&");
+	}
+
+	function startGuestJoinStatusMonitor() {
+		var startedAt = Date.now();
+		var interval = window.setInterval(function () {
+			if (removeGuestJoinStatusIfReady() || Date.now() - startedAt > 60000) {
+				window.clearInterval(interval);
+				removeGuestJoinStatus();
+			}
+		}, 500);
+	}
+
+	function removeGuestJoinStatusIfReady() {
+		var status = document.getElementById("mcastJoining");
+		if (!status) {
+			return true;
+		}
+		if (!document.body) {
+			return false;
+		}
+		return hasLiveGuestMedia();
+	}
+
+	function removeGuestJoinStatus() {
+		var status = document.getElementById("mcastJoining");
+		if (status && status.parentNode) {
+			status.parentNode.removeChild(status);
+		}
+	}
+
+	function hasLiveGuestMedia() {
+		var videos = document.querySelectorAll("video");
+		for (var index = 0; index < videos.length; index++) {
+			var video = videos[index];
+			if (video.readyState >= 2 && (video.videoWidth > 0 || video.videoHeight > 0)) {
+				return true;
+			}
+			var stream = video.srcObject;
+			if (stream && typeof stream.getTracks === "function") {
+				var tracks = stream.getTracks();
+				for (var trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+					if (tracks[trackIndex].readyState === "live") {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	function decryptToken(tokenValue) {
