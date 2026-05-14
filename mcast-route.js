@@ -2,8 +2,10 @@
 	"use strict";
 
 	var tokenPassphrase = "MCastStudio.VdoToken.v1.c7f1e4d2a0b84a53b9d6e2084f39a721";
-	var path = (window.location.pathname || "").replace(/\/+$/, "").toLowerCase();
-	var route = path.endsWith("/g") ? "guest" : path.endsWith("/vcall") ? "call" : "";
+	var shortInviteResolveUrl = "https://mcast-studio.web.app/api/vdoShortInviteResolve";
+	var rawPath = (window.location.pathname || "").replace(/\/+$/, "");
+	var path = rawPath.toLowerCase();
+	var route = path === "/g" || path.indexOf("/g/") === 0 ? "guest" : path.endsWith("/vcall") ? "call" : "";
 	if (!route) {
 		return;
 	}
@@ -38,8 +40,14 @@
 	var params = new URLSearchParams(search);
 	var decoded = "";
 	var token = params.get("t") || params.get("token") || "";
+	var shortCode = params.get("s") || params.get("code") || readShortInviteCodeFromPath(rawPath);
 	if (token) {
 		decoded = decryptToken(token);
+	} else if (shortCode) {
+		token = resolveShortInviteToken(shortCode);
+		if (token) {
+			decoded = decryptToken(token);
+		}
 	} else if (search.length > 1) {
 		decoded = search.substring(1);
 	}
@@ -98,6 +106,38 @@
 			}
 		});
 		return parts.join("&");
+	}
+
+	function readShortInviteCodeFromPath(currentPath) {
+		var match = (currentPath || "").match(/^\/g\/([A-Za-z0-9]{6,16})\/?$/);
+		return match ? match[1] : "";
+	}
+
+	function resolveShortInviteToken(code) {
+		if (!/^[A-Za-z0-9]{6,16}$/.test(code || "")) {
+			showInviteError("This MCast Studio invitation link is not valid.");
+			return "";
+		}
+
+		try {
+			var request = new XMLHttpRequest();
+			request.open("GET", shortInviteResolveUrl + "?code=" + encodeURIComponent(code), false);
+			request.setRequestHeader("Accept", "application/json");
+			request.send(null);
+			if (request.status < 200 || request.status >= 300) {
+				showInviteError(request.status === 410
+					? "This MCast Studio invitation link has expired."
+					: "This MCast Studio invitation link is not valid.");
+				return "";
+			}
+
+			var payload = JSON.parse(request.responseText || "{}");
+			return (payload.token || "").toString().trim();
+		} catch (error) {
+			console.error("MCast short invite resolve failed", error);
+			showInviteError("This MCast Studio invitation link could not be loaded.");
+			return "";
+		}
 	}
 
 	function startGuestJoinStatusMonitor() {
@@ -160,11 +200,25 @@
 			return text.replace(/^\?/, "");
 		} catch (error) {
 			console.error("MCast token decode failed", error);
-			document.addEventListener("DOMContentLoaded", function () {
-				document.body.innerHTML = "<div style=\"display:grid;place-items:center;min-height:100vh;background:#0b0f16;color:#f8d7da;font:500 16px system-ui;text-align:center;padding:24px;\">This MCast Studio invitation link is not valid.</div>";
-			});
+			showInviteError("This MCast Studio invitation link is not valid.");
 			return "";
 		}
+	}
+
+	function showInviteError(message) {
+		document.addEventListener("DOMContentLoaded", function () {
+			document.body.innerHTML = "<div style=\"display:grid;place-items:center;min-height:100vh;background:#0b0f16;color:#f8d7da;font:500 16px system-ui;text-align:center;padding:24px;\">" +
+				escapeHtml(message) +
+				"</div>";
+		});
+	}
+
+	function escapeHtml(value) {
+		return (value || "").toString()
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
 	}
 
 	function fromBase64Url(value) {

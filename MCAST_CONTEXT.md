@@ -14,6 +14,7 @@ Routes:
 
 Token handling:
 - MCast desktop links use `?t=v1...`.
+- MCast desktop can also create short guest links as `/g/?s=CODE`; `mcast-route.js` resolves `CODE` via `https://mcast-studio.web.app/api/vdoShortInviteResolve` and then uses the returned encrypted `t` token.
 - `mcast-route.js` decodes the token with the same CryptoJS/OpenSSL AES-CBC passphrase used in the desktop app.
 - The decoded query is assigned to `session.decrypted` before `lib.js` runs, so the upstream VDO parser and startup flow still own room joining.
 - This token is link packing and casual tamper resistance, not strong secrecy, because the decode passphrase is present in client-side JavaScript.
