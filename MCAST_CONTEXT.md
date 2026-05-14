@@ -20,3 +20,5 @@ Guest flow:
 Source/host flow:
 - Keep director links and browser-source capture links on `/vcall/`.
 - Do not route clean output, source capture, host/director, or return-audio windows through `/g/`.
+- Desktop director links use `mcastbridge`; this route forces `showdirector`, `mutespeaker`, `autostart`, and `quality=0`.
+- Desktop source receiver links use `mcastsource` and/or `cbguestkey`; this route forces clean output/viewer flags, mute/autostart, and `quality=0` so the desktop app can capture full-quality guest media from the single director WebView bridge.

@@ -58,6 +58,22 @@
 			setFlag(routedParams, "autostart");
 			setFlag(routedParams, "nosettings");
 			setFlag(routedParams, "mcastguest");
+		} else if (currentRoute === "call") {
+			if (routedParams.has("mcastbridge")) {
+				setFlag(routedParams, "showdirector");
+				setFlag(routedParams, "mutespeaker");
+				setFlag(routedParams, "autostart");
+				routedParams.set("quality", "0");
+			}
+			if (routedParams.has("mcastsource") || routedParams.has("cbguestkey")) {
+				setFlag(routedParams, "cleanoutput");
+				setFlag(routedParams, "cleanviewer");
+				setFlag(routedParams, "transparent");
+				setFlag(routedParams, "mutespeaker");
+				setFlag(routedParams, "autostart");
+				routedParams.set("mcastsource", "1");
+				routedParams.set("quality", "0");
+			}
 		}
 		return serializeParams(routedParams);
 	}
