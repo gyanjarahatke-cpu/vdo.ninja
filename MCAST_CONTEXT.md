@@ -14,10 +14,11 @@ Routes:
 
 Token handling:
 - MCast desktop links use `?t=v1...`.
-- MCast desktop can also create short guest links as `/g/?s=CODE`; `mcast-route.js` resolves `CODE` via `https://mcast-studio.web.app/api/vdoShortInviteResolve` and then uses the returned encrypted `t` token.
-- `mcast-route.js` decodes the token with the same CryptoJS/OpenSSL AES-CBC passphrase used in the desktop app.
+- MCast desktop creates short guest links as `/g/?s=CODE`; `mcast-route.js` resolves `CODE` via `https://mcast-studio.web.app/api/vdoShortInviteResolve` and uses the returned decoded query.
+- MCast desktop creates protected room/director/source links as `/vcall/?r=CODE`; `mcast-route.js` resolves `CODE` via `https://mcast-studio.web.app/api/vdoRoomTicketResolve`.
+- `/vcall/` must not accept direct `?t=` or raw room query strings. The room token is decrypted and validated only in Firebase Functions with the `VDO_TOKEN_PASSPHRASE` secret.
 - The decoded query is assigned to `session.decrypted` before `lib.js` runs, so the upstream VDO parser and startup flow still own room joining.
-- This token is link packing and casual tamper resistance, not strong secrecy, because the decode passphrase is present in client-side JavaScript.
+- Guest direct `?t=` links are resolved by Firebase through `https://mcast-studio.web.app/api/vdoTokenResolve`; the frontend must not contain the VDO token passphrase.
 
 Guest flow:
 - `/g/` adds `webcam`, `autostart`, `nosettings`, and `mcastguest` defaults.

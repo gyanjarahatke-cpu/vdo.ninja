@@ -1,8 +1,9 @@
 (function () {
 	"use strict";
 
-	var tokenPassphrase = "MCastStudio.VdoToken.v1.c7f1e4d2a0b84a53b9d6e2084f39a721";
 	var shortInviteResolveUrl = "https://mcast-studio.web.app/api/vdoShortInviteResolve";
+	var tokenResolveUrl = "https://mcast-studio.web.app/api/vdoTokenResolve";
+	var roomTicketResolveUrl = "https://mcast-studio.web.app/api/vdoRoomTicketResolve";
 	var rawPath = (window.location.pathname || "").replace(/\/+$/, "");
 	var path = rawPath.toLowerCase();
 	var route = path === "/g" || path.indexOf("/g/") === 0 ? "guest" : path.endsWith("/vcall") ? "call" : "";
@@ -40,16 +41,22 @@
 	var params = new URLSearchParams(search);
 	var decoded = "";
 	var token = params.get("t") || params.get("token") || "";
-	var shortCode = params.get("s") || params.get("code") || readShortInviteCodeFromPath(rawPath);
+	var shortCode = route === "call"
+		? params.get("r") || params.get("s") || params.get("code")
+		: params.get("s") || params.get("code") || readShortInviteCodeFromPath(rawPath);
 	if (token) {
-		decoded = decryptToken(token);
-	} else if (shortCode) {
-		token = resolveShortInviteToken(shortCode);
-		if (token) {
-			decoded = decryptToken(token);
+		if (route === "call") {
+			showInviteError("This MCast Studio room link is not authorized.");
+			return;
 		}
-	} else if (search.length > 1) {
+		decoded = resolvePackedToken(token, route);
+	} else if (shortCode) {
+		decoded = resolveStoredRoute(shortCode, route);
+	} else if (route === "guest" && search.length > 1) {
 		decoded = search.substring(1);
+	} else if (route === "call") {
+		showInviteError("This MCast Studio room link is not authorized.");
+		return;
 	}
 
 	if (!decoded) {
@@ -113,7 +120,7 @@
 		return match ? match[1] : "";
 	}
 
-	function resolveShortInviteToken(code) {
+	function resolveStoredRoute(code, currentRoute) {
 		if (!/^[A-Za-z0-9]{6,16}$/.test(code || "")) {
 			showInviteError("This MCast Studio invitation link is not valid.");
 			return "";
@@ -121,21 +128,43 @@
 
 		try {
 			var request = new XMLHttpRequest();
-			request.open("GET", shortInviteResolveUrl + "?code=" + encodeURIComponent(code), false);
+			var endpoint = currentRoute === "call" ? roomTicketResolveUrl : shortInviteResolveUrl;
+			request.open("GET", endpoint + "?code=" + encodeURIComponent(code), false);
 			request.setRequestHeader("Accept", "application/json");
 			request.send(null);
 			if (request.status < 200 || request.status >= 300) {
 				showInviteError(request.status === 410
-					? "This MCast Studio invitation link has expired."
-					: "This MCast Studio invitation link is not valid.");
+					? "This MCast Studio link has expired."
+					: "This MCast Studio link is not valid.");
 				return "";
 			}
 
 			var payload = JSON.parse(request.responseText || "{}");
-			return (payload.token || "").toString().trim();
+			return (payload.query || "").toString().trim();
 		} catch (error) {
-			console.error("MCast short invite resolve failed", error);
-			showInviteError("This MCast Studio invitation link could not be loaded.");
+			console.error("MCast route resolve failed", error);
+			showInviteError("This MCast Studio link could not be loaded.");
+			return "";
+		}
+	}
+
+	function resolvePackedToken(tokenValue, currentRoute) {
+		try {
+			var request = new XMLHttpRequest();
+			request.open("POST", tokenResolveUrl, false);
+			request.setRequestHeader("Accept", "application/json");
+			request.setRequestHeader("Content-Type", "application/json");
+			request.send(JSON.stringify({ token: tokenValue, route: currentRoute }));
+			if (request.status < 200 || request.status >= 300) {
+				showInviteError("This MCast Studio link is not valid.");
+				return "";
+			}
+
+			var payload = JSON.parse(request.responseText || "{}");
+			return (payload.query || "").toString().trim();
+		} catch (error) {
+			console.error("MCast packed route resolve failed", error);
+			showInviteError("This MCast Studio link could not be loaded.");
 			return "";
 		}
 	}
@@ -188,23 +217,6 @@
 		return false;
 	}
 
-	function decryptToken(tokenValue) {
-		try {
-			var payload = tokenValue.indexOf("v1.") === 0 ? tokenValue.substring(3) : tokenValue;
-			payload = fromBase64Url(payload);
-			var bytes = CryptoJS.AES.decrypt(payload, tokenPassphrase);
-			var text = bytes.toString(CryptoJS.enc.Utf8);
-			if (!text) {
-				throw new Error("empty token payload");
-			}
-			return text.replace(/^\?/, "");
-		} catch (error) {
-			console.error("MCast token decode failed", error);
-			showInviteError("This MCast Studio invitation link is not valid.");
-			return "";
-		}
-	}
-
 	function showInviteError(message) {
 		document.addEventListener("DOMContentLoaded", function () {
 			document.body.innerHTML = "<div style=\"display:grid;place-items:center;min-height:100vh;background:#0b0f16;color:#f8d7da;font:500 16px system-ui;text-align:center;padding:24px;\">" +
@@ -221,11 +233,4 @@
 			.replace(/"/g, "&quot;");
 	}
 
-	function fromBase64Url(value) {
-		var base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-		while (base64.length % 4) {
-			base64 += "=";
-		}
-		return base64;
-	}
 })();
