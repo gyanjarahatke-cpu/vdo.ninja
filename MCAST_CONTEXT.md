@@ -2,6 +2,11 @@
 
 This fork is deployed for MCast Studio guest calls at `https://vn.gjhlab.com/`.
 
+Upstream sync policy:
+- This repository is a GitHub fork of `steveseguin/vdo.ninja`, but upstream changes must not be auto-merged or auto-deployed.
+- Keep GitHub Actions free of scheduled upstream-sync jobs. Pull upstream only when the MCast team intentionally decides to update the fork.
+- Local checkout should normally have only `origin`; add an `upstream` remote temporarily only for an intentional sync/review.
+
 Routes:
 - `/` is intentionally a redirect-only page to `https://gjhlab.com/`.
 - `/g/` is the human guest invitation route.
