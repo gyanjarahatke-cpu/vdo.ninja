@@ -171,9 +171,11 @@
 			"html.mcast-guest .mcast-join-mode{display:inline-flex;align-items:center;gap:7px;max-width:46%;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.07);color:#e8edf5;font-size:12px;font-weight:720;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-join-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16);flex:0 0 auto;}",
 			"html.mcast-guest .mcast-preview-stage{position:absolute;inset:72px 18px 104px 18px;display:grid;place-items:center;border-radius:8px;background:#0b0d10;overflow:hidden;}",
+			"html.mcast-guest .mcast-local-video{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0!important;object-fit:cover!important;background:#050607!important;transform:none!important;resize:none!important;pointer-events:none!important;}",
 			"html.mcast-guest .mcast-preview-avatar{display:grid;place-items:center;width:118px;height:118px;border-radius:50%;background:#2a3038;color:#d7dde7;font-size:42px;font-weight:760;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}",
 			"html.mcast-guest .mcast-preview-label{position:absolute;left:14px;bottom:12px;max-width:calc(100% - 28px);padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.62);color:#f8fafc;font-size:12px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-preview-off{position:absolute;inset:0;display:none;place-items:center;background:#0b0d10;color:#a8b3c2;font-size:13px;font-weight:680;text-align:center;padding:24px;}",
+			"html.mcast-guest .mcast-preview-stage.has-video .mcast-preview-avatar,html.mcast-guest .mcast-preview-stage.has-video .mcast-preview-off{display:none!important;}",
 			"html.mcast-guest #mcastJoining.mcast-video-off .mcast-preview-off{display:grid;}",
 			"html.mcast-guest .mcast-device-row{position:relative;z-index:1;display:flex;justify-content:center;gap:14px;margin-top:auto;}",
 			"html.mcast-guest .mcast-device-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:128px;height:42px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:#2a2f36;color:#f8fafc;font-size:13px;font-weight:720;cursor:pointer;}",
@@ -197,6 +199,18 @@
 			"html.mcast-guest .mcast-join-spinner{width:15px;height:15px;border-radius:50%;border:2px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:mcastSpin .9s linear infinite;flex:0 0 auto;}",
 			"html.mcast-guest .mcast-join-footer{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;}",
 			"html.mcast-guest .mcast-terms{margin-top:18px;color:#6b7280;font-size:11px;line-height:1.45;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room{display:block;padding:0;background:#050607;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;background:#050607;box-shadow:none;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-preview{min-height:100dvh;padding:16px;background:#050607;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-preview-stage{inset:0;border-radius:0;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-topbar{position:relative;z-index:3;padding:0;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-row{position:absolute;left:50%;bottom:18px;z-index:4;transform:translateX(-50%);margin:0;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,6,7,.58);backdrop-filter:blur(12px);}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button{min-width:44px;width:44px;height:44px;padding:0;border-radius:50%;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button span:not(.mcast-device-icon){display:none;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-form{position:absolute;right:16px;bottom:18px;z-index:3;width:min(360px,calc(100% - 32px));padding:0;background:transparent;color:#f8fafc;pointer-events:none;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-heading,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-message,html.mcast-guest #mcastJoining.mcast-in-room .mcast-field,html.mcast-guest #mcastJoining.mcast-in-room .mcast-check-row,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-action,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-footer,html.mcast-guest #mcastJoining.mcast-in-room .mcast-terms{display:none!important;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-status{margin:0;padding:9px 11px;border-color:rgba(255,255,255,.14);background:rgba(5,6,7,.58);color:#f8fafc;box-shadow:0 10px 24px rgba(0,0,0,.25);backdrop-filter:blur(12px);}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-spinner{display:none;}",
 			"html.mcast-guest .prompt,html.mcast-guest [role='dialog'],html.mcast-guest .modal,html.mcast-guest #passwordPrompt{z-index:10000!important;}",
 			"@keyframes mcastSpin{to{transform:rotate(360deg);}}",
 			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px 14px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{gap:10px;}html.mcast-guest .mcast-device-button{min-width:116px;height:40px;font-size:12px;}}",
@@ -463,6 +477,7 @@
 			try {
 				setShellText(shell, "[data-mcast-status]", "Joining room...");
 				publishWebcam(false, !!miconly);
+				enterGuestRoomShell(shell, miconly);
 				applyGuestMediaPreferencesLater();
 				window.setTimeout(function () {
 					setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
@@ -484,6 +499,111 @@
 		window.setTimeout(function () {
 			waitForNativeWebcamReadyAndPublish(shell, miconly, attempt + 1);
 		}, 250);
+	}
+
+	function enterGuestRoomShell(shell, miconly) {
+		if (!shell) {
+			return;
+		}
+		shell.classList.add("mcast-in-room");
+		shell.classList.toggle("mcast-video-off", !!miconly || !guestJoinPreferences.video);
+		setShellText(shell, "[data-mcast-status]", "Connected");
+		lockNativeGuestChrome();
+		startLocalVideoMountMonitor(shell);
+	}
+
+	function lockNativeGuestChrome() {
+		try {
+			document.documentElement.classList.add("mcast-room-active");
+			document.body.classList.add("mcast-room-active");
+			document.body.style.overflow = "hidden";
+			document.body.style.position = "fixed";
+			document.body.style.inset = "0";
+			document.body.style.width = "100%";
+		} catch (error) {
+			console.warn("MCast could not lock native chrome", error);
+		}
+	}
+
+	function startLocalVideoMountMonitor(shell) {
+		var attempts = 0;
+		var timer = window.setInterval(function () {
+			attempts++;
+			if (mountLocalGuestVideo(shell) || attempts >= 80) {
+				window.clearInterval(timer);
+			}
+		}, 250);
+	}
+
+	function mountLocalGuestVideo(shell) {
+		if (!shell || !guestJoinPreferences.video) {
+			return true;
+		}
+		var stage = shell.querySelector(".mcast-preview-stage");
+		if (!stage) {
+			return false;
+		}
+		var video = findLocalGuestVideoElement();
+		if (!video) {
+			return false;
+		}
+		video.classList.add("mcast-local-video");
+		video.muted = true;
+		video.autoplay = true;
+		video.controls = false;
+		video.playsInline = true;
+		video.setAttribute("playsinline", "");
+		video.removeAttribute("draggable");
+		if (video.parentNode !== stage) {
+			stage.appendChild(video);
+		}
+		stage.classList.add("has-video");
+		try {
+			var playResult = video.play();
+			if (playResult && typeof playResult.catch === "function") {
+				playResult.catch(function () {});
+			}
+		} catch (error) {
+			console.warn("MCast local video play failed", error);
+		}
+		return true;
+	}
+
+	function findLocalGuestVideoElement() {
+		if (typeof session !== "undefined" && session.videoElement && isUsableLocalVideo(session.videoElement)) {
+			return session.videoElement;
+		}
+		var preferredIds = ["videosource", "previewWebcam"];
+		for (var preferredIndex = 0; preferredIndex < preferredIds.length; preferredIndex++) {
+			var preferred = document.getElementById(preferredIds[preferredIndex]);
+			if (isUsableLocalVideo(preferred)) {
+				return preferred;
+			}
+		}
+		var videos = document.querySelectorAll("video");
+		for (var index = 0; index < videos.length; index++) {
+			if (isUsableLocalVideo(videos[index])) {
+				return videos[index];
+			}
+		}
+		return null;
+	}
+
+	function isUsableLocalVideo(video) {
+		if (!video || video.closest("#mcastJoining") && video.classList.contains("mcast-local-video")) {
+			return !!video;
+		}
+		var stream = video.srcObject;
+		if (!stream || typeof stream.getTracks !== "function") {
+			return false;
+		}
+		var tracks = stream.getTracks();
+		for (var index = 0; index < tracks.length; index++) {
+			if (tracks[index].readyState === "live") {
+				return true;
+			}
+		}
+		return video.readyState >= 2 && (video.videoWidth > 0 || video.videoHeight > 0);
 	}
 
 	function resetGuestJoinButton(shell) {
