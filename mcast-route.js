@@ -10,29 +10,22 @@
 	if (!route) {
 		return;
 	}
+	var guestJoinPreferences = {
+		audio: readGuestPreference("audio", true),
+		video: readGuestPreference("video", true),
+		joined: false
+	};
 
 	document.documentElement.classList.add("mcast-route");
 	document.documentElement.classList.add(route === "guest" ? "mcast-guest" : "mcast-vcall");
 
 	if (route === "guest") {
-		var style = document.createElement("style");
-		style.textContent = [
-			"html.mcast-guest,html.mcast-guest body{background:#0b0f16!important;}",
-			"html.mcast-guest #header,html.mcast-guest #mainmenu,html.mcast-guest #head1,html.mcast-guest #head1a,html.mcast-guest #head3,html.mcast-guest #head3a,html.mcast-guest #dropButton,html.mcast-guest #container-1,html.mcast-guest #container-2,html.mcast-guest #container-4,html.mcast-guest #container-5,html.mcast-guest #container-6,html.mcast-guest #container-7,html.mcast-guest #container-8,html.mcast-guest #container-9,html.mcast-guest #credits,html.mcast-guest #legal{display:none!important;}",
-			"html.mcast-guest #mcastJoining{position:fixed;inset:0;display:grid;place-items:center;color:#d7e3f3;font:500 16px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0;text-align:center;padding:24px;z-index:1;pointer-events:none;}",
-			"html.mcast-guest .prompt,html.mcast-guest [role='dialog'],html.mcast-guest .modal,html.mcast-guest #passwordPrompt{z-index:10000!important;}"
-		].join("");
-		document.head.appendChild(style);
+		installGuestShellStyles();
 		document.addEventListener("DOMContentLoaded", function () {
-			if (document.getElementById("mcastJoining")) {
-				startGuestJoinStatusMonitor();
-				return;
+			ensureGuestJoinShell();
+			if (window.MCastRoute) {
+				updateGuestJoinStatus(window.MCastRoute.mode, window.MCastRoute.state);
 			}
-			var status = document.createElement("div");
-			status.id = "mcastJoining";
-			status.setAttribute("aria-live", "polite");
-			status.textContent = "Joining secure MCast Studio room...";
-			document.body.appendChild(status);
 			startGuestJoinStatusMonitor();
 		});
 	}
@@ -64,6 +57,7 @@
 	}
 
 	decoded = applyRouteDefaults(decoded, route);
+	applyRouteMetadata(decoded, route);
 	if (typeof session !== "undefined") {
 		session.decrypted = "?" + decoded.replace(/^\?/, "");
 		session.nohistory = true;
@@ -73,9 +67,13 @@
 		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
 		if (currentRoute === "guest") {
 			setFlag(routedParams, "webcam");
-			setFlag(routedParams, "autostart");
 			setFlag(routedParams, "nosettings");
 			setFlag(routedParams, "mcastguest");
+			setFlag(routedParams, "mcastprejoin");
+			if (routedParams.has("mcastautojoin")) {
+				setFlag(routedParams, "autostart");
+			}
+			applyStoredGuestIdentity(routedParams);
 		} else if (currentRoute === "call") {
 			if (routedParams.has("mcastbridge")) {
 				setFlag(routedParams, "showdirector");
@@ -90,10 +88,493 @@
 				setFlag(routedParams, "mutespeaker");
 				setFlag(routedParams, "autostart");
 				routedParams.set("mcastsource", "1");
-				routedParams.set("quality", "0");
+				if (!routedParams.has("quality")) {
+					routedParams.set("quality", routedParams.get("mcastrouting") === "low_bitrate" ? "2" : "0");
+				}
 			}
 		}
 		return serializeParams(routedParams);
+	}
+
+	function applyRouteMetadata(query, currentRoute) {
+		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
+		var mode = normalizeRouteToken(routedParams.get("mcastmode") || "stream_guest", "stream_guest");
+		var role = normalizeRouteToken(routedParams.get("mcastrole") || (currentRoute === "guest" ? "participant" : "source"), "participant");
+		var state = normalizeRouteToken(routedParams.get("mcaststate") || "backstage", "backstage");
+		var routing = normalizeRouteToken(routedParams.get("mcastrouting") || "low_bitrate", "low_bitrate");
+		var root = document.documentElement;
+		root.classList.add("mcast-mode-" + mode);
+		root.classList.add("mcast-role-" + role);
+		root.classList.add("mcast-state-" + state);
+		root.classList.add("mcast-routing-" + routing);
+		window.MCastRoute = {
+			route: currentRoute,
+			mode: mode,
+			role: role,
+			state: state,
+			routing: routing
+		};
+		updateRouteTitle(mode, role);
+		updateGuestJoinStatus(mode, state);
+	}
+
+	function normalizeRouteToken(value, fallback) {
+		var normalized = (value || "").toString().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+		return normalized || fallback;
+	}
+
+	function updateRouteTitle(mode, role) {
+		var modeTitle = mode.replace(/_/g, " ").replace(/\b\w/g, function (match) {
+			return match.toUpperCase();
+		});
+		if (role === "participant") {
+			document.title = "MCast Studio " + modeTitle;
+		}
+	}
+
+	function installGuestShellStyles() {
+		if (document.getElementById("mcastGuestShellStyles")) {
+			return;
+		}
+
+		var style = document.createElement("style");
+		style.id = "mcastGuestShellStyles";
+		style.textContent = [
+			"html.mcast-guest,html.mcast-guest body{background:#111315!important;min-height:100%;}",
+			"html.mcast-guest body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;letter-spacing:0!important;overflow:hidden!important;}",
+			"html.mcast-guest #header,html.mcast-guest #mainmenu,html.mcast-guest #head1,html.mcast-guest #head1a,html.mcast-guest #head3,html.mcast-guest #head3a,html.mcast-guest #dropButton,html.mcast-guest #container-1,html.mcast-guest #container-2,html.mcast-guest #container-4,html.mcast-guest #container-5,html.mcast-guest #container-6,html.mcast-guest #container-7,html.mcast-guest #container-8,html.mcast-guest #container-9,html.mcast-guest #credits,html.mcast-guest #legal{display:none!important;}",
+			"html.mcast-guest #mcastJoining{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;color:#eef2f7;background:#111315;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:auto;}",
+			"html.mcast-guest #mcastJoining.mcast-ready{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility .22s ease;}",
+			"html.mcast-guest .mcast-join-panel{width:min(1060px,100%);min-height:min(720px,calc(100dvh - 32px));display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);overflow:hidden;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#1a1d21;box-shadow:0 22px 70px rgba(0,0,0,.34);}",
+			"html.mcast-guest .mcast-join-preview{position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:420px;background:#1b1f25;padding:18px;}",
+			"html.mcast-guest .mcast-join-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#f8fafc;min-width:0;}",
+			"html.mcast-guest .mcast-join-brand{display:flex;align-items:center;gap:10px;min-width:0;}",
+			"html.mcast-guest .mcast-join-mark{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:#2563eb;color:#fff;font-weight:800;font-size:13px;flex:0 0 auto;}",
+			"html.mcast-guest .mcast-join-brand-title{font-size:14px;font-weight:760;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-join-brand-subtitle{margin-top:2px;color:#a8b3c2;font-size:12px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-join-mode{display:inline-flex;align-items:center;gap:7px;max-width:46%;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.07);color:#e8edf5;font-size:12px;font-weight:720;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-join-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16);flex:0 0 auto;}",
+			"html.mcast-guest .mcast-preview-stage{position:absolute;inset:72px 18px 104px 18px;display:grid;place-items:center;border-radius:8px;background:#0b0d10;overflow:hidden;}",
+			"html.mcast-guest .mcast-preview-avatar{display:grid;place-items:center;width:118px;height:118px;border-radius:50%;background:#2a3038;color:#d7dde7;font-size:42px;font-weight:760;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}",
+			"html.mcast-guest .mcast-preview-label{position:absolute;left:14px;bottom:12px;max-width:calc(100% - 28px);padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.62);color:#f8fafc;font-size:12px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-preview-off{position:absolute;inset:0;display:none;place-items:center;background:#0b0d10;color:#a8b3c2;font-size:13px;font-weight:680;text-align:center;padding:24px;}",
+			"html.mcast-guest #mcastJoining.mcast-video-off .mcast-preview-off{display:grid;}",
+			"html.mcast-guest .mcast-device-row{position:relative;z-index:1;display:flex;justify-content:center;gap:14px;margin-top:auto;}",
+			"html.mcast-guest .mcast-device-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:128px;height:42px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:#2a2f36;color:#f8fafc;font-size:13px;font-weight:720;cursor:pointer;}",
+			"html.mcast-guest .mcast-device-button:hover{background:#343b44;}",
+			"html.mcast-guest .mcast-device-button.is-off{background:#b91c1c;border-color:#dc2626;color:#fff;}",
+			"html.mcast-guest .mcast-device-icon{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.12);font-size:11px;font-weight:800;}",
+			"html.mcast-guest .mcast-join-form{display:flex;flex-direction:column;justify-content:center;background:#f7f8fa;color:#1f2937;padding:34px 30px;}",
+			"html.mcast-guest .mcast-join-heading{color:#111827;font-size:26px;line-height:1.18;font-weight:780;margin:0 0 10px 0;}",
+			"html.mcast-guest .mcast-join-message{color:#4b5563;font-size:14px;line-height:1.52;margin:0 0 24px 0;}",
+			"html.mcast-guest .mcast-field{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}",
+			"html.mcast-guest .mcast-field-label{font-size:12px;font-weight:760;color:#374151;}",
+			"html.mcast-guest .mcast-name-input{height:44px;border:1px solid #cfd5dd;border-radius:6px;background:#fff;color:#111827;font:650 15px Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:0 12px;outline:none;}",
+			"html.mcast-guest .mcast-name-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.14);}",
+			"html.mcast-guest .mcast-check-row{display:flex;align-items:center;gap:9px;color:#4b5563;font-size:13px;font-weight:620;margin:2px 0 18px 0;}",
+			"html.mcast-guest .mcast-check-row input{width:16px;height:16px;accent-color:#2563eb;}",
+			"html.mcast-guest .mcast-join-action{height:46px;border:0;border-radius:6px;background:#2563eb;color:#fff;font-size:15px;font-weight:780;cursor:pointer;}",
+			"html.mcast-guest .mcast-join-action:hover{background:#1d4ed8;}",
+			"html.mcast-guest .mcast-join-action:disabled{opacity:.65;cursor:default;}",
+			"html.mcast-guest .mcast-join-status{display:flex;align-items:center;gap:10px;margin-top:16px;padding:11px 12px;border:1px solid #dde3ea;border-radius:6px;background:#fff;color:#334155;font-size:13px;font-weight:650;}",
+			"html.mcast-guest .mcast-join-spinner{width:15px;height:15px;border-radius:50%;border:2px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:mcastSpin .9s linear infinite;flex:0 0 auto;}",
+			"html.mcast-guest .mcast-join-footer{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;}",
+			"html.mcast-guest .mcast-terms{margin-top:18px;color:#6b7280;font-size:11px;line-height:1.45;}",
+			"html.mcast-guest .prompt,html.mcast-guest [role='dialog'],html.mcast-guest .modal,html.mcast-guest #passwordPrompt{z-index:10000!important;}",
+			"@keyframes mcastSpin{to{transform:rotate(360deg);}}",
+			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px 14px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{gap:10px;}html.mcast-guest .mcast-device-button{min-width:116px;height:40px;font-size:12px;}}",
+			"@media (orientation:landscape) and (max-height:540px){html.mcast-guest #mcastJoining{padding:8px;}html.mcast-guest .mcast-join-panel{height:calc(100dvh - 16px);min-height:0;grid-template-columns:minmax(0,1fr) 360px;}html.mcast-guest .mcast-join-preview{min-height:0;padding:12px;}html.mcast-guest .mcast-preview-stage{inset:58px 12px 72px 12px;}html.mcast-guest .mcast-preview-avatar{width:88px;height:88px;font-size:32px;}html.mcast-guest .mcast-join-form{padding:20px;}html.mcast-guest .mcast-join-heading{font-size:21px;margin-bottom:7px;}html.mcast-guest .mcast-join-message{font-size:13px;margin-bottom:14px;}html.mcast-guest .mcast-device-button{height:38px;min-width:112px;}html.mcast-guest .mcast-terms,html.mcast-guest .mcast-join-footer{display:none;}}",
+			"@media (max-width:380px){html.mcast-guest .mcast-device-row{gap:8px;}html.mcast-guest .mcast-device-button{min-width:0;flex:1;padding:0 10px;}html.mcast-guest .mcast-join-mode{max-width:42%;}html.mcast-guest .mcast-join-heading{font-size:22px;}}"
+		].join("");
+		document.head.appendChild(style);
+	}
+
+	function ensureGuestJoinShell() {
+		if (route !== "guest") {
+			return null;
+		}
+
+		var existing = document.getElementById("mcastJoining");
+		if (existing) {
+			return existing;
+		}
+
+		var shell = document.createElement("div");
+		shell.id = "mcastJoining";
+		shell.setAttribute("aria-live", "polite");
+		shell.innerHTML = [
+			"<section class=\"mcast-join-panel\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"mcastJoinHeading\">",
+			"<div class=\"mcast-join-preview\">",
+			"<div class=\"mcast-join-topbar\">",
+			"<div class=\"mcast-join-brand\"><div class=\"mcast-join-mark\">MC</div><div><div class=\"mcast-join-brand-title\">MCast Studio</div><div class=\"mcast-join-brand-subtitle\">Remote session</div></div></div>",
+			"<div class=\"mcast-join-mode\"><span class=\"mcast-join-dot\"></span><span data-mcast-mode>Secure room</span></div>",
+			"</div>",
+			"<div class=\"mcast-preview-stage\"><div class=\"mcast-preview-avatar\" data-mcast-avatar>G</div><div class=\"mcast-preview-off\">Camera is off</div><div class=\"mcast-preview-label\" data-mcast-preview-name>Guest</div></div>",
+			"<div class=\"mcast-device-row\" aria-label=\"Device controls\">",
+			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-audio-toggle><span class=\"mcast-device-icon\">M</span><span data-mcast-audio-label>Mute</span></button>",
+			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-video-toggle><span class=\"mcast-device-icon\">V</span><span data-mcast-video-label>Stop Video</span></button>",
+			"</div>",
+			"</div>",
+			"<div class=\"mcast-join-form\">",
+			"<h1 id=\"mcastJoinHeading\" class=\"mcast-join-heading\" data-mcast-heading>Join your session</h1>",
+			"<p class=\"mcast-join-message\" data-mcast-message>Check your name and devices before entering.</p>",
+			"<label class=\"mcast-field\"><span class=\"mcast-field-label\">Your name</span><input class=\"mcast-name-input\" data-mcast-name type=\"text\" autocomplete=\"name\" autocorrect=\"off\" autocapitalize=\"words\" maxlength=\"60\" placeholder=\"Enter your name\"></label>",
+			"<label class=\"mcast-check-row\"><input data-mcast-remember type=\"checkbox\" checked><span>Remember my name on this device</span></label>",
+			"<button type=\"button\" class=\"mcast-join-action\" data-mcast-join>Join</button>",
+			"<div class=\"mcast-join-status\"><span class=\"mcast-join-spinner\"></span><span data-mcast-status>Ready to join</span></div>",
+			"<div class=\"mcast-join-footer\">Use headphones when possible. Keep this tab open while the host prepares the session.</div>",
+			"<div class=\"mcast-terms\">By joining, you allow this browser to use your microphone and camera for this MCast Studio session.</div>",
+			"</div>",
+			"</section>"
+		].join("");
+		document.body.appendChild(shell);
+		hydrateGuestJoinShell(shell);
+		return shell;
+	}
+
+	function updateGuestJoinStatus(mode, state) {
+		if (route !== "guest") {
+			return;
+		}
+		var shell = ensureGuestJoinShell();
+		if (!shell) {
+			return;
+		}
+		var profile = getGuestShellProfile(mode, state);
+		setShellText(shell, "[data-mcast-mode]", profile.modeTitle);
+		setShellText(shell, "[data-mcast-heading]", profile.heading);
+		setShellText(shell, "[data-mcast-message]", profile.message);
+		setShellText(shell, "[data-mcast-status]", profile.status);
+	}
+
+	function hydrateGuestJoinShell(shell) {
+		var nameInput = shell.querySelector("[data-mcast-name]");
+		var rememberInput = shell.querySelector("[data-mcast-remember]");
+		var joinButton = shell.querySelector("[data-mcast-join]");
+		var audioButton = shell.querySelector("[data-mcast-audio-toggle]");
+		var videoButton = shell.querySelector("[data-mcast-video-toggle]");
+		var rememberedName = readStoredGuestName();
+
+		if (nameInput) {
+			nameInput.value = rememberedName;
+			nameInput.addEventListener("input", function () {
+				updateGuestPreviewName(shell, nameInput.value);
+			});
+			nameInput.addEventListener("keydown", function (event) {
+				if (event.key === "Enter") {
+					event.preventDefault();
+					startGuestJoinFromShell(shell);
+				}
+			});
+		}
+		if (rememberInput) {
+			rememberInput.checked = readGuestPreference("rememberName", true);
+		}
+		if (joinButton) {
+			joinButton.addEventListener("click", function () {
+				startGuestJoinFromShell(shell);
+			});
+		}
+		if (audioButton) {
+			audioButton.addEventListener("click", function () {
+				guestJoinPreferences.audio = !guestJoinPreferences.audio;
+				writeGuestPreference("audio", guestJoinPreferences.audio);
+				renderGuestDeviceControls(shell);
+			});
+		}
+		if (videoButton) {
+			videoButton.addEventListener("click", function () {
+				guestJoinPreferences.video = !guestJoinPreferences.video;
+				writeGuestPreference("video", guestJoinPreferences.video);
+				renderGuestDeviceControls(shell);
+			});
+		}
+
+		updateGuestPreviewName(shell, rememberedName);
+		renderGuestDeviceControls(shell);
+	}
+
+	function startGuestJoinFromShell(shell) {
+		if (!shell || guestJoinPreferences.joined) {
+			return;
+		}
+
+		var nameInput = shell.querySelector("[data-mcast-name]");
+		var rememberInput = shell.querySelector("[data-mcast-remember]");
+		var joinButton = shell.querySelector("[data-mcast-join]");
+		var name = nameInput ? nameInput.value.trim() : "";
+		var rememberName = rememberInput ? rememberInput.checked : true;
+
+		guestJoinPreferences.joined = true;
+		writeGuestPreference("rememberName", rememberName);
+		writeGuestPreference("audio", guestJoinPreferences.audio);
+		writeGuestPreference("video", guestJoinPreferences.video);
+		if (rememberName && name) {
+			writeStoredGuestName(name);
+		} else if (!rememberName) {
+			writeStoredGuestName("");
+		}
+
+		applyGuestNameToNativeSession(name);
+		setShellText(shell, "[data-mcast-status]", "Starting camera and microphone...");
+		if (joinButton) {
+			joinButton.disabled = true;
+			joinButton.textContent = "Joining...";
+		}
+
+		waitForNativeJoinAndStart(shell, 0);
+	}
+
+	function waitForNativeJoinAndStart(shell, attempt) {
+		if (tryStartNativeGuestJoin(shell)) {
+			return;
+		}
+		if (attempt >= 80) {
+			setShellText(shell, "[data-mcast-status]", "Still preparing. Check browser camera and microphone permissions.");
+			return;
+		}
+		window.setTimeout(function () {
+			waitForNativeJoinAndStart(shell, attempt + 1);
+		}, 250);
+	}
+
+	function tryStartNativeGuestJoin(shell) {
+		var starter = null;
+		if (typeof window.press2talk === "function") {
+			starter = window.press2talk;
+		} else if (typeof press2talk === "function") {
+			starter = press2talk;
+		}
+		var nativeButton = document.getElementById("press2talk");
+
+		try {
+			if (starter && nativeButton) {
+				Promise.resolve(starter(true)).then(function () {
+					applyGuestMediaPreferencesLater();
+					setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
+					window.setTimeout(function () {
+						shell.classList.add("mcast-ready");
+					}, 450);
+				}).catch(function (error) {
+					console.error("MCast guest join failed", error);
+					setShellText(shell, "[data-mcast-status]", "Could not start media. Check browser permissions and try again.");
+					resetGuestJoinButton(shell);
+				});
+				return true;
+			}
+
+			if (nativeButton && typeof nativeButton.click === "function") {
+				nativeButton.click();
+				applyGuestMediaPreferencesLater();
+				setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
+				window.setTimeout(function () {
+					shell.classList.add("mcast-ready");
+				}, 450);
+				return true;
+			}
+		} catch (error) {
+			console.error("MCast guest join start failed", error);
+			setShellText(shell, "[data-mcast-status]", "Could not start media. Check browser permissions and try again.");
+			resetGuestJoinButton(shell);
+			return true;
+		}
+
+		return false;
+	}
+
+	function resetGuestJoinButton(shell) {
+		guestJoinPreferences.joined = false;
+		var joinButton = shell ? shell.querySelector("[data-mcast-join]") : null;
+		if (joinButton) {
+			joinButton.disabled = false;
+			joinButton.textContent = "Join";
+		}
+	}
+
+	function applyGuestMediaPreferencesLater() {
+		var attempts = 0;
+		var timer = window.setInterval(function () {
+			attempts++;
+			applyGuestMediaPreferences();
+			if (attempts >= 12 || hasLiveGuestMedia()) {
+				window.clearInterval(timer);
+			}
+		}, 500);
+	}
+
+	function applyGuestMediaPreferences() {
+		if (!guestJoinPreferences.audio) {
+			forceGuestMuteState(true);
+		}
+		if (!guestJoinPreferences.video) {
+			forceGuestVideoMuteState(true);
+		}
+	}
+
+	function forceGuestMuteState(muted) {
+		try {
+			if (typeof session === "undefined") {
+				return;
+			}
+			if (typeof session.muted === "undefined") {
+				session.muted = false;
+			}
+			if (session.muted !== muted) {
+				if (typeof window.toggleMute === "function") {
+					window.toggleMute();
+				} else if (typeof toggleMute === "function") {
+					toggleMute();
+				}
+			}
+		} catch (error) {
+			console.warn("MCast could not apply audio preference", error);
+		}
+	}
+
+	function forceGuestVideoMuteState(muted) {
+		try {
+			if (typeof session === "undefined") {
+				return;
+			}
+			if (typeof session.videoMuted === "undefined") {
+				session.videoMuted = false;
+			}
+			if (session.videoMuted !== muted) {
+				if (typeof window.toggleVideoMute === "function") {
+					window.toggleVideoMute();
+				} else if (typeof toggleVideoMute === "function") {
+					toggleVideoMute();
+				}
+			}
+		} catch (error) {
+			console.warn("MCast could not apply video preference", error);
+		}
+	}
+
+	function applyGuestNameToNativeSession(name) {
+		var cleanName = (name || "").trim().slice(0, 60);
+		if (!cleanName) {
+			return;
+		}
+		try {
+			if (typeof session !== "undefined") {
+				session.label = cleanName;
+			}
+		} catch (error) {
+			console.warn("MCast could not set session label", error);
+		}
+		var fields = document.querySelectorAll("input[name='label'],input[name='l'],input[name='name'],input[id='label'],input[id='name'],input[id='username']");
+		for (var index = 0; index < fields.length; index++) {
+			fields[index].value = cleanName;
+			fields[index].dispatchEvent(new Event("input", { bubbles: true }));
+			fields[index].dispatchEvent(new Event("change", { bubbles: true }));
+		}
+	}
+
+	function updateGuestPreviewName(shell, value) {
+		var name = (value || "").trim() || "Guest";
+		setShellText(shell, "[data-mcast-preview-name]", name);
+		var avatar = shell.querySelector("[data-mcast-avatar]");
+		if (avatar) {
+			avatar.textContent = name.substring(0, 1).toUpperCase();
+		}
+	}
+
+	function renderGuestDeviceControls(shell) {
+		var audioButton = shell.querySelector("[data-mcast-audio-toggle]");
+		var videoButton = shell.querySelector("[data-mcast-video-toggle]");
+		if (audioButton) {
+			audioButton.classList.toggle("is-off", !guestJoinPreferences.audio);
+			setShellText(audioButton, "[data-mcast-audio-label]", guestJoinPreferences.audio ? "Mute" : "Unmute");
+			audioButton.setAttribute("aria-pressed", guestJoinPreferences.audio ? "false" : "true");
+		}
+		if (videoButton) {
+			videoButton.classList.toggle("is-off", !guestJoinPreferences.video);
+			setShellText(videoButton, "[data-mcast-video-label]", guestJoinPreferences.video ? "Stop Video" : "Start Video");
+			videoButton.setAttribute("aria-pressed", guestJoinPreferences.video ? "false" : "true");
+		}
+		shell.classList.toggle("mcast-video-off", !guestJoinPreferences.video);
+	}
+
+	function setShellText(root, selector, value) {
+		var element = root.querySelector(selector);
+		if (element) {
+			element.textContent = value || "";
+		}
+	}
+
+	function getGuestShellProfile(mode, state) {
+		var modeTitle = toTitleCase(mode || "stream_guest");
+		var profiles = {
+			meeting: {
+				heading: "Joining the meeting",
+				message: "Your session will open as soon as the connection is ready.",
+				status: "Connecting to meeting..."
+			},
+			classroom: {
+				heading: "Classroom waiting room",
+				message: "Your teacher will bring you into the class when ready.",
+				status: "Waiting for teacher approval..."
+			},
+			stream_guest: {
+				heading: "Joining the green room",
+				message: "The production team will bring you on screen when it is time.",
+				status: "Connecting backstage..."
+			},
+			webinar: {
+				heading: "Joining the webinar",
+				message: "The host will approve speakers before they appear on screen.",
+				status: "Waiting for host approval..."
+			},
+			podcast: {
+				heading: "Podcast audio check",
+				message: "Keep your microphone ready while the host prepares the recording.",
+				status: "Preparing podcast session..."
+			},
+			remote_interview: {
+				heading: "Interview waiting room",
+				message: "The producer will check your audio and video before the show.",
+				status: "Waiting for producer check..."
+			}
+		};
+		var profile = profiles[mode] || profiles.stream_guest;
+		if (state === "active") {
+			profile = {
+				heading: "You are connected",
+				message: "The host can hear you and will decide when to show video.",
+				status: "Audio route active..."
+			};
+		} else if (state === "raised_hand") {
+			profile = {
+				heading: "Hand raised",
+				message: "The host can see your request and will bring you in when ready.",
+				status: "Waiting in the raise-hand queue..."
+			};
+		} else if (state === "backstage") {
+			profile = {
+				heading: "You are backstage",
+				message: "The production team can prepare your feed before you go live.",
+				status: "Backstage connection active..."
+			};
+		} else if (state === "on_screen") {
+			profile = {
+				heading: "You are on screen",
+				message: "Stay ready and keep this browser tab open.",
+				status: "Live route active..."
+			};
+		}
+		return {
+			modeTitle: modeTitle,
+			heading: profile.heading,
+			message: profile.message,
+			status: profile.status
+		};
+	}
+
+	function toTitleCase(value) {
+		return (value || "").replace(/_/g, " ").replace(/\b\w/g, function (match) {
+			return match.toUpperCase();
+		});
 	}
 
 	function setFlag(routedParams, key) {
@@ -113,6 +594,60 @@
 			}
 		});
 		return parts.join("&");
+	}
+
+	function applyStoredGuestIdentity(routedParams) {
+		var name = readStoredGuestName();
+		if (!name || routedParams.has("label") || routedParams.has("l")) {
+			return;
+		}
+		routedParams.set("l", name);
+	}
+
+	function readStoredGuestName() {
+		if (readGuestPreference("rememberName", true) === false) {
+			return "";
+		}
+		try {
+			return (window.localStorage.getItem("mcastGuestName") || "").trim().slice(0, 60);
+		} catch (error) {
+			return "";
+		}
+	}
+
+	function writeStoredGuestName(value) {
+		try {
+			if (value) {
+				window.localStorage.setItem("mcastGuestName", value.trim().slice(0, 60));
+			} else {
+				window.localStorage.removeItem("mcastGuestName");
+			}
+		} catch (error) {
+			console.warn("MCast could not store guest name", error);
+		}
+	}
+
+	function readGuestPreference(key, fallback) {
+		try {
+			var value = window.localStorage.getItem("mcastGuestPreference." + key);
+			if (value === "true") {
+				return true;
+			}
+			if (value === "false") {
+				return false;
+			}
+		} catch (error) {
+			return fallback;
+		}
+		return fallback;
+	}
+
+	function writeGuestPreference(key, value) {
+		try {
+			window.localStorage.setItem("mcastGuestPreference." + key, value ? "true" : "false");
+		} catch (error) {
+			console.warn("MCast could not store guest preference", error);
+		}
 	}
 
 	function readShortInviteCodeFromPath(currentPath) {
@@ -172,7 +707,7 @@
 	function startGuestJoinStatusMonitor() {
 		var startedAt = Date.now();
 		var interval = window.setInterval(function () {
-			if (removeGuestJoinStatusIfReady() || Date.now() - startedAt > 60000) {
+			if (removeGuestJoinStatusIfReady() || (guestJoinPreferences.joined && Date.now() - startedAt > 60000)) {
 				window.clearInterval(interval);
 				removeGuestJoinStatus();
 			}
