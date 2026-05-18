@@ -436,6 +436,12 @@
 					setShellText(shell, "[data-mcast-status]", "Waiting for browser permission...");
 				}
 			}, 1800);
+			window.setTimeout(function () {
+				if (guestJoinPreferences.joined && !hasLiveGuestMedia()) {
+					setShellText(shell, "[data-mcast-status]", "Permission was not completed. Allow browser camera/mic access and click Join again.");
+					resetGuestJoinButton(shell);
+				}
+			}, 30000);
 			return true;
 		} catch (error) {
 			console.error("MCast guest webcam start failed", error);
