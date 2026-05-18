@@ -158,7 +158,7 @@
 			"html.mcast-guest,html.mcast-guest body{background:#111315!important;min-height:100%;}",
 			"html.mcast-guest body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;letter-spacing:0!important;overflow:hidden!important;}",
 			"html.mcast-guest #header,html.mcast-guest #mainmenu,html.mcast-guest #head1,html.mcast-guest #head1a,html.mcast-guest #head3,html.mcast-guest #head3a,html.mcast-guest #dropButton,html.mcast-guest #container-1,html.mcast-guest #container-2,html.mcast-guest #container-4,html.mcast-guest #container-5,html.mcast-guest #container-6,html.mcast-guest #container-7,html.mcast-guest #container-8,html.mcast-guest #container-9,html.mcast-guest #credits,html.mcast-guest #legal{display:none!important;}",
-			"html.mcast-guest #mcastJoining{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;color:#eef2f7;background:#111315;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:auto;}",
+			"html.mcast-guest #mcastJoining{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;color:#eef2f7;background:#111315;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:auto;}",
 			"html.mcast-guest #mcastJoining.mcast-ready{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility .22s ease;}",
 			"html.mcast-guest .mcast-join-panel{width:min(1060px,100%);min-height:min(720px,calc(100dvh - 32px));display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);overflow:hidden;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#1a1d21;box-shadow:0 22px 70px rgba(0,0,0,.34);}",
 			"html.mcast-guest .mcast-join-preview{position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:420px;background:#1b1f25;padding:18px;}",
@@ -171,7 +171,7 @@
 			"html.mcast-guest .mcast-join-mode{display:inline-flex;align-items:center;gap:7px;max-width:46%;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.07);color:#e8edf5;font-size:12px;font-weight:720;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-join-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16);flex:0 0 auto;}",
 			"html.mcast-guest .mcast-preview-stage{position:absolute;inset:72px 18px 104px 18px;display:grid;place-items:center;border-radius:8px;background:#0b0d10;overflow:hidden;}",
-			"html.mcast-guest .mcast-local-video{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0!important;object-fit:cover!important;background:#050607!important;transform:none!important;resize:none!important;pointer-events:none!important;}",
+			"html.mcast-guest .mcast-local-video{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0!important;object-fit:cover!important;background:#050607!important;resize:none!important;pointer-events:none!important;}",
 			"html.mcast-guest .mcast-preview-avatar{display:grid;place-items:center;width:118px;height:118px;border-radius:50%;background:#2a3038;color:#d7dde7;font-size:42px;font-weight:760;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}",
 			"html.mcast-guest .mcast-preview-label{position:absolute;left:14px;bottom:12px;max-width:calc(100% - 28px);padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.62);color:#f8fafc;font-size:12px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-preview-off{position:absolute;inset:0;display:none;place-items:center;background:#0b0d10;color:#a8b3c2;font-size:13px;font-weight:680;text-align:center;padding:24px;}",
@@ -204,13 +204,16 @@
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-preview{min-height:100dvh;padding:16px;background:#050607;}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-preview-stage{inset:0;border-radius:0;}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-topbar{position:relative;z-index:3;padding:0;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-row{position:absolute;left:50%;bottom:18px;z-index:4;transform:translateX(-50%);margin:0;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,6,7,.58);backdrop-filter:blur(12px);}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-row{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483002;transform:translateX(-50%);margin:0;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,6,7,.72);box-shadow:0 16px 42px rgba(0,0,0,.36);backdrop-filter:blur(12px);}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button{min-width:44px;width:44px;height:44px;padding:0;border-radius:50%;}",
+			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button.is-end{background:#dc2626;border-color:#ef4444;color:#fff;}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button span:not(.mcast-device-icon){display:none;}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-form{position:absolute;right:16px;bottom:18px;z-index:3;width:min(360px,calc(100% - 32px));padding:0;background:transparent;color:#f8fafc;pointer-events:none;}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-heading,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-message,html.mcast-guest #mcastJoining.mcast-in-room .mcast-field,html.mcast-guest #mcastJoining.mcast-in-room .mcast-check-row,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-action,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-footer,html.mcast-guest #mcastJoining.mcast-in-room .mcast-terms{display:none!important;}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-status{margin:0;padding:9px 11px;border-color:rgba(255,255,255,.14);background:rgba(5,6,7,.58);color:#f8fafc;box-shadow:0 10px 24px rgba(0,0,0,.25);backdrop-filter:blur(12px);}",
 			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-spinner{display:none;}",
+			"html.mcast-room-active body>*:not(#mcastJoining):not(#mcastGuestShellStyles){display:none!important;}",
+			"html.mcast-room-active #logoname,html.mcast-room-active #qos,html.mcast-room-active #header,html.mcast-room-active #mainmenu,html.mcast-room-active #controlButtons,html.mcast-room-active #miniTaskBar,html.mcast-room-active #credits{display:none!important;}",
 			"html.mcast-guest .prompt,html.mcast-guest [role='dialog'],html.mcast-guest .modal,html.mcast-guest #passwordPrompt{z-index:10000!important;}",
 			"@keyframes mcastSpin{to{transform:rotate(360deg);}}",
 			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px 14px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{gap:10px;}html.mcast-guest .mcast-device-button{min-width:116px;height:40px;font-size:12px;}}",
@@ -244,6 +247,7 @@
 			"<div class=\"mcast-device-row\" aria-label=\"Device controls\">",
 			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-audio-toggle><span class=\"mcast-device-icon\" data-mcast-audio-icon aria-hidden=\"true\"></span><span data-mcast-audio-label>Mute</span></button>",
 			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-video-toggle><span class=\"mcast-device-icon\" data-mcast-video-icon aria-hidden=\"true\"></span><span data-mcast-video-label>Stop Video</span></button>",
+			"<button type=\"button\" class=\"mcast-device-button is-end\" data-mcast-end title=\"Leave\" aria-label=\"Leave\"><span class=\"mcast-device-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><path d=\"M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.4 2.1L8.1 9.5a16 16 0 0 0 6.4 6.4l1.2-1.2a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2Z\"></path><path d=\"M23 1 1 23\"></path></svg></span><span>Leave</span></button>",
 			"</div>",
 			"</div>",
 			"<div class=\"mcast-join-form\">",
@@ -284,6 +288,7 @@
 		var joinButton = shell.querySelector("[data-mcast-join]");
 		var audioButton = shell.querySelector("[data-mcast-audio-toggle]");
 		var videoButton = shell.querySelector("[data-mcast-video-toggle]");
+		var endButton = shell.querySelector("[data-mcast-end]");
 		var rememberedName = readStoredGuestName();
 
 		if (nameInput) {
@@ -311,6 +316,9 @@
 				guestJoinPreferences.audio = !guestJoinPreferences.audio;
 				writeGuestPreference("audio", guestJoinPreferences.audio);
 				renderGuestDeviceControls(shell);
+				if (guestJoinPreferences.joined) {
+					forceGuestMuteState(!guestJoinPreferences.audio);
+				}
 			});
 		}
 		if (videoButton) {
@@ -318,6 +326,17 @@
 				guestJoinPreferences.video = !guestJoinPreferences.video;
 				writeGuestPreference("video", guestJoinPreferences.video);
 				renderGuestDeviceControls(shell);
+				if (guestJoinPreferences.joined) {
+					forceGuestVideoMuteState(!guestJoinPreferences.video);
+					if (guestJoinPreferences.video) {
+						startLocalVideoMountMonitor(shell);
+					}
+				}
+			});
+		}
+		if (endButton) {
+			endButton.addEventListener("click", function () {
+				endGuestRoom(shell);
 			});
 		}
 
@@ -512,6 +531,43 @@
 		startLocalVideoMountMonitor(shell);
 	}
 
+	function endGuestRoom(shell) {
+		guestJoinPreferences.joined = false;
+		try {
+			if (typeof hangup === "function") {
+				hangup(false);
+			} else if (window.hangup && typeof window.hangup === "function") {
+				window.hangup(false);
+			}
+		} catch (error) {
+			console.warn("MCast native hangup failed", error);
+		}
+		stopLocalGuestTracks();
+		if (shell) {
+			shell.classList.add("mcast-video-off");
+			setShellText(shell, "[data-mcast-status]", "Disconnected");
+			var buttons = shell.querySelectorAll(".mcast-device-button");
+			for (var index = 0; index < buttons.length; index++) {
+				buttons[index].disabled = true;
+			}
+		}
+	}
+
+	function stopLocalGuestTracks() {
+		try {
+			var video = findLocalGuestVideoElement();
+			var stream = video && video.srcObject;
+			if (stream && typeof stream.getTracks === "function") {
+				var tracks = stream.getTracks();
+				for (var index = 0; index < tracks.length; index++) {
+					tracks[index].stop();
+				}
+			}
+		} catch (error) {
+			console.warn("MCast could not stop local tracks", error);
+		}
+	}
+
 	function lockNativeGuestChrome() {
 		try {
 			document.documentElement.classList.add("mcast-room-active");
@@ -537,6 +593,9 @@
 
 	function mountLocalGuestVideo(shell) {
 		if (!shell || !guestJoinPreferences.video) {
+			if (shell) {
+				shell.classList.add("mcast-video-off");
+			}
 			return true;
 		}
 		var stage = shell.querySelector(".mcast-preview-stage");
@@ -558,6 +617,7 @@
 			stage.appendChild(video);
 		}
 		stage.classList.add("has-video");
+		shell.classList.remove("mcast-video-off");
 		try {
 			var playResult = video.play();
 			if (playResult && typeof playResult.catch === "function") {
