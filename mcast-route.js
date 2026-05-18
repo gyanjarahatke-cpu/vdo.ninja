@@ -6,7 +6,7 @@
 	var roomTicketResolveUrl = "https://mcast-studio.web.app/api/vdoRoomTicketResolve";
 	var rawPath = (window.location.pathname || "").replace(/\/+$/, "");
 	var path = rawPath.toLowerCase();
-	var route = path === "/g" || path.indexOf("/g/") === 0 ? "guest" : path.endsWith("/vcall") ? "call" : "";
+	var route = isGuestInvitePath(path) ? "guest" : isCallPath(path) ? "call" : "";
 	if (!route) {
 		return;
 	}
@@ -70,6 +70,11 @@
 			setFlag(routedParams, "nosettings");
 			setFlag(routedParams, "mcastguest");
 			setFlag(routedParams, "mcastprejoin");
+			var mcastMode = normalizeRouteToken(routedParams.get("mcastmode") || "", "");
+			if (!routedParams.has("push") && (mcastMode === "meeting" || mcastMode === "classroom" || mcastMode === "webinar")) {
+				routedParams.set("push", getOrCreateSingleLinkGuestPush(routedParams));
+				routedParams.set("mcastsinglelink", "1");
+			}
 			if (routedParams.has("mcastautojoin")) {
 				setFlag(routedParams, "autostart");
 			}
@@ -121,6 +126,14 @@
 	function normalizeRouteToken(value, fallback) {
 		var normalized = (value || "").toString().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
 		return normalized || fallback;
+	}
+
+	function isGuestInvitePath(currentPath) {
+		return /^\/(?:g|m|c|s|w|p|i)(?:\/|$)/.test(currentPath || "");
+	}
+
+	function isCallPath(currentPath) {
+		return currentPath === "/vcall" || (currentPath || "").indexOf("/vcall/") === 0;
 	}
 
 	function updateRouteTitle(mode, role) {
@@ -604,6 +617,47 @@
 		routedParams.set("l", name);
 	}
 
+	function getOrCreateSingleLinkGuestPush(routedParams) {
+		var room = normalizeRouteToken(routedParams.get("room") || "room", "room");
+		var storageKey = "mcast.singleLinkPush." + room;
+		var existing = "";
+		try {
+			existing = window.localStorage ? window.localStorage.getItem(storageKey) || "" : "";
+		} catch (error) {
+			existing = "";
+		}
+		if (/^guest_[a-z0-9_]{8,48}$/i.test(existing)) {
+			return existing;
+		}
+
+		var generated = "guest_" + createRandomRouteId();
+		try {
+			if (window.localStorage) {
+				window.localStorage.setItem(storageKey, generated);
+			}
+		} catch (error) {
+			// Storage can be blocked; the one-time generated id is still valid.
+		}
+		return generated;
+	}
+
+	function createRandomRouteId() {
+		var alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+		var id = "";
+		if (window.crypto && typeof window.crypto.getRandomValues === "function") {
+			var values = new Uint8Array(16);
+			window.crypto.getRandomValues(values);
+			for (var index = 0; index < values.length; index++) {
+				id += alphabet[values[index] % alphabet.length];
+			}
+			return id;
+		}
+		for (var fallbackIndex = 0; fallbackIndex < 16; fallbackIndex++) {
+			id += alphabet[Math.floor(Math.random() * alphabet.length)];
+		}
+		return id;
+	}
+
 	function readStoredGuestName() {
 		if (readGuestPreference("rememberName", true) === false) {
 			return "";
@@ -651,7 +705,7 @@
 	}
 
 	function readShortInviteCodeFromPath(currentPath) {
-		var match = (currentPath || "").match(/^\/g\/([A-Za-z0-9]{6,16})\/?$/);
+		var match = (currentPath || "").match(/^\/(?:g|m|c|s|w|p|i)\/([A-Za-z0-9]{6,16})\/?$/i);
 		return match ? match[1] : "";
 	}
 
