@@ -26,7 +26,6 @@
 			if (window.MCastRoute) {
 				updateGuestJoinStatus(window.MCastRoute.mode, window.MCastRoute.state);
 			}
-			startGuestJoinStatusMonitor();
 		});
 	}
 
@@ -70,6 +69,9 @@
 			setFlag(routedParams, "nosettings");
 			setFlag(routedParams, "mcastguest");
 			setFlag(routedParams, "mcastprejoin");
+			if (!routedParams.has("mcastautojoin")) {
+				routedParams.delete("autostart");
+			}
 			var mcastMode = normalizeRouteToken(routedParams.get("mcastmode") || "", "");
 			if (!routedParams.has("push") && (mcastMode === "meeting" || mcastMode === "classroom" || mcastMode === "webinar")) {
 				routedParams.set("push", getOrCreateSingleLinkGuestPush(routedParams));
@@ -162,7 +164,8 @@
 			"html.mcast-guest .mcast-join-preview{position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:420px;background:#1b1f25;padding:18px;}",
 			"html.mcast-guest .mcast-join-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#f8fafc;min-width:0;}",
 			"html.mcast-guest .mcast-join-brand{display:flex;align-items:center;gap:10px;min-width:0;}",
-			"html.mcast-guest .mcast-join-mark{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:#2563eb;color:#fff;font-weight:800;font-size:13px;flex:0 0 auto;}",
+			"html.mcast-guest .mcast-join-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.12);overflow:hidden;flex:0 0 auto;}",
+			"html.mcast-guest .mcast-join-logo{display:block;width:100%;height:100%;object-fit:cover;}",
 			"html.mcast-guest .mcast-join-brand-title{font-size:14px;font-weight:760;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-join-brand-subtitle{margin-top:2px;color:#a8b3c2;font-size:12px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-join-mode{display:inline-flex;align-items:center;gap:7px;max-width:46%;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.07);color:#e8edf5;font-size:12px;font-weight:720;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
@@ -176,7 +179,8 @@
 			"html.mcast-guest .mcast-device-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:128px;height:42px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:#2a2f36;color:#f8fafc;font-size:13px;font-weight:720;cursor:pointer;}",
 			"html.mcast-guest .mcast-device-button:hover{background:#343b44;}",
 			"html.mcast-guest .mcast-device-button.is-off{background:#b91c1c;border-color:#dc2626;color:#fff;}",
-			"html.mcast-guest .mcast-device-icon{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.12);font-size:11px;font-weight:800;}",
+			"html.mcast-guest .mcast-device-icon{display:grid;place-items:center;width:20px;height:20px;flex:0 0 auto;}",
+			"html.mcast-guest .mcast-device-icon svg{display:block;width:19px;height:19px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}",
 			"html.mcast-guest .mcast-join-form{display:flex;flex-direction:column;justify-content:center;background:#f7f8fa;color:#1f2937;padding:34px 30px;}",
 			"html.mcast-guest .mcast-join-heading{color:#111827;font-size:26px;line-height:1.18;font-weight:780;margin:0 0 10px 0;}",
 			"html.mcast-guest .mcast-join-message{color:#4b5563;font-size:14px;line-height:1.52;margin:0 0 24px 0;}",
@@ -219,13 +223,13 @@
 			"<section class=\"mcast-join-panel\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"mcastJoinHeading\">",
 			"<div class=\"mcast-join-preview\">",
 			"<div class=\"mcast-join-topbar\">",
-			"<div class=\"mcast-join-brand\"><div class=\"mcast-join-mark\">MC</div><div><div class=\"mcast-join-brand-title\">MCast Studio</div><div class=\"mcast-join-brand-subtitle\">Remote session</div></div></div>",
+			"<div class=\"mcast-join-brand\"><div class=\"mcast-join-mark\"><img class=\"mcast-join-logo\" src=\"./media/mcast-apple-touch-icon.png\" alt=\"\"></div><div><div class=\"mcast-join-brand-title\">MCast Studio</div><div class=\"mcast-join-brand-subtitle\">Remote session</div></div></div>",
 			"<div class=\"mcast-join-mode\"><span class=\"mcast-join-dot\"></span><span data-mcast-mode>Secure room</span></div>",
 			"</div>",
 			"<div class=\"mcast-preview-stage\"><div class=\"mcast-preview-avatar\" data-mcast-avatar>G</div><div class=\"mcast-preview-off\">Camera is off</div><div class=\"mcast-preview-label\" data-mcast-preview-name>Guest</div></div>",
 			"<div class=\"mcast-device-row\" aria-label=\"Device controls\">",
-			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-audio-toggle><span class=\"mcast-device-icon\">M</span><span data-mcast-audio-label>Mute</span></button>",
-			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-video-toggle><span class=\"mcast-device-icon\">V</span><span data-mcast-video-label>Stop Video</span></button>",
+			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-audio-toggle><span class=\"mcast-device-icon\" data-mcast-audio-icon aria-hidden=\"true\"></span><span data-mcast-audio-label>Mute</span></button>",
+			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-video-toggle><span class=\"mcast-device-icon\" data-mcast-video-icon aria-hidden=\"true\"></span><span data-mcast-video-label>Stop Video</span></button>",
 			"</div>",
 			"</div>",
 			"<div class=\"mcast-join-form\">",
@@ -352,6 +356,10 @@
 	}
 
 	function tryStartNativeGuestJoin(shell) {
+		if (route === "guest") {
+			return tryStartNativeGuestWebcamJoin(shell);
+		}
+
 		var starter = null;
 		if (typeof window.press2talk === "function") {
 			starter = window.press2talk;
@@ -393,6 +401,83 @@
 		}
 
 		return false;
+	}
+
+	function tryStartNativeGuestWebcamJoin(shell) {
+		if (typeof session === "undefined") {
+			return false;
+		}
+		if (typeof requestBasicPermissions !== "function" || typeof setupWebcamSelection !== "function" || typeof publishWebcam !== "function") {
+			return false;
+		}
+
+		try {
+			session.autostart = false;
+			applyGuestMediaPreferences();
+			var constraints = {
+				audio: !!guestJoinPreferences.audio,
+				video: !!guestJoinPreferences.video
+			};
+			var miconly = !constraints.video;
+			setShellText(shell, "[data-mcast-status]", "Allow camera and microphone permissions...");
+			requestBasicPermissions(constraints, function (nativeMicOnly) {
+				try {
+					setupWebcamSelection(nativeMicOnly || miconly);
+				} catch (setupError) {
+					console.error("MCast guest setup failed", setupError);
+					setShellText(shell, "[data-mcast-status]", "Could not prepare media. Check browser permissions and try again.");
+					resetGuestJoinButton(shell);
+					return;
+				}
+				waitForNativeWebcamReadyAndPublish(shell, nativeMicOnly || miconly, 0);
+			}, miconly);
+			window.setTimeout(function () {
+				if (guestJoinPreferences.joined && !hasLiveGuestMedia()) {
+					setShellText(shell, "[data-mcast-status]", "Waiting for browser permission...");
+				}
+			}, 1800);
+			return true;
+		} catch (error) {
+			console.error("MCast guest webcam start failed", error);
+			setShellText(shell, "[data-mcast-status]", "Could not start media. Check browser permissions and try again.");
+			resetGuestJoinButton(shell);
+			return true;
+		}
+	}
+
+	function waitForNativeWebcamReadyAndPublish(shell, miconly, attempt) {
+		if (!guestJoinPreferences.joined) {
+			return;
+		}
+
+		var goButton = document.getElementById("gowebcam");
+		var ready = goButton && goButton.dataset && goButton.dataset.ready === "true";
+		var audioReady = goButton && goButton.dataset && goButton.dataset.audioready === "true";
+		if (goButton && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
+			try {
+				setShellText(shell, "[data-mcast-status]", "Joining room...");
+				publishWebcam(false, !!miconly);
+				applyGuestMediaPreferencesLater();
+				window.setTimeout(function () {
+					setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
+				}, 700);
+			} catch (publishError) {
+				console.error("MCast guest publish failed", publishError);
+				setShellText(shell, "[data-mcast-status]", "Could not join. Check browser permissions and try again.");
+				resetGuestJoinButton(shell);
+			}
+			return;
+		}
+
+		if (attempt >= 80) {
+			setShellText(shell, "[data-mcast-status]", "Could not prepare camera or microphone. Check browser permissions and try again.");
+			resetGuestJoinButton(shell);
+			return;
+		}
+
+		window.setTimeout(function () {
+			waitForNativeWebcamReadyAndPublish(shell, miconly, attempt + 1);
+		}, 250);
 	}
 
 	function resetGuestJoinButton(shell) {
@@ -482,6 +567,20 @@
 			fields[index].dispatchEvent(new Event("input", { bubbles: true }));
 			fields[index].dispatchEvent(new Event("change", { bubbles: true }));
 		}
+		var videoNameFields = document.querySelectorAll("input[id^='videoname']");
+		for (var videoNameIndex = 0; videoNameIndex < videoNameFields.length; videoNameIndex++) {
+			videoNameFields[videoNameIndex].value = cleanName;
+			videoNameFields[videoNameIndex].dispatchEvent(new Event("input", { bubbles: true }));
+			videoNameFields[videoNameIndex].dispatchEvent(new Event("change", { bubbles: true }));
+		}
+		try {
+			if (typeof urlParams !== "undefined" && urlParams && typeof urlParams.set === "function") {
+				urlParams.set("label", cleanName);
+				urlParams.set("l", cleanName);
+			}
+		} catch (error) {
+			console.warn("MCast could not set URL label state", error);
+		}
 	}
 
 	function updateGuestPreviewName(shell, value) {
@@ -499,11 +598,13 @@
 		if (audioButton) {
 			audioButton.classList.toggle("is-off", !guestJoinPreferences.audio);
 			setShellText(audioButton, "[data-mcast-audio-label]", guestJoinPreferences.audio ? "Mute" : "Unmute");
+			setShellHtml(audioButton, "[data-mcast-audio-icon]", getDeviceIcon("mic", guestJoinPreferences.audio));
 			audioButton.setAttribute("aria-pressed", guestJoinPreferences.audio ? "false" : "true");
 		}
 		if (videoButton) {
 			videoButton.classList.toggle("is-off", !guestJoinPreferences.video);
 			setShellText(videoButton, "[data-mcast-video-label]", guestJoinPreferences.video ? "Stop Video" : "Start Video");
+			setShellHtml(videoButton, "[data-mcast-video-icon]", getDeviceIcon("video", guestJoinPreferences.video));
 			videoButton.setAttribute("aria-pressed", guestJoinPreferences.video ? "false" : "true");
 		}
 		shell.classList.toggle("mcast-video-off", !guestJoinPreferences.video);
@@ -514,6 +615,24 @@
 		if (element) {
 			element.textContent = value || "";
 		}
+	}
+
+	function setShellHtml(root, selector, value) {
+		var element = root.querySelector(selector);
+		if (element) {
+			element.innerHTML = value || "";
+		}
+	}
+
+	function getDeviceIcon(type, enabled) {
+		if (type === "mic") {
+			return enabled
+				? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z\"></path><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"></path><path d=\"M12 19v3\"></path></svg>"
+				: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 2a3 3 0 0 0-3 3v3\"></path><path d=\"M15 9.3V5a3 3 0 0 0-5.1-2.1\"></path><path d=\"M19 10v2a7 7 0 0 1-.7 3\"></path><path d=\"M5 10v2a7 7 0 0 0 10.5 6.1\"></path><path d=\"M12 19v3\"></path><path d=\"M3 3l18 18\"></path></svg>";
+		}
+		return enabled
+			? "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M15 10l4.6-3.1A1 1 0 0 1 21 7.7v8.6a1 1 0 0 1-1.4.8L15 14\"></path><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"></rect></svg>"
+			: "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M10.7 6H13a2 2 0 0 1 2 2v2.3\"></path><path d=\"M15 14l4.6 3.1a1 1 0 0 0 1.4-.8V7.7a1 1 0 0 0-1.4-.8L17 8.7\"></path><path d=\"M3 3l18 18\"></path><path d=\"M3 8a2 2 0 0 1 2-2h1\"></path><path d=\"M3 12v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1\"></path></svg>";
 	}
 
 	function getGuestShellProfile(mode, state) {
