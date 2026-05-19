@@ -135,16 +135,16 @@
 				overflow: hidden;
 			}
 
-			.local-video {
+			.video-frame {
 				position: absolute;
 				inset: 0;
 				width: 100%;
 				height: 100%;
-				object-fit: cover;
 				background: #050607;
+				overflow: hidden;
 			}
 
-			body.orientation-portrait .local-video {
+			body.orientation-portrait .video-frame {
 				top: 0;
 				left: 50%;
 				right: auto;
@@ -152,11 +152,9 @@
 				width: min(100%, calc(100dvh * 9 / 16));
 				height: 100%;
 				transform: translateX(-50%);
-				object-fit: cover;
-				background: #050607;
 			}
 
-			body.orientation-landscape .local-video {
+			body.orientation-landscape .video-frame {
 				top: 50%;
 				left: 0;
 				right: auto;
@@ -164,7 +162,16 @@
 				width: 100%;
 				height: min(100%, calc(100dvw * 9 / 16));
 				transform: translateY(-50%);
+			}
+
+			.local-video {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
 				object-fit: cover;
+				transform-origin: 50% 50%;
+				background: #050607;
 			}
 
 			.freeze-frame {
@@ -175,27 +182,8 @@
 				width: 100%;
 				height: 100%;
 				object-fit: cover;
+				transform-origin: 50% 50%;
 				background: #050607;
-			}
-
-			body.orientation-portrait .freeze-frame {
-				top: 0;
-				left: 50%;
-				right: auto;
-				bottom: auto;
-				width: min(100%, calc(100dvh * 9 / 16));
-				height: 100%;
-				transform: translateX(-50%);
-			}
-
-			body.orientation-landscape .freeze-frame {
-				top: 50%;
-				left: 0;
-				right: auto;
-				bottom: auto;
-				width: 100%;
-				height: min(100%, calc(100dvw * 9 / 16));
-				transform: translateY(-50%);
 			}
 
 			.stage.is-switching .freeze-frame {
@@ -608,8 +596,10 @@
 					<div class="mode-pill"><span class="mode-dot"></span><span data-mode>Secure room</span></div>
 				</div>
 				<div class="stage" data-stage>
-					<video class="local-video" data-video muted autoplay playsinline></video>
-					<canvas class="freeze-frame" data-freeze-frame aria-hidden="true"></canvas>
+					<div class="video-frame" data-video-frame>
+						<video class="local-video" data-video muted autoplay playsinline></video>
+						<canvas class="freeze-frame" data-freeze-frame aria-hidden="true"></canvas>
+					</div>
 					<div class="avatar" data-avatar>G</div>
 					<div class="video-off">Camera is off</div>
 					<div class="preview-label" data-preview-name>Guest</div>
@@ -677,6 +667,7 @@
 
 				var refs = {
 					stage: document.querySelector("[data-stage]"),
+					videoFrame: document.querySelector("[data-video-frame]"),
 					video: document.querySelector("[data-video]"),
 					freezeFrame: document.querySelector("[data-freeze-frame]"),
 					avatar: document.querySelector("[data-avatar]"),
@@ -724,6 +715,8 @@
 							startJoin();
 						}
 					});
+					window.addEventListener("resize", syncEngineVideoAfterLayoutChange);
+					window.addEventListener("orientationchange", syncEngineVideoAfterLayoutChange);
 					refs.join.addEventListener("click", startJoin);
 					refs.audio.addEventListener("click", function () {
 						state.audio = !state.audio;
@@ -839,7 +832,8 @@
 					var previousTrackId = options.previousTrackId || "";
 					state.mediaTimer = window.setInterval(function () {
 						attempts++;
-						var stream = getEngineStream();
+						var engineVideo = getEngineVideoElement();
+						var stream = engineVideo && engineVideo.srcObject;
 						if (stream) {
 							var trackId = getVideoTrackId(stream);
 							if (!options.allowSameTrack && previousTrackId && trackId === previousTrackId && attempts < 40) {
@@ -851,6 +845,7 @@
 							setStatus("Connected");
 							applyEngineMediaState();
 							applyInitialCameraProfile();
+							applyEngineVideoVisualState(engineVideo);
 							try {
 								var playResult = refs.video.play();
 								if (playResult && playResult.catch) {
@@ -880,7 +875,7 @@
 					}, 250);
 				}
 
-				function getEngineStream() {
+				function getEngineVideoElement() {
 					var win = state.iframe && state.iframe.contentWindow;
 					var doc = state.iframe && state.iframe.contentDocument;
 					var candidates = [];
@@ -907,7 +902,7 @@
 					for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
 						var stream = candidates[candidateIndex].srcObject;
 						if (isLiveStream(stream)) {
-							return stream;
+							return candidates[candidateIndex];
 						}
 					}
 					return null;
@@ -932,6 +927,96 @@
 					}
 					var tracks = stream.getVideoTracks();
 					return tracks.length ? tracks[0].id : "";
+				}
+
+				function syncEngineVideoAfterLayoutChange() {
+					if (!state.joined) {
+						return;
+					}
+					window.setTimeout(function () {
+						refreshEngineVideoTransform(true);
+					}, 260);
+				}
+
+				function refreshEngineVideoTransform(updateEngine) {
+					var win = state.iframe && state.iframe.contentWindow;
+					try {
+						if (updateEngine && win && win.session) {
+							win.session.orientation = state.orientation;
+							if (typeof win.updateForceRotate === "function") {
+								win.updateForceRotate(false);
+							}
+							if (typeof win.applyMirror === "function") {
+								win.applyMirror(win.session.mirrorExclude);
+							}
+						}
+					} catch (error) {}
+					var engineVideo = getEngineVideoElement();
+					if (engineVideo) {
+						applyEngineVideoVisualState(engineVideo);
+					}
+				}
+
+				function applyEngineVideoVisualState(engineVideo) {
+					var transform = buildEngineVideoTransform(engineVideo);
+					refs.video.style.transform = transform || "none";
+					refs.freezeFrame.style.transform = transform || "none";
+					var rotated = normalizeRotation(readEngineRotation(engineVideo));
+					refs.video.dataset.rotated = rotated.toString();
+					refs.freezeFrame.dataset.rotated = rotated.toString();
+				}
+
+				function buildEngineVideoTransform(engineVideo) {
+					var parts = [];
+					var base = "";
+					if (engineVideo && engineVideo.dataset && engineVideo.dataset.transform) {
+						base = engineVideo.dataset.transform;
+					} else if (engineVideo && engineVideo.style && engineVideo.style.transform) {
+						base = stripLayoutTranslate(engineVideo.style.transform).replace(/rotate\([^)]*\)/g, "").trim();
+					}
+					if (base && base !== "unset" && base !== "none") {
+						parts.push(base);
+					}
+					var rotated = normalizeRotation(readEngineRotation(engineVideo));
+					if (rotated) {
+						parts.push("rotate(" + rotated + "deg)");
+					}
+					return parts.join(" ");
+				}
+
+				function readEngineRotation(engineVideo) {
+					if (!engineVideo) {
+						return 0;
+					}
+					if (engineVideo.dataset && engineVideo.dataset.rotated) {
+						return engineVideo.dataset.rotated;
+					}
+					if (typeof engineVideo.rotated !== "undefined") {
+						return engineVideo.rotated;
+					}
+					if (engineVideo.style && engineVideo.style.transform) {
+						var match = engineVideo.style.transform.match(/rotate\((-?\d+(?:\.\d+)?)deg\)/);
+						if (match) {
+							return match[1];
+						}
+					}
+					return 0;
+				}
+
+				function normalizeRotation(value) {
+					var rotation = parseInt(value || 0, 10);
+					if (!Number.isFinite(rotation)) {
+						return 0;
+					}
+					rotation %= 360;
+					if (rotation < 0) {
+						rotation += 360;
+					}
+					return rotation;
+				}
+
+				function stripLayoutTranslate(value) {
+					return (value || "").replace(/translate\([^)]*\)/g, "").trim();
 				}
 
 				function applyEngineMediaState() {
@@ -970,12 +1055,20 @@
 					}
 					var ratio = state.orientation === "portrait" ? 9 / 16 : 16 / 9;
 					try {
-						win.session.orientation = false;
-						win.session.forceRotate = 0;
+						win.session.orientation = state.orientation;
 						win.session.forceAspectRatio = ratio;
 						if (typeof win.updateCameraConstraints === "function") {
 							win.updateCameraConstraints("aspectRatio", ratio, false, false, false);
 						}
+						if (typeof win.updateForceRotate === "function") {
+							win.updateForceRotate(false);
+						}
+						if (typeof win.applyMirror === "function") {
+							win.applyMirror(win.session.mirrorExclude);
+						}
+						window.setTimeout(function () {
+							refreshEngineVideoTransform(false);
+						}, 260);
 					} catch (error) {}
 				}
 
@@ -992,8 +1085,7 @@
 					try {
 						win.session.facingMode = state.facing;
 						win.session.videoDevice = false;
-						win.session.orientation = false;
-						win.session.forceRotate = 0;
+						win.session.orientation = state.orientation;
 						var select = doc && doc.querySelector("#videoSource3");
 						var targetIndex = findFacingOptionIndex(select, state.facing);
 						if (select && targetIndex >= 0) {
@@ -1049,6 +1141,10 @@
 					state.cameraSwitching = false;
 					refs.facing.disabled = false;
 					refs.stage.classList.remove("is-switching");
+					refreshEngineVideoTransform(true);
+					window.setTimeout(function () {
+						refreshEngineVideoTransform(false);
+					}, 650);
 				}
 
 				function findFacingOptionIndex(select, facing) {
