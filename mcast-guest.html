@@ -941,7 +941,7 @@
 					var transform = buildEngineVideoTransform(engineVideo);
 					refs.video.style.transform = transform || "none";
 					refs.freezeFrame.style.transform = transform || "none";
-					var rotated = normalizeRotation(readEngineRotation(engineVideo));
+					var rotated = getDisplayRotation(engineVideo);
 					refs.video.dataset.rotated = rotated.toString();
 					refs.freezeFrame.dataset.rotated = rotated.toString();
 				}
@@ -957,11 +957,19 @@
 					if (base && base !== "unset" && base !== "none") {
 						parts.push(base);
 					}
-					var rotated = normalizeRotation(readEngineRotation(engineVideo));
+					var rotated = getDisplayRotation(engineVideo);
 					if (rotated) {
 						parts.push("rotate(" + rotated + "deg)");
 					}
 					return parts.join(" ");
+				}
+
+				function getDisplayRotation(engineVideo) {
+					var rotated = normalizeRotation(readEngineRotation(engineVideo));
+					if (rotated === 90 || rotated === 270) {
+						return (360 - rotated) % 360;
+					}
+					return rotated;
 				}
 
 				function readEngineRotation(engineVideo) {
