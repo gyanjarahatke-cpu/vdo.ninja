@@ -144,6 +144,11 @@
 				background: #050607;
 			}
 
+			body.orientation-portrait .local-video {
+				object-fit: contain;
+				background: #050607;
+			}
+
 			.avatar {
 				display: grid;
 				place-items: center;
@@ -236,6 +241,10 @@
 			}
 
 			.control.end {
+				display: none;
+			}
+
+			.control.room-only {
 				display: none;
 			}
 
@@ -441,6 +450,10 @@
 				display: inline-flex;
 			}
 
+			body.in-room .control.room-only {
+				display: inline-flex;
+			}
+
 			body.in-room .form {
 				position: absolute;
 				right: 16px;
@@ -556,6 +569,14 @@
 						<svg data-video-icon viewBox="0 0 24 24" aria-hidden="true"></svg>
 						<span data-video-label>Stop Video</span>
 					</button>
+					<button type="button" class="control room-only" data-orientation aria-pressed="false" title="Landscape" aria-label="Landscape">
+						<svg data-orientation-icon viewBox="0 0 24 24" aria-hidden="true"></svg>
+						<span data-orientation-label>Landscape</span>
+					</button>
+					<button type="button" class="control room-only" data-facing aria-pressed="false" title="Front Camera" aria-label="Front Camera">
+						<svg data-facing-icon viewBox="0 0 24 24" aria-hidden="true"></svg>
+						<span data-facing-label>Front Camera</span>
+					</button>
 					<button type="button" class="control end" data-end title="Leave" aria-label="Leave">
 						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.4 2.1L8.1 9.5a16 16 0 0 0 6.4 6.4l1.2-1.2a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2Z"></path><path d="M23 1 1 23"></path></svg>
 						<span>Leave</span>
@@ -587,13 +608,16 @@
 				var state = {
 					audio: readBool("audio", true),
 					video: readBool("video", true),
+					orientation: readChoice("orientation", "landscape", ["landscape", "portrait"]),
+					facing: readChoice("facing", "user", ["user", "environment"]),
 					remember: readBool("rememberName", true),
 					joined: false,
 					query: "",
 					mode: "stream_guest",
 					iframe: null,
 					engineReady: false,
-					mediaTimer: null
+					mediaTimer: null,
+					cameraProfileApplied: false
 				};
 
 				var refs = {
@@ -610,11 +634,17 @@
 					join: document.querySelector("[data-join]"),
 					audio: document.querySelector("[data-audio]"),
 					camera: document.querySelector("[data-camera]"),
+					orientation: document.querySelector("[data-orientation]"),
+					facing: document.querySelector("[data-facing]"),
 					end: document.querySelector("[data-end]"),
 					audioIcon: document.querySelector("[data-audio-icon]"),
 					videoIcon: document.querySelector("[data-video-icon]"),
+					orientationIcon: document.querySelector("[data-orientation-icon]"),
+					facingIcon: document.querySelector("[data-facing-icon]"),
 					audioLabel: document.querySelector("[data-audio-label]"),
-					videoLabel: document.querySelector("[data-video-label]")
+					videoLabel: document.querySelector("[data-video-label]"),
+					orientationLabel: document.querySelector("[data-orientation-label]"),
+					facingLabel: document.querySelector("[data-facing-label]")
 				};
 
 				init();
@@ -651,6 +681,18 @@
 						document.body.classList.toggle("is-video-off", !state.video);
 						renderControls();
 						applyEngineMediaState();
+					});
+					refs.orientation.addEventListener("click", function () {
+						state.orientation = state.orientation === "portrait" ? "landscape" : "portrait";
+						writeString("orientation", state.orientation);
+						renderControls();
+						applyEngineOrientation();
+					});
+					refs.facing.addEventListener("click", function () {
+						state.facing = state.facing === "environment" ? "user" : "environment";
+						writeString("facing", state.facing);
+						renderControls();
+						applyEngineFacing();
 					});
 					refs.end.addEventListener("click", endCall);
 				}
@@ -726,6 +768,7 @@
 					iframe.src = "/g/?" + serializeParams(params);
 					document.body.appendChild(iframe);
 					state.iframe = iframe;
+					state.cameraProfileApplied = false;
 				}
 
 				function startMediaMonitor() {
@@ -742,6 +785,7 @@
 							refs.stage.classList.add("has-video");
 							setStatus("Connected");
 							applyEngineMediaState();
+							applyInitialCameraProfile();
 							try {
 								var playResult = refs.video.play();
 								if (playResult && playResult.catch) {
@@ -830,6 +874,87 @@
 					} catch (error) {}
 				}
 
+				function applyInitialCameraProfile() {
+					if (state.cameraProfileApplied) {
+						return;
+					}
+					state.cameraProfileApplied = true;
+					applyEngineOrientation();
+					if (state.facing === "environment") {
+						applyEngineFacing();
+					}
+				}
+
+				function applyEngineOrientation() {
+					document.body.classList.toggle("orientation-portrait", state.orientation === "portrait");
+					document.body.classList.toggle("orientation-landscape", state.orientation === "landscape");
+					var win = state.iframe && state.iframe.contentWindow;
+					if (!win || !win.session) {
+						return;
+					}
+					var ratio = state.orientation === "portrait" ? 9 / 16 : 16 / 9;
+					try {
+						win.session.orientation = state.orientation;
+						win.session.forceAspectRatio = ratio;
+						if (typeof win.updateCameraConstraints === "function") {
+							win.updateCameraConstraints("aspectRatio", ratio, false, false, false);
+						}
+						if (typeof win.updateForceRotate === "function") {
+							win.updateForceRotate(true);
+						}
+					} catch (error) {}
+				}
+
+				function applyEngineFacing() {
+					var win = state.iframe && state.iframe.contentWindow;
+					var doc = state.iframe && state.iframe.contentDocument;
+					if (!win || !win.session) {
+						return;
+					}
+					try {
+						win.session.facingMode = state.facing;
+						win.session.videoDevice = false;
+						var select = doc && doc.querySelector("#videoSource3");
+						var targetIndex = findFacingOptionIndex(select, state.facing);
+						if (select && targetIndex >= 0) {
+							select.selectedIndex = targetIndex;
+							if (select.options[targetIndex]) {
+								win.session.videoDevice = select.options[targetIndex].value || false;
+							}
+							if (typeof win.changeVideoDevice === "function") {
+								win.changeVideoDevice(targetIndex, win.session.quality || 0);
+							} else if (typeof win.grabVideo === "function") {
+								win.grabVideo(win.session.quality || 0, "videosource", "#videoSource3");
+							}
+						} else if (typeof win.grabVideo === "function") {
+							win.grabVideo(win.session.quality || 0, "videosource", "#videoSource3");
+						}
+						refs.stage.classList.remove("has-video");
+						startMediaMonitor();
+					} catch (error) {}
+				}
+
+				function findFacingOptionIndex(select, facing) {
+					if (!select || !select.options || !select.options.length) {
+						return -1;
+					}
+					var preferred = facing === "environment"
+						? ["back", "rear", "environment"]
+						: ["front", "user", "face"];
+					for (var optionIndex = 0; optionIndex < select.options.length; optionIndex++) {
+						var label = ((select.options[optionIndex].textContent || select.options[optionIndex].label || "") + "").toLowerCase();
+						for (var keywordIndex = 0; keywordIndex < preferred.length; keywordIndex++) {
+							if (label.indexOf(preferred[keywordIndex]) >= 0) {
+								return optionIndex;
+							}
+						}
+					}
+					if (select.options.length > 1) {
+						return select.selectedIndex === 0 ? 1 : 0;
+					}
+					return -1;
+				}
+
 				function endCall() {
 					try {
 						var win = state.iframe && state.iframe.contentWindow;
@@ -891,20 +1016,36 @@
 				}
 
 				function renderControls() {
+					document.body.classList.toggle("orientation-portrait", state.orientation === "portrait");
+					document.body.classList.toggle("orientation-landscape", state.orientation === "landscape");
 					refs.audio.classList.toggle("is-off", !state.audio);
 					refs.camera.classList.toggle("is-off", !state.video);
 					refs.audio.setAttribute("aria-pressed", state.audio ? "false" : "true");
 					refs.camera.setAttribute("aria-pressed", state.video ? "false" : "true");
+					refs.orientation.setAttribute("aria-pressed", state.orientation === "portrait" ? "true" : "false");
+					refs.facing.setAttribute("aria-pressed", state.facing === "environment" ? "true" : "false");
 					refs.audioLabel.textContent = state.audio ? "Mute" : "Unmute";
 					refs.videoLabel.textContent = state.video ? "Stop Video" : "Start Video";
+					refs.orientationLabel.textContent = state.orientation === "portrait" ? "Portrait" : "Landscape";
+					refs.facingLabel.textContent = state.facing === "environment" ? "Back Camera" : "Front Camera";
 					refs.audio.title = refs.audioLabel.textContent;
 					refs.camera.title = refs.videoLabel.textContent;
+					refs.orientation.title = refs.orientationLabel.textContent;
+					refs.orientation.setAttribute("aria-label", refs.orientationLabel.textContent);
+					refs.facing.title = refs.facingLabel.textContent;
+					refs.facing.setAttribute("aria-label", refs.facingLabel.textContent);
 					refs.audioIcon.innerHTML = state.audio
 						? "<path d=\"M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z\"></path><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"></path><path d=\"M12 19v3\"></path>"
 						: "<path d=\"M12 2a3 3 0 0 0-3 3v3\"></path><path d=\"M15 9.3V5a3 3 0 0 0-5.1-2.1\"></path><path d=\"M19 10v2a7 7 0 0 1-.7 3\"></path><path d=\"M5 10v2a7 7 0 0 0 10.5 6.1\"></path><path d=\"M12 19v3\"></path><path d=\"M3 3l18 18\"></path>";
 					refs.videoIcon.innerHTML = state.video
 						? "<path d=\"M15 10l4.6-3.1A1 1 0 0 1 21 7.7v8.6a1 1 0 0 1-1.4.8L15 14\"></path><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"></rect>"
 						: "<path d=\"M10.7 6H13a2 2 0 0 1 2 2v2.3\"></path><path d=\"M15 14l4.6 3.1a1 1 0 0 0 1.4-.8V7.7a1 1 0 0 0-1.4-.8L17 8.7\"></path><path d=\"M3 3l18 18\"></path><path d=\"M3 8a2 2 0 0 1 2-2h1\"></path><path d=\"M3 12v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1\"></path>";
+					refs.orientationIcon.innerHTML = state.orientation === "portrait"
+						? "<rect x=\"8\" y=\"3\" width=\"8\" height=\"18\" rx=\"2\"></rect><path d=\"M11 18h2\"></path>"
+						: "<rect x=\"3\" y=\"7\" width=\"18\" height=\"10\" rx=\"2\"></rect><path d=\"M18 12h1\"></path>";
+					refs.facingIcon.innerHTML = state.facing === "environment"
+						? "<path d=\"M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2Z\"></path><circle cx=\"12\" cy=\"13\" r=\"4\"></circle><path d=\"M7 10h.01\"></path>"
+						: "<path d=\"M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2Z\"></path><circle cx=\"12\" cy=\"13\" r=\"4\"></circle><path d=\"M9 13h.01\"></path><path d=\"M15 13h.01\"></path>";
 				}
 
 				function readInviteCode() {
@@ -977,6 +1118,22 @@
 				function writeBool(key, value) {
 					try {
 						window.localStorage.setItem("mcastGuestPreference." + key, value ? "true" : "false");
+					} catch (error) {}
+				}
+
+				function readChoice(key, fallback, allowed) {
+					try {
+						var value = (window.localStorage.getItem("mcastGuestPreference." + key) || "").toLowerCase();
+						if (allowed.indexOf(value) >= 0) {
+							return value;
+						}
+					} catch (error) {}
+					return fallback;
+				}
+
+				function writeString(key, value) {
+					try {
+						window.localStorage.setItem("mcastGuestPreference." + key, value);
 					} catch (error) {}
 				}
 			})();
