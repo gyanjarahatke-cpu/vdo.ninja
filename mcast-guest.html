@@ -696,7 +696,7 @@
 						}
 					});
 					window.addEventListener("resize", syncEngineVideoAfterLayoutChange);
-					window.addEventListener("orientationchange", syncEngineVideoAfterLayoutChange);
+					window.addEventListener("orientationchange", syncManualOrientationAfterLayoutChange);
 					refs.join.addEventListener("click", startJoin);
 					refs.audio.addEventListener("click", function () {
 						state.audio = !state.audio;
@@ -914,7 +914,17 @@
 						return;
 					}
 					window.setTimeout(function () {
-						refreshEngineVideoTransform(true);
+						refreshEngineVideoTransform(false);
+					}, 260);
+				}
+
+				function syncManualOrientationAfterLayoutChange() {
+					if (!state.joined) {
+						return;
+					}
+					window.setTimeout(function () {
+						applyManualEngineOrientation();
+						refreshEngineVideoTransform(false);
 					}, 260);
 				}
 
@@ -922,10 +932,7 @@
 					var win = state.iframe && state.iframe.contentWindow;
 					try {
 						if (updateEngine && win && win.session) {
-							win.session.orientation = state.orientation;
-							if (typeof win.updateForceRotate === "function") {
-								win.updateForceRotate(false);
-							}
+							applyManualEngineOrientation();
 							if (typeof win.applyMirror === "function") {
 								win.applyMirror(win.session.mirrorExclude);
 							}
@@ -941,9 +948,8 @@
 					var transform = buildEngineVideoTransform(engineVideo);
 					refs.video.style.transform = transform || "none";
 					refs.freezeFrame.style.transform = transform || "none";
-					var rotated = getDisplayRotation(engineVideo);
-					refs.video.dataset.rotated = rotated.toString();
-					refs.freezeFrame.dataset.rotated = rotated.toString();
+					refs.video.dataset.rotated = "0";
+					refs.freezeFrame.dataset.rotated = "0";
 				}
 
 				function buildEngineVideoTransform(engineVideo) {
@@ -957,54 +963,60 @@
 					if (base && base !== "unset" && base !== "none") {
 						parts.push(base);
 					}
-					var rotated = getDisplayRotation(engineVideo);
-					if (rotated) {
-						parts.push("rotate(" + rotated + "deg)");
-					}
 					return parts.join(" ");
-				}
-
-				function getDisplayRotation(engineVideo) {
-					var rotated = normalizeRotation(readEngineRotation(engineVideo));
-					if (rotated === 90 || rotated === 270) {
-						return (360 - rotated) % 360;
-					}
-					return rotated;
-				}
-
-				function readEngineRotation(engineVideo) {
-					if (!engineVideo) {
-						return 0;
-					}
-					if (engineVideo.dataset && engineVideo.dataset.rotated) {
-						return engineVideo.dataset.rotated;
-					}
-					if (typeof engineVideo.rotated !== "undefined") {
-						return engineVideo.rotated;
-					}
-					if (engineVideo.style && engineVideo.style.transform) {
-						var match = engineVideo.style.transform.match(/rotate\((-?\d+(?:\.\d+)?)deg\)/);
-						if (match) {
-							return match[1];
-						}
-					}
-					return 0;
-				}
-
-				function normalizeRotation(value) {
-					var rotation = parseInt(value || 0, 10);
-					if (!Number.isFinite(rotation)) {
-						return 0;
-					}
-					rotation %= 360;
-					if (rotation < 0) {
-						rotation += 360;
-					}
-					return rotation;
 				}
 
 				function stripLayoutTranslate(value) {
 					return (value || "").replace(/translate\([^)]*\)/g, "").trim();
+				}
+
+				function applyManualEngineOrientation() {
+					var win = state.iframe && state.iframe.contentWindow;
+					if (!win || !win.session) {
+						return;
+					}
+					var ratio = state.orientation === "portrait" ? 9 / 16 : 16 / 9;
+					try {
+						guardEngineAutoRotation(win);
+						win.session.orientation = false;
+						win.session.forceRotate = 0;
+						win.session.forceAspectRatio = ratio;
+						var engineVideo = getEngineVideoElement();
+						if (engineVideo) {
+							engineVideo.rotated = 0;
+							if (engineVideo.dataset) {
+								engineVideo.dataset.rotated = "0";
+							}
+						}
+						if (typeof win.updateCameraConstraints === "function") {
+							win.updateCameraConstraints("aspectRatio", ratio, false, false, false);
+						}
+					} catch (error) {}
+				}
+
+				function guardEngineAutoRotation(win) {
+					if (!win || win.__mcastManualOrientationGuarded) {
+						return;
+					}
+					win.__mcastManualOrientationGuarded = true;
+					if (typeof win.updateForceRotate === "function") {
+						win.__mcastOriginalUpdateForceRotate = win.updateForceRotate;
+						win.updateForceRotate = function () {
+							try {
+								if (win.session) {
+									win.session.orientation = false;
+									win.session.forceRotate = 0;
+								}
+								if (typeof win.applyMirror === "function") {
+									win.applyMirror(win.session && win.session.mirrorExclude);
+								}
+							} catch (error) {}
+							return false;
+						};
+					}
+					win.onorientationchange = function () {
+						window.setTimeout(syncManualOrientationAfterLayoutChange, 260);
+					};
 				}
 
 				function applyEngineMediaState() {
@@ -1041,16 +1053,8 @@
 					if (!win || !win.session) {
 						return;
 					}
-					var ratio = state.orientation === "portrait" ? 9 / 16 : 16 / 9;
 					try {
-						win.session.orientation = state.orientation;
-						win.session.forceAspectRatio = ratio;
-						if (typeof win.updateCameraConstraints === "function") {
-							win.updateCameraConstraints("aspectRatio", ratio, false, false, false);
-						}
-						if (typeof win.updateForceRotate === "function") {
-							win.updateForceRotate(false);
-						}
+						applyManualEngineOrientation();
 						if (typeof win.applyMirror === "function") {
 							win.applyMirror(win.session.mirrorExclude);
 						}
@@ -1073,7 +1077,7 @@
 					try {
 						win.session.facingMode = state.facing;
 						win.session.videoDevice = false;
-						win.session.orientation = state.orientation;
+						applyManualEngineOrientation();
 						var select = doc && doc.querySelector("#videoSource3");
 						var targetIndex = findFacingOptionIndex(select, state.facing);
 						if (select && targetIndex >= 0) {
