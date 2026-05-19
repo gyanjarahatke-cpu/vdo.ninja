@@ -58,6 +58,9 @@
 		return;
 	}
 
+	if (token || shortCode) {
+		cleanTransportRouteParams(params);
+	}
 	decoded = applyRouteDefaults(decoded, route);
 	applyRouteMetadata(decoded, route);
 	if (typeof session !== "undefined") {
@@ -1092,6 +1095,28 @@
 	function readShortInviteCodeFromPath(currentPath) {
 		var match = (currentPath || "").match(/^\/(?:g|m|c|s|w|p|i)\/([A-Za-z0-9]{6,16})\/?$/i);
 		return match ? match[1] : "";
+	}
+
+	function cleanTransportRouteParams(sourceParams) {
+		try {
+			if (!window.history || typeof window.history.replaceState !== "function") {
+				return;
+			}
+
+			var cleanParams = new URLSearchParams(sourceParams.toString());
+			cleanParams.delete("t");
+			cleanParams.delete("token");
+			cleanParams.delete("r");
+			cleanParams.delete("s");
+			cleanParams.delete("code");
+			var nextQuery = cleanParams.toString();
+			var nextUrl = window.location.pathname +
+				(nextQuery ? "?" + nextQuery : "") +
+				(window.location.hash || "");
+			window.history.replaceState({ path: nextUrl }, "", nextUrl);
+		} catch (error) {
+			console.warn("MCast could not clean transport route params", error);
+		}
 	}
 
 	function resolveStoredRoute(code, currentRoute) {
