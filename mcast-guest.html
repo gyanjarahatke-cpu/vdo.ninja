@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+		<meta name="robots" content="noindex, nofollow">
+		<title>MCast Studio Guest Invite</title>
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+				background: #111315;
+				color: #eef2f7;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			html,
+			body {
+				width: 100%;
+				min-height: 100%;
+				margin: 0;
+				overflow: hidden;
+				background: #111315;
+				letter-spacing: 0;
+			}
+
+			body {
+				display: grid;
+				place-items: center;
+				padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+			}
+
+			.mcast-shell {
+				position: relative;
+				width: min(1060px, 100%);
+				min-height: min(720px, calc(100dvh - 32px));
+				display: grid;
+				grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+				overflow: hidden;
+				border: 1px solid rgba(255, 255, 255, .1);
+				border-radius: 8px;
+				background: #1a1d21;
+				box-shadow: 0 22px 70px rgba(0, 0, 0, .34);
+			}
+
+			.preview {
+				position: relative;
+				min-height: 420px;
+				background: #050607;
+				padding: 18px;
+				overflow: hidden;
+			}
+
+			.topbar {
+				position: relative;
+				z-index: 3;
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 12px;
+				min-width: 0;
+			}
+
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				min-width: 0;
+			}
+
+			.logo {
+				width: 38px;
+				height: 38px;
+				border-radius: 8px;
+				background: #fff;
+				object-fit: cover;
+				flex: 0 0 auto;
+			}
+
+			.brand-title {
+				font-size: 14px;
+				font-weight: 760;
+				line-height: 1.15;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			.brand-subtitle {
+				margin-top: 2px;
+				color: #a8b3c2;
+				font-size: 12px;
+				font-weight: 560;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			.mode-pill {
+				display: inline-flex;
+				align-items: center;
+				gap: 7px;
+				max-width: 46%;
+				border: 1px solid rgba(255, 255, 255, .12);
+				border-radius: 999px;
+				background: rgba(255, 255, 255, .07);
+				color: #e8edf5;
+				font-size: 12px;
+				font-weight: 720;
+				padding: 7px 10px;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			.mode-dot {
+				width: 7px;
+				height: 7px;
+				border-radius: 50%;
+				background: #22c55e;
+				box-shadow: 0 0 0 4px rgba(34, 197, 94, .16);
+				flex: 0 0 auto;
+			}
+
+			.stage {
+				position: absolute;
+				inset: 72px 18px 104px;
+				display: grid;
+				place-items: center;
+				border-radius: 8px;
+				background: #0b0d10;
+				overflow: hidden;
+			}
+
+			.local-video {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				background: #050607;
+			}
+
+			.avatar {
+				display: grid;
+				place-items: center;
+				width: 118px;
+				height: 118px;
+				border-radius: 50%;
+				background: #2a3038;
+				color: #d7dde7;
+				font-size: 42px;
+				font-weight: 760;
+				box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+			}
+
+			.stage.has-video .avatar,
+			.stage.has-video .video-off {
+				display: none;
+			}
+
+			.video-off {
+				position: absolute;
+				inset: 0;
+				display: none;
+				place-items: center;
+				background: #0b0d10;
+				color: #a8b3c2;
+				font-size: 13px;
+				font-weight: 680;
+				text-align: center;
+				padding: 24px;
+			}
+
+			.is-video-off .video-off {
+				display: grid;
+			}
+
+			.preview-label {
+				position: absolute;
+				left: 14px;
+				bottom: 12px;
+				max-width: calc(100% - 28px);
+				padding: 6px 9px;
+				border-radius: 6px;
+				background: rgba(0, 0, 0, .62);
+				color: #f8fafc;
+				font-size: 12px;
+				font-weight: 680;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			.controls {
+				position: relative;
+				z-index: 4;
+				display: flex;
+				justify-content: center;
+				gap: 14px;
+				margin-top: auto;
+				position: absolute;
+				left: 50%;
+				bottom: 18px;
+				transform: translateX(-50%);
+			}
+
+			.control {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+				min-width: 128px;
+				height: 42px;
+				border: 1px solid rgba(255, 255, 255, .16);
+				border-radius: 999px;
+				background: #2a2f36;
+				color: #f8fafc;
+				font-size: 13px;
+				font-weight: 720;
+				cursor: pointer;
+			}
+
+			.control:hover {
+				background: #343b44;
+			}
+
+			.control.is-off,
+			.control.end {
+				background: #b91c1c;
+				border-color: #dc2626;
+				color: #fff;
+			}
+
+			.control.end {
+				display: none;
+			}
+
+			.control svg {
+				display: block;
+				width: 19px;
+				height: 19px;
+				stroke: currentColor;
+				stroke-width: 2;
+				fill: none;
+				stroke-linecap: round;
+				stroke-linejoin: round;
+			}
+
+			.form {
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				background: #f7f8fa;
+				color: #1f2937;
+				padding: 34px 30px;
+			}
+
+			h1 {
+				color: #111827;
+				font-size: 26px;
+				line-height: 1.18;
+				font-weight: 780;
+				margin: 0 0 10px;
+			}
+
+			.message {
+				color: #4b5563;
+				font-size: 14px;
+				line-height: 1.52;
+				margin: 0 0 24px;
+			}
+
+			.field {
+				display: flex;
+				flex-direction: column;
+				gap: 7px;
+				margin-bottom: 14px;
+			}
+
+			.field span {
+				font-size: 12px;
+				font-weight: 760;
+				color: #374151;
+			}
+
+			.name-input {
+				height: 44px;
+				border: 1px solid #cfd5dd;
+				border-radius: 6px;
+				background: #fff;
+				color: #111827;
+				font: 650 15px Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+				padding: 0 12px;
+				outline: none;
+			}
+
+			.name-input:focus {
+				border-color: #2563eb;
+				box-shadow: 0 0 0 3px rgba(37, 99, 235, .14);
+			}
+
+			.check-row {
+				display: flex;
+				align-items: center;
+				gap: 9px;
+				color: #4b5563;
+				font-size: 13px;
+				font-weight: 620;
+				margin: 2px 0 18px;
+			}
+
+			.check-row input {
+				width: 16px;
+				height: 16px;
+				accent-color: #2563eb;
+			}
+
+			.join {
+				height: 46px;
+				border: 0;
+				border-radius: 6px;
+				background: #2563eb;
+				color: #fff;
+				font-size: 15px;
+				font-weight: 780;
+				cursor: pointer;
+			}
+
+			.join:hover {
+				background: #1d4ed8;
+			}
+
+			.join:disabled {
+				opacity: .65;
+				cursor: default;
+			}
+
+			.status {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				margin-top: 16px;
+				padding: 11px 12px;
+				border: 1px solid #dde3ea;
+				border-radius: 6px;
+				background: #fff;
+				color: #334155;
+				font-size: 13px;
+				font-weight: 650;
+			}
+
+			.spinner {
+				width: 15px;
+				height: 15px;
+				border-radius: 50%;
+				border: 2px solid rgba(37, 99, 235, .22);
+				border-top-color: #2563eb;
+				animation: spin .9s linear infinite;
+				flex: 0 0 auto;
+			}
+
+			.footer,
+			.terms {
+				margin-top: 16px;
+				color: #6b7280;
+				font-size: 11px;
+				line-height: 1.45;
+			}
+
+			.terms {
+				margin-top: 18px;
+			}
+
+			.engine-frame {
+				position: fixed;
+				left: -20px;
+				top: -20px;
+				width: 2px;
+				height: 2px;
+				border: 0;
+				opacity: 0;
+				pointer-events: none;
+			}
+
+			body.in-room {
+				padding: 0;
+				background: #050607;
+			}
+
+			body.in-room .mcast-shell {
+				width: 100%;
+				height: 100dvh;
+				min-height: 100dvh;
+				border: 0;
+				border-radius: 0;
+				grid-template-columns: 1fr;
+				background: #050607;
+				box-shadow: none;
+			}
+
+			body.in-room .preview {
+				min-height: 100dvh;
+				padding: 16px;
+			}
+
+			body.in-room .stage {
+				inset: 0;
+				border-radius: 0;
+			}
+
+			body.in-room .controls {
+				position: fixed;
+				bottom: max(18px, env(safe-area-inset-bottom));
+				z-index: 5;
+				margin: 0;
+				padding: 8px;
+				border: 1px solid rgba(255, 255, 255, .12);
+				border-radius: 999px;
+				background: rgba(5, 6, 7, .72);
+				box-shadow: 0 16px 42px rgba(0, 0, 0, .36);
+				backdrop-filter: blur(12px);
+			}
+
+			body.in-room .control {
+				min-width: 44px;
+				width: 44px;
+				height: 44px;
+				padding: 0;
+				border-radius: 50%;
+			}
+
+			body.in-room .control span {
+				display: none;
+			}
+
+			body.in-room .control.end {
+				display: inline-flex;
+			}
+
+			body.in-room .form {
+				position: absolute;
+				right: 16px;
+				bottom: 18px;
+				z-index: 3;
+				width: min(360px, calc(100% - 32px));
+				padding: 0;
+				background: transparent;
+				color: #f8fafc;
+				pointer-events: none;
+			}
+
+			body.in-room h1,
+			body.in-room .message,
+			body.in-room .field,
+			body.in-room .check-row,
+			body.in-room .join,
+			body.in-room .footer,
+			body.in-room .terms {
+				display: none;
+			}
+
+			body.in-room .status {
+				margin: 0;
+				padding: 9px 11px;
+				border-color: rgba(255, 255, 255, .14);
+				background: rgba(5, 6, 7, .58);
+				color: #f8fafc;
+				box-shadow: 0 10px 24px rgba(0, 0, 0, .25);
+				backdrop-filter: blur(12px);
+			}
+
+			body.in-room .spinner {
+				display: none;
+			}
+
+			@keyframes spin {
+				to {
+					transform: rotate(360deg);
+				}
+			}
+
+			@media (max-width: 760px) {
+				body {
+					padding: 0;
+				}
+
+				.mcast-shell {
+					width: 100%;
+					height: 100dvh;
+					min-height: 100dvh;
+					border: 0;
+					border-radius: 0;
+					grid-template-columns: 1fr;
+					grid-template-rows: minmax(42dvh, 1fr) auto;
+				}
+
+				.preview {
+					min-height: 42dvh;
+					padding: 14px;
+				}
+
+				.stage {
+					inset: 64px 14px 84px;
+				}
+
+				.form {
+					padding: 24px 20px 20px;
+					justify-content: flex-start;
+				}
+
+				h1 {
+					font-size: 24px;
+				}
+
+				.controls {
+					gap: 10px;
+				}
+
+				.control {
+					min-width: 116px;
+					height: 40px;
+					font-size: 12px;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main class="mcast-shell" aria-live="polite">
+			<section class="preview">
+				<div class="topbar">
+					<div class="brand">
+						<img class="logo" src="/media/mcast-apple-touch-icon.png" alt="">
+						<div>
+							<div class="brand-title">MCast Studio</div>
+							<div class="brand-subtitle">Remote session</div>
+						</div>
+					</div>
+					<div class="mode-pill"><span class="mode-dot"></span><span data-mode>Secure room</span></div>
+				</div>
+				<div class="stage" data-stage>
+					<video class="local-video" data-video muted autoplay playsinline></video>
+					<div class="avatar" data-avatar>G</div>
+					<div class="video-off">Camera is off</div>
+					<div class="preview-label" data-preview-name>Guest</div>
+				</div>
+				<div class="controls" aria-label="Device controls">
+					<button type="button" class="control" data-audio aria-pressed="false" title="Mute">
+						<svg data-audio-icon viewBox="0 0 24 24" aria-hidden="true"></svg>
+						<span data-audio-label>Mute</span>
+					</button>
+					<button type="button" class="control" data-camera aria-pressed="false" title="Stop Video">
+						<svg data-video-icon viewBox="0 0 24 24" aria-hidden="true"></svg>
+						<span data-video-label>Stop Video</span>
+					</button>
+					<button type="button" class="control end" data-end title="Leave" aria-label="Leave">
+						<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.4 2.1L8.1 9.5a16 16 0 0 0 6.4 6.4l1.2-1.2a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2Z"></path><path d="M23 1 1 23"></path></svg>
+						<span>Leave</span>
+					</button>
+				</div>
+			</section>
+			<section class="form">
+				<h1 data-heading>Join your session</h1>
+				<p class="message" data-message>Check your name and devices before entering.</p>
+				<label class="field">
+					<span>Your name</span>
+					<input class="name-input" data-name type="text" autocomplete="name" autocorrect="off" autocapitalize="words" maxlength="60" placeholder="Enter your name">
+				</label>
+				<label class="check-row">
+					<input data-remember type="checkbox" checked>
+					<span>Remember my name on this device</span>
+				</label>
+				<button type="button" class="join" data-join>Join</button>
+				<div class="status"><span class="spinner"></span><span data-status>Loading invite...</span></div>
+				<div class="footer">Use headphones when possible. Keep this tab open while the host prepares the session.</div>
+				<div class="terms">By joining, you allow this browser to use your microphone and camera for this MCast Studio session.</div>
+			</section>
+		</main>
+		<script>
+			(function () {
+				"use strict";
+
+				var resolveUrl = "https://mcast-studio.web.app/api/vdoShortInviteResolve";
+				var state = {
+					audio: readBool("audio", true),
+					video: readBool("video", true),
+					remember: readBool("rememberName", true),
+					joined: false,
+					query: "",
+					mode: "stream_guest",
+					iframe: null,
+					engineReady: false,
+					mediaTimer: null
+				};
+
+				var refs = {
+					stage: document.querySelector("[data-stage]"),
+					video: document.querySelector("[data-video]"),
+					avatar: document.querySelector("[data-avatar]"),
+					previewName: document.querySelector("[data-preview-name]"),
+					mode: document.querySelector("[data-mode]"),
+					heading: document.querySelector("[data-heading]"),
+					message: document.querySelector("[data-message]"),
+					status: document.querySelector("[data-status]"),
+					name: document.querySelector("[data-name]"),
+					remember: document.querySelector("[data-remember]"),
+					join: document.querySelector("[data-join]"),
+					audio: document.querySelector("[data-audio]"),
+					camera: document.querySelector("[data-camera]"),
+					end: document.querySelector("[data-end]"),
+					audioIcon: document.querySelector("[data-audio-icon]"),
+					videoIcon: document.querySelector("[data-video-icon]"),
+					audioLabel: document.querySelector("[data-audio-label]"),
+					videoLabel: document.querySelector("[data-video-label]")
+				};
+
+				init();
+
+				function init() {
+					refs.name.value = state.remember ? readName() : "";
+					refs.remember.checked = state.remember;
+					updateName(refs.name.value);
+					renderControls();
+					wireEvents();
+					loadInvite();
+				}
+
+				function wireEvents() {
+					refs.name.addEventListener("input", function () {
+						updateName(refs.name.value);
+					});
+					refs.name.addEventListener("keydown", function (event) {
+						if (event.key === "Enter") {
+							event.preventDefault();
+							startJoin();
+						}
+					});
+					refs.join.addEventListener("click", startJoin);
+					refs.audio.addEventListener("click", function () {
+						state.audio = !state.audio;
+						writeBool("audio", state.audio);
+						renderControls();
+						applyEngineMediaState();
+					});
+					refs.camera.addEventListener("click", function () {
+						state.video = !state.video;
+						writeBool("video", state.video);
+						document.body.classList.toggle("is-video-off", !state.video);
+						renderControls();
+						applyEngineMediaState();
+					});
+					refs.end.addEventListener("click", endCall);
+				}
+
+				function loadInvite() {
+					var code = readInviteCode();
+					if (!code) {
+						setError("This MCast Studio invitation link is not valid.");
+						return;
+					}
+					fetch(resolveUrl + "?code=" + encodeURIComponent(code), { cache: "no-store" })
+						.then(function (response) {
+							if (!response.ok) {
+								throw new Error("Invite resolve failed.");
+							}
+							return response.json();
+						})
+						.then(function (payload) {
+							state.query = (payload.query || "").toString();
+							state.mode = normalizeToken(payload.mode || readQueryValue(state.query, "mcastmode") || "stream_guest");
+							applyModeText(state.mode, normalizeToken(payload.state || readQueryValue(state.query, "mcaststate") || "backstage"));
+						})
+						.catch(function () {
+							setError("This MCast Studio invitation link could not be loaded.");
+						});
+				}
+
+				function startJoin() {
+					if (state.joined || !state.query) {
+						return;
+					}
+
+					var name = (refs.name.value || "").trim().slice(0, 60);
+					state.remember = refs.remember.checked;
+					writeBool("rememberName", state.remember);
+					if (state.remember && name) {
+						writeName(name);
+					} else if (!state.remember) {
+						writeName("");
+					}
+					updateName(name);
+
+					state.joined = true;
+					refs.join.disabled = true;
+					refs.join.textContent = "Joining...";
+					setStatus("Starting camera and microphone...");
+					document.body.classList.add("in-room");
+					document.body.classList.toggle("is-video-off", !state.video);
+					createEngineFrame(name);
+					startMediaMonitor();
+				}
+
+				function createEngineFrame(name) {
+					if (state.iframe) {
+						state.iframe.remove();
+					}
+					var params = new URLSearchParams(state.query.replace(/^\?/, ""));
+					params.set("webcam", "");
+					params.set("nosettings", "");
+					params.set("mcastguest", "");
+					params.set("mcastengine", "1");
+					params.set("mcastautojoin", "1");
+					params.set("autostart", "");
+					if (name) {
+						params.set("label", name);
+						params.set("l", name);
+					}
+
+					var iframe = document.createElement("iframe");
+					iframe.className = "engine-frame";
+					iframe.allow = "camera; microphone; autoplay; display-capture; fullscreen; picture-in-picture";
+					iframe.referrerPolicy = "no-referrer";
+					iframe.src = "/g/?" + serializeParams(params);
+					document.body.appendChild(iframe);
+					state.iframe = iframe;
+				}
+
+				function startMediaMonitor() {
+					if (state.mediaTimer) {
+						window.clearInterval(state.mediaTimer);
+					}
+					var attempts = 0;
+					state.mediaTimer = window.setInterval(function () {
+						attempts++;
+						var stream = getEngineStream();
+						if (stream) {
+							state.engineReady = true;
+							refs.video.srcObject = stream;
+							refs.stage.classList.add("has-video");
+							setStatus("Connected");
+							applyEngineMediaState();
+							try {
+								var playResult = refs.video.play();
+								if (playResult && playResult.catch) {
+									playResult.catch(function () {});
+								}
+							} catch (error) {}
+							if (attempts > 8) {
+								window.clearInterval(state.mediaTimer);
+								state.mediaTimer = null;
+							}
+							return;
+						}
+						if (attempts === 8) {
+							setStatus("Allow browser camera and microphone permissions...");
+						}
+						if (attempts > 120) {
+							window.clearInterval(state.mediaTimer);
+							state.mediaTimer = null;
+							setStatus("Could not start media. Check browser permissions and refresh.");
+						}
+					}, 250);
+				}
+
+				function getEngineStream() {
+					var win = state.iframe && state.iframe.contentWindow;
+					var doc = state.iframe && state.iframe.contentDocument;
+					var candidates = [];
+					try {
+						if (win && win.session && win.session.videoElement) {
+							candidates.push(win.session.videoElement);
+						}
+						if (doc) {
+							var ids = ["videosource", "previewWebcam"];
+							for (var idIndex = 0; idIndex < ids.length; idIndex++) {
+								var byId = doc.getElementById(ids[idIndex]);
+								if (byId) {
+									candidates.push(byId);
+								}
+							}
+							var videos = doc.querySelectorAll("video");
+							for (var index = 0; index < videos.length; index++) {
+								candidates.push(videos[index]);
+							}
+						}
+					} catch (error) {
+						return null;
+					}
+					for (var candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
+						var stream = candidates[candidateIndex].srcObject;
+						if (isLiveStream(stream)) {
+							return stream;
+						}
+					}
+					return null;
+				}
+
+				function isLiveStream(stream) {
+					if (!stream || typeof stream.getTracks !== "function") {
+						return false;
+					}
+					var tracks = stream.getTracks();
+					for (var index = 0; index < tracks.length; index++) {
+						if (tracks[index].readyState === "live") {
+							return true;
+						}
+					}
+					return false;
+				}
+
+				function applyEngineMediaState() {
+					var win = state.iframe && state.iframe.contentWindow;
+					if (!win || !win.session) {
+						return;
+					}
+					try {
+						if (typeof win.session.muted !== "undefined" && win.session.muted === state.audio) {
+							if (typeof win.toggleMute === "function") {
+								win.toggleMute();
+							}
+						}
+						if (typeof win.session.videoMuted !== "undefined" && win.session.videoMuted === state.video) {
+							if (typeof win.toggleVideoMute === "function") {
+								win.toggleVideoMute();
+							}
+						}
+					} catch (error) {}
+				}
+
+				function endCall() {
+					try {
+						var win = state.iframe && state.iframe.contentWindow;
+						if (win && typeof win.hangup === "function") {
+							win.hangup(false);
+						}
+					} catch (error) {}
+					var stream = refs.video.srcObject;
+					if (stream && typeof stream.getTracks === "function") {
+						stream.getTracks().forEach(function (track) {
+							track.stop();
+						});
+					}
+					refs.video.srcObject = null;
+					if (state.iframe) {
+						state.iframe.remove();
+						state.iframe = null;
+					}
+					state.joined = false;
+					setStatus("Disconnected");
+				}
+
+				function applyModeText(mode, sessionState) {
+					refs.mode.textContent = toTitle(mode);
+					var profile = {
+						heading: "You are backstage",
+						message: "The production team can prepare your feed before you go live.",
+						status: "Ready to join"
+					};
+					if (mode === "meeting") {
+						profile.heading = "Joining the meeting";
+						profile.message = "Your session will open as soon as the connection is ready.";
+					} else if (mode === "classroom") {
+						profile.heading = "Classroom waiting room";
+						profile.message = "Your teacher will bring you into the class when ready.";
+					} else if (mode === "webinar") {
+						profile.heading = "Joining the webinar";
+						profile.message = "The host will approve speakers before they appear on screen.";
+					} else if (mode === "podcast") {
+						profile.heading = "Podcast audio check";
+						profile.message = "Keep your microphone ready while the host prepares the recording.";
+					} else if (mode === "remote_interview") {
+						profile.heading = "Interview waiting room";
+						profile.message = "The producer will check your audio and video before the show.";
+					}
+					if (sessionState === "active") {
+						profile.heading = "You are connected";
+						profile.message = "The host can hear you and will decide when to show video.";
+					}
+					refs.heading.textContent = profile.heading;
+					refs.message.textContent = profile.message;
+					setStatus(profile.status);
+				}
+
+				function updateName(value) {
+					var name = (value || "").trim() || "Guest";
+					refs.previewName.textContent = name;
+					refs.avatar.textContent = name.substring(0, 1).toUpperCase();
+				}
+
+				function renderControls() {
+					refs.audio.classList.toggle("is-off", !state.audio);
+					refs.camera.classList.toggle("is-off", !state.video);
+					refs.audio.setAttribute("aria-pressed", state.audio ? "false" : "true");
+					refs.camera.setAttribute("aria-pressed", state.video ? "false" : "true");
+					refs.audioLabel.textContent = state.audio ? "Mute" : "Unmute";
+					refs.videoLabel.textContent = state.video ? "Stop Video" : "Start Video";
+					refs.audio.title = refs.audioLabel.textContent;
+					refs.camera.title = refs.videoLabel.textContent;
+					refs.audioIcon.innerHTML = state.audio
+						? "<path d=\"M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z\"></path><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"></path><path d=\"M12 19v3\"></path>"
+						: "<path d=\"M12 2a3 3 0 0 0-3 3v3\"></path><path d=\"M15 9.3V5a3 3 0 0 0-5.1-2.1\"></path><path d=\"M19 10v2a7 7 0 0 1-.7 3\"></path><path d=\"M5 10v2a7 7 0 0 0 10.5 6.1\"></path><path d=\"M12 19v3\"></path><path d=\"M3 3l18 18\"></path>";
+					refs.videoIcon.innerHTML = state.video
+						? "<path d=\"M15 10l4.6-3.1A1 1 0 0 1 21 7.7v8.6a1 1 0 0 1-1.4.8L15 14\"></path><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"></rect>"
+						: "<path d=\"M10.7 6H13a2 2 0 0 1 2 2v2.3\"></path><path d=\"M15 14l4.6 3.1a1 1 0 0 0 1.4-.8V7.7a1 1 0 0 0-1.4-.8L17 8.7\"></path><path d=\"M3 3l18 18\"></path><path d=\"M3 8a2 2 0 0 1 2-2h1\"></path><path d=\"M3 12v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-1\"></path>";
+				}
+
+				function readInviteCode() {
+					var pathMatch = (window.location.pathname || "").match(/^\/(?:g|m|c|s|w|p|i)\/([A-Za-z0-9]{6,16})\/?$/i);
+					if (pathMatch) {
+						return pathMatch[1];
+					}
+					var params = new URLSearchParams(window.location.search || "");
+					return params.get("s") || params.get("code") || "";
+				}
+
+				function readQueryValue(query, key) {
+					return new URLSearchParams((query || "").replace(/^\?/, "")).get(key) || "";
+				}
+
+				function serializeParams(params) {
+					var parts = [];
+					params.forEach(function (value, key) {
+						parts.push(value === "" ? encodeURIComponent(key) : encodeURIComponent(key) + "=" + encodeURIComponent(value));
+					});
+					return parts.join("&");
+				}
+
+				function setStatus(value) {
+					refs.status.textContent = value || "";
+				}
+
+				function setError(value) {
+					setStatus(value);
+					refs.join.disabled = true;
+				}
+
+				function normalizeToken(value) {
+					return (value || "").toString().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "stream_guest";
+				}
+
+				function toTitle(value) {
+					return normalizeToken(value).replace(/_/g, " ").replace(/\b\w/g, function (match) {
+						return match.toUpperCase();
+					});
+				}
+
+				function readName() {
+					try {
+						return (window.localStorage.getItem("mcastGuestName") || "").trim().slice(0, 60);
+					} catch (error) {
+						return "";
+					}
+				}
+
+				function writeName(value) {
+					try {
+						if (value) {
+							window.localStorage.setItem("mcastGuestName", value.trim().slice(0, 60));
+						} else {
+							window.localStorage.removeItem("mcastGuestName");
+						}
+					} catch (error) {}
+				}
+
+				function readBool(key, fallback) {
+					try {
+						var value = window.localStorage.getItem("mcastGuestPreference." + key);
+						if (value === "true") return true;
+						if (value === "false") return false;
+					} catch (error) {}
+					return fallback;
+				}
+
+				function writeBool(key, value) {
+					try {
+						window.localStorage.setItem("mcastGuestPreference." + key, value ? "true" : "false");
+					} catch (error) {}
+				}
+			})();
+		</script>
+	</body>
+</html>
