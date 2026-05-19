@@ -15,6 +15,9 @@
 		video: readGuestPreference("video", true),
 		joined: false
 	};
+	var activeGuestRoomShell = null;
+	var nativeChromeObserver = null;
+	var nativeChromeKeepAliveTimer = null;
 
 	document.documentElement.classList.add("mcast-route");
 	document.documentElement.classList.add(route === "guest" ? "mcast-guest" : "mcast-vcall");
@@ -526,10 +529,12 @@
 		if (!shell) {
 			return;
 		}
+		activeGuestRoomShell = shell;
 		shell.classList.add("mcast-in-room");
 		shell.classList.toggle("mcast-video-off", !!miconly || !guestJoinPreferences.video);
 		setShellText(shell, "[data-mcast-status]", "Connected");
 		lockNativeGuestChrome();
+		startNativeChromeSuppressor();
 		startLocalVideoMountMonitor(shell);
 	}
 
@@ -572,14 +577,87 @@
 
 	function lockNativeGuestChrome() {
 		try {
+			var shell = activeGuestRoomShell || document.getElementById("mcastJoining");
+			if (shell && document.body && shell.parentNode !== document.body) {
+				document.body.appendChild(shell);
+			} else if (shell && document.body && document.body.lastElementChild !== shell) {
+				document.body.appendChild(shell);
+			}
+			if (shell) {
+				shell.style.setProperty("display", "block", "important");
+				shell.style.setProperty("visibility", "visible", "important");
+				shell.style.setProperty("opacity", "1", "important");
+				shell.style.setProperty("z-index", "2147483000", "important");
+			}
 			document.documentElement.classList.add("mcast-room-active");
 			document.body.classList.add("mcast-room-active");
 			document.body.style.overflow = "hidden";
 			document.body.style.position = "fixed";
 			document.body.style.inset = "0";
 			document.body.style.width = "100%";
+			hideNativeGuestChromeElements();
 		} catch (error) {
 			console.warn("MCast could not lock native chrome", error);
+		}
+	}
+
+	function startNativeChromeSuppressor() {
+		if (nativeChromeKeepAliveTimer) {
+			return;
+		}
+		nativeChromeKeepAliveTimer = window.setInterval(function () {
+			if (!guestJoinPreferences.joined) {
+				window.clearInterval(nativeChromeKeepAliveTimer);
+				nativeChromeKeepAliveTimer = null;
+				if (nativeChromeObserver) {
+					nativeChromeObserver.disconnect();
+					nativeChromeObserver = null;
+				}
+				return;
+			}
+			lockNativeGuestChrome();
+			if (activeGuestRoomShell) {
+				mountLocalGuestVideo(activeGuestRoomShell);
+			}
+		}, 350);
+
+		if (typeof MutationObserver !== "undefined" && document.documentElement) {
+			nativeChromeObserver = new MutationObserver(function () {
+				lockNativeGuestChrome();
+			});
+			nativeChromeObserver.observe(document.documentElement, {
+				childList: true,
+				subtree: true
+			});
+		}
+	}
+
+	function hideNativeGuestChromeElements() {
+		var selectors = [
+			"#header",
+			"#mainmenu",
+			"#logoname",
+			"#qos",
+			"#controlButtons",
+			"#miniTaskBar",
+			"#credits",
+			"#legal",
+			"#container-1",
+			"#container-2",
+			"#container-3",
+			"#container-4",
+			"#container-5",
+			"#container-6",
+			"#container-7",
+			"#container-8",
+			"#container-9"
+		];
+		for (var index = 0; index < selectors.length; index++) {
+			var element = document.querySelector(selectors[index]);
+			if (element) {
+				element.style.setProperty("display", "none", "important");
+				element.style.setProperty("visibility", "hidden", "important");
+			}
 		}
 	}
 
