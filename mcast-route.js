@@ -674,18 +674,30 @@
 		var ready = goButton && goButton.dataset && goButton.dataset.ready === "true";
 		var audioReady = goButton && goButton.dataset && goButton.dataset.audioready === "true";
 		var requiresVideo = !miconly && !!guestJoinPreferences.video;
-		var videoReady = !requiresVideo || hasLiveGuestVideoTrack();
+		var videoReady = !requiresVideo || hasPublishableGuestVideo();
 		if (requiresVideo && !videoReady && attempt >= 4) {
 			ensureDirectGuestPreviewStream(shell);
 		}
+		if (requiresVideo && hasLiveGuestVideoTrack() && !hasLiveGuestVideoFrame()) {
+			primeMcastGuestVideoPlayback();
+		}
 		if (requiresVideo && !videoReady && attempt > 0 && attempt % 12 === 0) {
-			setShellText(shell, "[data-mcast-status]", guestJoinPreferences.directPreviewFailed ? "Could not start camera. Check browser permissions and try again." : "Starting camera...");
+			setShellText(shell, "[data-mcast-status]", guestJoinPreferences.directPreviewFailed ? "Could not start camera. Check browser permissions and try again." : "Starting camera preview...");
 		}
 		if (goButton && videoReady && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
 			try {
+				if (requiresVideo) {
+					forceMcastGuestVideoUnmuted();
+					primeMcastGuestVideoPlayback();
+				}
 				setShellText(shell, "[data-mcast-status]", "Joining room...");
 				publishWebcam(false, !!miconly);
 				enterNativeGuestRoom(shell, miconly);
+				if (requiresVideo) {
+					forceMcastGuestVideoUnmuted();
+					window.setTimeout(forceMcastGuestVideoUnmuted, 500);
+					window.setTimeout(primeMcastGuestVideoPlayback, 700);
+				}
 				applyGuestMediaPreferencesLater();
 			} catch (publishError) {
 				console.error("MCast guest publish failed", publishError);
@@ -1636,20 +1648,30 @@
 		}
 	}
 
-	function playMcastVideo(video) {
+	function playMcastVideo(video, force) {
 		if (!video || typeof video.play !== "function") {
 			return;
 		}
-		video.setAttribute("playsinline", "");
-		video.setAttribute("webkit-playsinline", "");
-		video.controls = false;
-		video.removeAttribute("controls");
-		if (shouldAvoidExplicitMobileVideoPlay()) {
+		prepareMcastInlineVideo(video);
+		if (!force && shouldAvoidExplicitMobileVideoPlay()) {
 			return;
 		}
 		try {
 			video.play().catch(function () {});
 		} catch (error) {}
+	}
+
+	function prepareMcastInlineVideo(video) {
+		if (!video) {
+			return;
+		}
+		video.muted = true;
+		video.autoplay = true;
+		video.playsInline = true;
+		video.setAttribute("playsinline", "");
+		video.setAttribute("webkit-playsinline", "");
+		video.controls = false;
+		video.removeAttribute("controls");
 	}
 
 	function shouldAvoidExplicitMobileVideoPlay() {
@@ -1661,7 +1683,7 @@
 		if (!video) {
 			return false;
 		}
-		if (video.readyState >= 2 && (video.videoWidth > 0 || video.videoHeight > 0)) {
+		if (hasRenderedVideoFrame(video)) {
 			return true;
 		}
 		var stream = video.srcObject;
@@ -1676,6 +1698,10 @@
 		return stream.getTracks().some(function (track) {
 			return track.kind === "video" && track.readyState === "live";
 		});
+	}
+
+	function hasRenderedVideoFrame(video) {
+		return !!(video && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0);
 	}
 
 	function hasLiveStreamTrack(stream, kind) {
@@ -1717,6 +1743,27 @@
 		}
 		var published = document.getElementById("videosource");
 		return !!(published && hasLiveStreamTrack(published.srcObject, "video"));
+	}
+
+	function hasLiveGuestVideoFrame() {
+		if (!guestJoinPreferences.video) {
+			return false;
+		}
+		try {
+			if (typeof session !== "undefined" && session.videoElement && hasRenderedVideoFrame(session.videoElement)) {
+				return true;
+			}
+		} catch (error) {}
+		var preview = document.getElementById("previewWebcam");
+		if (hasRenderedVideoFrame(preview)) {
+			return true;
+		}
+		var published = document.getElementById("videosource");
+		return hasRenderedVideoFrame(published);
+	}
+
+	function hasPublishableGuestVideo() {
+		return hasLiveGuestVideoTrack() && hasLiveGuestVideoFrame();
 	}
 
 	function hasLiveGuestVideo() {
@@ -1810,6 +1857,7 @@
 		if (!hasLiveStreamTrack(session.streamSrc, "video")) {
 			return false;
 		}
+		forceMcastGuestVideoUnmuted();
 		try {
 			if (typeof checkBasicStreamsExist === "function") {
 				checkBasicStreamsExist();
@@ -1825,15 +1873,60 @@
 				session.videoElement.srcObject = session.streamSrc;
 			}
 		}
+		forceMcastGuestVideoUnmuted();
+		if (session.videoElement) {
+			prepareMcastInlineVideo(session.videoElement);
+			playMcastVideo(session.videoElement, true);
+		}
 		var preview = ensurePreviewVideoElement();
 		preview.srcObject = session.videoElement && session.videoElement.srcObject ? session.videoElement.srcObject : session.streamSrc;
-		preview.muted = true;
-		preview.autoplay = true;
-		preview.playsInline = true;
-		preview.setAttribute("playsinline", "");
-		preview.setAttribute("webkit-playsinline", "");
-		playMcastVideo(preview);
+		prepareMcastInlineVideo(preview);
+		playMcastVideo(preview, true);
 		return hasLiveGuestVideoTrack();
+	}
+
+	function primeMcastGuestVideoPlayback() {
+		try {
+			if (typeof session !== "undefined" && session.videoElement) {
+				playMcastVideo(session.videoElement, true);
+			}
+		} catch (error) {}
+		playMcastVideo(document.getElementById("previewWebcam"), true);
+		playMcastVideo(document.getElementById("videosource"), true);
+	}
+
+	function forceMcastGuestVideoUnmuted() {
+		try {
+			if (typeof session === "undefined") {
+				return;
+			}
+			session.videoMuted = false;
+			session.videoMutedFlag = false;
+			enableVideoTracks(session.streamSrc);
+			if (session.videoElement) {
+				enableVideoTracks(session.videoElement.srcObject);
+			}
+			var button = document.getElementById("mutevideobutton");
+			if (button) {
+				button.classList.remove("red");
+				button.ariaPressed = "false";
+			}
+			var toggle = document.getElementById("mutevideotoggle");
+			if (toggle) {
+				toggle.className = "las la-video toggleSize";
+			}
+		} catch (error) {}
+	}
+
+	function enableVideoTracks(stream) {
+		if (!stream || typeof stream.getVideoTracks !== "function") {
+			return;
+		}
+		stream.getVideoTracks().forEach(function (track) {
+			try {
+				track.enabled = true;
+			} catch (error) {}
+		});
 	}
 
 	function createMcastMediaStream() {
