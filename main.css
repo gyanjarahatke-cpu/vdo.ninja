@@ -8695,6 +8695,16 @@ body.mcast-native-guest #chatlitebutton {
     pointer-events: none !important;
 }
 
+html.mcast-native-guest #head2,
+html.mcast-native-guest #mediafileshare,
+html.mcast-native-guest #sharefilebutton,
+html.mcast-native-guest #chatbutton,
+html.mcast-native-guest #chatlitebutton {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 body.mcast-native-guest #subControlButtons div,
 body.mcast-native-guest #subControlButtons span button {
     width: 42px !important;
