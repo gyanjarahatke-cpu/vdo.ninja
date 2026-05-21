@@ -3586,12 +3586,18 @@ async function main() {
 		session.labelsize = parseInt(session.labelsize);
 	}
 
+	var mcastManagedGuestLabel = urlParams.has("mcastprejoin") || urlParams.has("mcastguest");
 	if (urlParams.has("label") || urlParams.has("l")) {
 		session.label = urlParams.get("label") || urlParams.get("l") || null;
 		var updateURLAsNeed = true;
 		if (session.label == null || session.label.length == 0) {
-			window.focus();
-			session.label = await promptAlt(getTranslation("enter-display-name"), true);
+			if (mcastManagedGuestLabel) {
+				session.label = null;
+				updateURLAsNeed = false;
+			} else {
+				window.focus();
+				session.label = await promptAlt(getTranslation("enter-display-name"), true);
+			}
 		} else {
 			var updateURLAsNeed = false;
 			try {
@@ -3617,16 +3623,23 @@ async function main() {
 	} else if (urlParams.has("defaultlabel") || urlParams.has("labelsuggestion") || urlParams.has("ls")) {
 		session.label = urlParams.get("defaultlabel") || urlParams.get("labelsuggestion") || urlParams.get("ls") || null;
 		var updateURLAsNeed = true;
-		window.focus();
-		var label = await promptAlt(getTranslation("enter-display-name"), true);
-		if (label) {
-			session.label = sanitizeLabel(label); // alphanumeric was too strict.
-		} else {
-			session.label = sanitizeLabel(session.label);
+		if (mcastManagedGuestLabel) {
+			session.label = session.label ? sanitizeLabel(session.label) : null;
 			updateURLAsNeed = false;
+		} else {
+			window.focus();
+			var label = await promptAlt(getTranslation("enter-display-name"), true);
+			if (label) {
+				session.label = sanitizeLabel(label); // alphanumeric was too strict.
+			} else {
+				session.label = sanitizeLabel(session.label);
+				updateURLAsNeed = false;
+			}
 		}
 
-		document.title = session.label; // what the result is.
+		if (session.label) {
+			document.title = session.label; // what the result is.
+		}
 
 		if (updateURLAsNeed) {
 			var label = encodeURIComponent(session.label);
