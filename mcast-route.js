@@ -356,6 +356,10 @@
 			"html.mcast-guest .mcast-join-status{min-height:18px;margin-top:12px;color:#64748b;font-size:12px;line-height:1.45;font-weight:650;}",
 			"html.mcast-guest .mcast-join-footer,html.mcast-guest .mcast-terms{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;font-weight:520;}",
 			"html.mcast-guest .mcast-terms{margin-top:18px;}",
+			"html.mcast-guest.mcast-native-room body{isolation:isolate!important;}",
+			"html.mcast-guest.mcast-native-room #gridlayout{position:relative!important;z-index:1!important;display:block!important;visibility:visible!important;opacity:1!important;}",
+			"html.mcast-guest.mcast-native-room #gridlayout video,html.mcast-guest.mcast-native-room #gridlayout .holder,html.mcast-guest.mcast-native-room #gridlayout .container_holder_video{visibility:visible!important;opacity:1!important;}",
+			"html.mcast-guest.mcast-native-room #controlButtons{z-index:995!important;}",
 			"html.mcast-guest.mcast-room-active #mcastJoining{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important;}",
 			"html.mcast-guest.mcast-room-active{background:#05070b!important;overflow:hidden!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;transform:none!important;transform-origin:initial!important;}",
 			"html.mcast-guest.mcast-room-active body{background:#05070b!important;overflow:hidden!important;position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;margin:0!important;transform:none!important;transform-origin:initial!important;}",
@@ -680,6 +684,10 @@
 
 	function enterNativeGuestRoom(shell, miconly) {
 		guestJoinPreferences.nativeRoomEntered = true;
+		document.documentElement.classList.add("mcast-native-room");
+		if (document.body) {
+			document.body.classList.add("mcast-native-room");
+		}
 		if (shell) {
 			shell.classList.toggle("mcast-video-off", !!miconly || !guestJoinPreferences.video);
 			setShellText(shell, "[data-mcast-status]", "Connected");
@@ -720,6 +728,7 @@
 		restoreNativeRoomElement(gridlayout, true);
 		restoreNativeRoomElement(document.getElementById("controlButtons"), true);
 		restoreNativeRoomElement(document.getElementById("subControlButtons"), true);
+		repairNativeVideoLayer();
 		normalizeNativeInlineVideoElements(document);
 		if (mainmenu) {
 			mainmenu.classList.remove("permahide");
@@ -774,6 +783,24 @@
 		});
 	}
 
+	function repairNativeVideoLayer() {
+		var gridlayout = document.getElementById("gridlayout");
+		if (!gridlayout) {
+			return;
+		}
+		gridlayout.classList.remove("hidden", "hidden2", "permahide");
+		gridlayout.style.setProperty("display", "block", "important");
+		gridlayout.style.setProperty("visibility", "visible", "important");
+		gridlayout.style.setProperty("opacity", "1", "important");
+		gridlayout.style.setProperty("position", "relative", "important");
+		gridlayout.style.setProperty("z-index", "1", "important");
+		var visibleNodes = gridlayout.querySelectorAll("video,.holder,.container_holder_video,.vidcon");
+		for (var index = 0; index < visibleNodes.length; index++) {
+			visibleNodes[index].style.setProperty("visibility", "visible", "important");
+			visibleNodes[index].style.setProperty("opacity", "1", "important");
+		}
+	}
+
 	function normalizeNativeInlineVideoElements(root) {
 		var videos = [];
 		if (root && root.tagName && root.tagName.toLowerCase() === "video") {
@@ -792,11 +819,13 @@
 	}
 
 	function startNativeInlineVideoGuard() {
+		repairNativeVideoLayer();
 		normalizeNativeInlineVideoElements(document);
 		if (!guestJoinPreferences.inlineVideoGuardTimer) {
 			var passes = 0;
 			guestJoinPreferences.inlineVideoGuardTimer = window.setInterval(function () {
 				passes++;
+				repairNativeVideoLayer();
 				normalizeNativeInlineVideoElements(document);
 				if (passes >= 40) {
 					window.clearInterval(guestJoinPreferences.inlineVideoGuardTimer);
@@ -812,6 +841,7 @@
 				for (var index = 0; index < mutation.addedNodes.length; index++) {
 					var node = mutation.addedNodes[index];
 					if (node && node.nodeType === 1) {
+						repairNativeVideoLayer();
 						normalizeNativeInlineVideoElements(node);
 					}
 				}
@@ -1728,6 +1758,10 @@
 	function resetGuestJoinButton(shell) {
 		guestJoinPreferences.joined = false;
 		guestJoinPreferences.nativeRoomEntered = false;
+		document.documentElement.classList.remove("mcast-native-room");
+		if (document.body) {
+			document.body.classList.remove("mcast-native-room");
+		}
 		if (guestJoinPreferences.inlineVideoGuardTimer) {
 			window.clearInterval(guestJoinPreferences.inlineVideoGuardTimer);
 			guestJoinPreferences.inlineVideoGuardTimer = null;
