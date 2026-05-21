@@ -8403,6 +8403,7 @@ body.mcast-native-guest #head3a,
 body.mcast-native-guest #head4,
 body.mcast-native-guest #head5,
 body.mcast-native-guest #head9,
+body.mcast-native-guest #head2,
 body.mcast-native-guest #translateButton,
 body.mcast-native-guest #helpbutton,
 body.mcast-native-guest #reportbutton,
@@ -8412,7 +8413,6 @@ body.mcast-native-guest #legal {
     display: none !important;
 }
 
-body.mcast-native-guest #head2,
 body.mcast-native-guest #head6,
 body.mcast-native-guest #head7,
 body.mcast-native-guest #head8 {
@@ -8684,6 +8684,15 @@ body.mcast-native-guest #subControlButtons {
 
 body.mcast-native-guest #subControlButtons::-webkit-scrollbar {
     display: none;
+}
+
+body.mcast-native-guest #mediafileshare,
+body.mcast-native-guest #sharefilebutton,
+body.mcast-native-guest #chatbutton,
+body.mcast-native-guest #chatlitebutton {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 body.mcast-native-guest #subControlButtons div,
