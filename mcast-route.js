@@ -21,6 +21,8 @@
 		joinStartedAt: 0,
 		readyTimer: null,
 		roomSkinTimer: null,
+		inlineVideoGuardTimer: null,
+		inlineVideoGuardObserver: null,
 		directPreviewPromise: null,
 		manualRotation: 0,
 		videoRepairScheduled: false,
@@ -686,6 +688,7 @@
 				shell.style.display = "none";
 			}, 350);
 		}
+		startNativeInlineVideoGuard();
 		showOriginalVdoRoomAfterJoin();
 		window.setTimeout(requestMixerLayoutUpdate, 300);
 		window.setTimeout(showOriginalVdoRoomAfterJoin, 900);
@@ -786,6 +789,41 @@
 			video.controls = false;
 			video.removeAttribute("controls");
 		});
+	}
+
+	function startNativeInlineVideoGuard() {
+		normalizeNativeInlineVideoElements(document);
+		if (!guestJoinPreferences.inlineVideoGuardTimer) {
+			var passes = 0;
+			guestJoinPreferences.inlineVideoGuardTimer = window.setInterval(function () {
+				passes++;
+				normalizeNativeInlineVideoElements(document);
+				if (passes >= 40) {
+					window.clearInterval(guestJoinPreferences.inlineVideoGuardTimer);
+					guestJoinPreferences.inlineVideoGuardTimer = null;
+				}
+			}, 750);
+		}
+		if (guestJoinPreferences.inlineVideoGuardObserver || typeof MutationObserver !== "function" || !document.body) {
+			return;
+		}
+		guestJoinPreferences.inlineVideoGuardObserver = new MutationObserver(function (mutations) {
+			mutations.forEach(function (mutation) {
+				for (var index = 0; index < mutation.addedNodes.length; index++) {
+					var node = mutation.addedNodes[index];
+					if (node && node.nodeType === 1) {
+						normalizeNativeInlineVideoElements(node);
+					}
+				}
+			});
+		});
+		guestJoinPreferences.inlineVideoGuardObserver.observe(document.body, { childList: true, subtree: true });
+		window.setTimeout(function () {
+			if (guestJoinPreferences.inlineVideoGuardObserver) {
+				guestJoinPreferences.inlineVideoGuardObserver.disconnect();
+				guestJoinPreferences.inlineVideoGuardObserver = null;
+			}
+		}, 30000);
 	}
 
 	function startNativeRoomSkinSync() {
@@ -1690,6 +1728,14 @@
 	function resetGuestJoinButton(shell) {
 		guestJoinPreferences.joined = false;
 		guestJoinPreferences.nativeRoomEntered = false;
+		if (guestJoinPreferences.inlineVideoGuardTimer) {
+			window.clearInterval(guestJoinPreferences.inlineVideoGuardTimer);
+			guestJoinPreferences.inlineVideoGuardTimer = null;
+		}
+		if (guestJoinPreferences.inlineVideoGuardObserver) {
+			guestJoinPreferences.inlineVideoGuardObserver.disconnect();
+			guestJoinPreferences.inlineVideoGuardObserver = null;
+		}
 		setJoinButtonState(shell, false, "Join", false);
 	}
 
