@@ -87,6 +87,7 @@
 			setFlag(routedParams, "mcastguest");
 			setFlag(routedParams, "mcastprejoin");
 			routedParams.delete("mcastengine");
+			disableNativePageRotation(routedParams);
 			normalizeGuestNameParams(routedParams);
 			if (!routedParams.has("mcastautojoin")) {
 				routedParams.delete("autostart");
@@ -123,6 +124,21 @@
 			}
 		}
 		return serializeParams(routedParams);
+	}
+
+	function disableNativePageRotation(routedParams) {
+		[
+			"forcelandscape",
+			"forcedlandscape",
+			"fl",
+			"forceportrait",
+			"forcedportrait",
+			"fp",
+			"rotatewindow",
+			"rotatepage"
+		].forEach(function (key) {
+			routedParams.delete(key);
+		});
 	}
 
 	function installDirectorControlBridge() {
@@ -314,24 +330,35 @@
 			"html.mcast-guest .mcast-join-status{min-height:18px;margin-top:12px;color:#64748b;font-size:12px;line-height:1.45;font-weight:650;}",
 			"html.mcast-guest .mcast-join-footer,html.mcast-guest .mcast-terms{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;font-weight:520;}",
 			"html.mcast-guest .mcast-terms{margin-top:18px;}",
-			"html.mcast-guest.mcast-room-active #mcastJoining{opacity:0;visibility:hidden;pointer-events:none;}",
-			"html.mcast-guest.mcast-room-active,html.mcast-guest.mcast-room-active body{background:#05070b!important;overflow:hidden!important;}",
+			"html.mcast-guest.mcast-room-active #mcastJoining{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important;}",
+			"html.mcast-guest.mcast-room-active{background:#05070b!important;overflow:hidden!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;transform:none!important;transform-origin:initial!important;}",
+			"html.mcast-guest.mcast-room-active body{background:#05070b!important;overflow:hidden!important;position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;min-height:100dvh!important;margin:0!important;transform:none!important;transform-origin:initial!important;}",
 			"html.mcast-guest.mcast-room-active #header,html.mcast-guest.mcast-room-active #head1,html.mcast-guest.mcast-room-active #head1a,html.mcast-guest.mcast-room-active #head2,html.mcast-guest.mcast-room-active #head3,html.mcast-guest.mcast-room-active #head3a,html.mcast-guest.mcast-room-active #head5,html.mcast-guest.mcast-room-active #head9,html.mcast-guest.mcast-room-active #qos,html.mcast-guest.mcast-room-active #logoname,html.mcast-guest.mcast-room-active #credits,html.mcast-guest.mcast-room-active #legal,html.mcast-guest.mcast-room-active #translateButton{display:none!important;}",
 			"html.mcast-guest.mcast-room-active #container-1,html.mcast-guest.mcast-room-active #container-2,html.mcast-guest.mcast-room-active #container-3,html.mcast-guest.mcast-room-active #container-3a,html.mcast-guest.mcast-room-active #container-4,html.mcast-guest.mcast-room-active #container-5,html.mcast-guest.mcast-room-active #container-6,html.mcast-guest.mcast-room-active #container-7,html.mcast-guest.mcast-room-active #container-8,html.mcast-guest.mcast-room-active #container-9,html.mcast-guest.mcast-room-active #container-10,html.mcast-guest.mcast-room-active #container-11,html.mcast-guest.mcast-room-active #container-12,html.mcast-guest.mcast-room-active #container-13,html.mcast-guest.mcast-room-active #container-14,html.mcast-guest.mcast-room-active #container-15,html.mcast-guest.mcast-room-active #container-16,html.mcast-guest.mcast-room-active #container-17,html.mcast-guest.mcast-room-active #container-18,html.mcast-guest.mcast-room-active #container-19,html.mcast-guest.mcast-room-active #container-20,html.mcast-guest.mcast-room-active #container-21{display:none!important;}",
 			"html.mcast-guest.mcast-room-active #main{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;overflow:hidden!important;background:#05070b!important;}",
-			"html.mcast-guest.mcast-room-active #mainmenu{position:fixed!important;inset:0!important;display:block!important;visibility:visible!important;opacity:1!important;width:100vw!important;min-width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:hidden!important;background:#05070b!important;padding:12px 12px 92px!important;box-sizing:border-box!important;}",
-			"html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{position:absolute!important;inset:12px 12px 92px!important;visibility:visible!important;opacity:1!important;width:auto!important;height:auto!important;margin:0!important;overflow:hidden!important;background:#05070b!important;}",
-			"html.mcast-guest.mcast-room-active .vidcon{border-radius:8px!important;background:#111827!important;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 16px 44px rgba(0,0,0,.28)!important;overflow:hidden!important;}",
-			"html.mcast-guest.mcast-room-active video,html.mcast-guest.mcast-room-active canvas{border-radius:8px!important;}",
-			"html.mcast-guest.mcast-room-active video.tile,html.mcast-guest.mcast-room-active .tile{object-fit:cover!important;background:#0b1018!important;}",
+			"html.mcast-guest.mcast-room-active #mainmenu{position:fixed!important;inset:0!important;display:block!important;visibility:visible!important;opacity:1!important;width:100vw!important;min-width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:hidden!important;background:#05070b!important;padding:12px 12px 92px!important;box-sizing:border-box!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoom,html.mcast-guest.mcast-room-active #mcastRoom *{box-sizing:border-box!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoom{position:fixed!important;inset:0!important;z-index:2147482500!important;display:grid!important;grid-template-rows:minmax(0,1fr) 74px!important;gap:12px!important;width:100vw!important;height:100dvh!important;padding:12px 12px max(12px,env(safe-area-inset-bottom))!important;background:#05070b!important;color:#f8fafc!important;overflow:hidden!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoomStage{position:relative!important;min-width:0!important;min-height:0!important;overflow:hidden!important;border-radius:8px!important;background:#070b12!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoomControls{position:relative!important;z-index:2!important;display:flex!important;align-items:center!important;justify-content:center!important;min-width:0!important;min-height:0!important;pointer-events:none!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoomStatus{position:absolute!important;inset:0!important;z-index:1!important;display:grid!important;place-items:center!important;padding:24px!important;color:#a8b3c2!important;font-size:13px!important;font-weight:680!important;text-align:center!important;background:#070b12!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoom.has-live-video #mcastRoomStatus{display:none!important;}",
+			"html.mcast-guest.mcast-room-active #directorlayout{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}",
+			"html.mcast-guest.mcast-room-active #gridlayout{position:absolute!important;inset:12px 12px 92px!important;display:grid!important;visibility:visible!important;opacity:1!important;width:auto!important;height:auto!important;margin:0!important;overflow:hidden!important;background:#05070b!important;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))!important;gap:12px!important;align-items:center!important;justify-items:center!important;place-content:center!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoomStage>#gridlayout{inset:0!important;width:100%!important;height:100%!important;background:#070b12!important;}",
+			"html.mcast-guest.mcast-room-active #gridlayout>video,html.mcast-guest.mcast-room-active #gridlayout>.vidcon,html.mcast-guest.mcast-room-active #gridlayout>#minipreview,html.mcast-guest.mcast-room-active #gridlayout>[id^='container_']{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;right:auto!important;bottom:auto!important;display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;max-width:min(100%,1280px)!important;height:auto!important;min-height:0!important;aspect-ratio:16/9!important;margin:0!important;border-radius:8px!important;background:#111827!important;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 16px 44px rgba(0,0,0,.28)!important;overflow:hidden!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #gridlayout>video,html.mcast-guest.mcast-room-active #gridlayout>.mcast-room-video{object-fit:cover!important;max-height:100%!important;}",
+			"html.mcast-guest.mcast-room-active #gridlayout video,html.mcast-guest.mcast-room-active #gridlayout canvas{width:100%!important;height:100%!important;border-radius:8px!important;object-fit:cover!important;background:#0b1018!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active .togglePreview,html.mcast-guest.mcast-room-active .video-label-container,html.mcast-guest.mcast-room-active .video-label{display:none!important;}",
 			"html.mcast-guest.mcast-room-active #controlButtons{display:flex!important;position:fixed!important;left:0!important;right:0!important;bottom:max(14px,env(safe-area-inset-bottom))!important;z-index:2147482990!important;width:100%!important;padding:0 12px!important;box-sizing:border-box!important;justify-content:center!important;align-items:center!important;pointer-events:none!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoomControls>#controlButtons{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;z-index:2!important;width:auto!important;max-width:100%!important;padding:0!important;}",
 			"html.mcast-guest.mcast-room-active #subControlButtons{display:flex!important;max-width:calc(100vw - 24px)!important;min-width:0!important;min-height:52px!important;gap:6px!important;padding:7px!important;border:1px solid rgba(255,255,255,.13)!important;border-radius:999px!important;background:rgba(10,13,18,.78)!important;box-shadow:0 16px 42px rgba(0,0,0,.36)!important;backdrop-filter:blur(14px)!important;pointer-events:auto!important;align-items:center!important;justify-content:center!important;flex-wrap:nowrap!important;}",
 			"html.mcast-guest.mcast-room-active #subControlButtons button,html.mcast-guest.mcast-room-active #subControlButtons .float,html.mcast-guest.mcast-room-active #subControlButtons a{border-radius:999px!important;min-width:42px!important;min-height:42px!important;}",
 			"html.mcast-guest.mcast-room-active .prompt,html.mcast-guest.mcast-room-active [role='dialog'],html.mcast-guest.mcast-room-active .modal,html.mcast-guest.mcast-room-active #passwordPrompt{z-index:2147483001!important;}",
 			"@keyframes mcastSpin{to{transform:rotate(360deg);}}",
-			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{left:14px;right:14px;bottom:14px;gap:10px;}html.mcast-guest .mcast-device-button{min-width:0;flex:1;height:40px;font-size:12px;padding:0 10px;}html.mcast-guest.mcast-room-active #mainmenu{padding:8px 8px 88px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:8px 8px 88px!important;}html.mcast-guest.mcast-room-active #subControlButtons{max-width:calc(100vw - 16px)!important;}}",
-			"@media (orientation:landscape) and (max-height:540px){html.mcast-guest #mcastJoining{padding:8px;}html.mcast-guest .mcast-join-panel{height:calc(100dvh - 16px);min-height:0;grid-template-columns:minmax(0,1fr) minmax(300px,360px);}html.mcast-guest .mcast-join-preview{min-height:0;padding:12px;}html.mcast-guest .mcast-preview-stage{inset:58px 12px 70px;}html.mcast-guest .mcast-preview-avatar{width:88px;height:88px;font-size:32px;}html.mcast-guest .mcast-join-form{padding:18px;}html.mcast-guest .mcast-join-heading{font-size:21px;margin-bottom:7px;}html.mcast-guest .mcast-join-message{font-size:13px;margin-bottom:12px;}html.mcast-guest .mcast-device-row{left:12px;right:12px;bottom:12px;}html.mcast-guest .mcast-device-button{height:38px;min-width:110px;}html.mcast-guest .mcast-terms,html.mcast-guest .mcast-join-footer{display:none;}html.mcast-guest.mcast-room-active #mainmenu{padding:6px 6px 70px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:6px 6px 70px!important;}html.mcast-guest.mcast-room-active #controlButtons{bottom:max(8px,env(safe-area-inset-bottom))!important;}html.mcast-guest.mcast-room-active #subControlButtons{min-height:48px!important;padding:5px!important;}}",
-			"@media (min-width:1200px){html.mcast-guest.mcast-room-active #mainmenu{padding:18px 18px 104px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:18px 18px 104px!important;}}"
+			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{left:14px;right:14px;bottom:14px;gap:10px;}html.mcast-guest .mcast-device-button{min-width:0;flex:1;height:40px;font-size:12px;padding:0 10px;}html.mcast-guest.mcast-room-active #mcastRoom{grid-template-rows:minmax(0,1fr) 64px!important;gap:8px!important;padding:8px 8px max(8px,env(safe-area-inset-bottom))!important;}html.mcast-guest.mcast-room-active #mainmenu{padding:8px 8px 88px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:8px 8px 88px!important;}html.mcast-guest.mcast-room-active #mcastRoomStage>#gridlayout{inset:0!important;}html.mcast-guest.mcast-room-active #subControlButtons{max-width:calc(100vw - 16px)!important;}}",
+			"@media (orientation:landscape) and (max-height:540px){html.mcast-guest #mcastJoining{padding:8px;}html.mcast-guest .mcast-join-panel{height:calc(100dvh - 16px);min-height:0;grid-template-columns:minmax(0,1fr) minmax(300px,360px);}html.mcast-guest .mcast-join-preview{min-height:0;padding:12px;}html.mcast-guest .mcast-preview-stage{inset:58px 12px 70px;}html.mcast-guest .mcast-preview-avatar{width:88px;height:88px;font-size:32px;}html.mcast-guest .mcast-join-form{padding:18px;}html.mcast-guest .mcast-join-heading{font-size:21px;margin-bottom:7px;}html.mcast-guest .mcast-join-message{font-size:13px;margin-bottom:12px;}html.mcast-guest .mcast-device-row{left:12px;right:12px;bottom:12px;}html.mcast-guest .mcast-device-button{height:38px;min-width:110px;}html.mcast-guest .mcast-terms,html.mcast-guest .mcast-join-footer{display:none;}html.mcast-guest.mcast-room-active #mcastRoom{grid-template-rows:minmax(0,1fr) 56px!important;gap:6px!important;padding:6px 6px max(6px,env(safe-area-inset-bottom))!important;}html.mcast-guest.mcast-room-active #mainmenu{padding:6px 6px 70px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:6px 6px 70px!important;}html.mcast-guest.mcast-room-active #mcastRoomStage>#gridlayout{inset:0!important;}html.mcast-guest.mcast-room-active #controlButtons{bottom:max(8px,env(safe-area-inset-bottom))!important;}html.mcast-guest.mcast-room-active #subControlButtons{min-height:48px!important;padding:5px!important;}}",
+			"@media (min-width:1200px){html.mcast-guest.mcast-room-active #mcastRoom{grid-template-rows:minmax(0,1fr) 76px!important;gap:14px!important;padding:18px 18px max(18px,env(safe-area-inset-bottom))!important;}html.mcast-guest.mcast-room-active #mainmenu{padding:18px 18px 104px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:18px 18px 104px!important;}html.mcast-guest.mcast-room-active #mcastRoomStage>#gridlayout{inset:0!important;}}"
 		].join("");
 		document.head.appendChild(style);
 	}
@@ -621,11 +648,18 @@
 			skinNativeRoomOnce();
 			if (attempts % 8 === 0) {
 				requestMixerLayoutUpdate();
+				window.setTimeout(skinNativeRoomOnce, 80);
 			}
 		}, 350);
-		window.addEventListener("resize", requestMixerLayoutUpdate);
+		window.addEventListener("resize", function () {
+			requestMixerLayoutUpdate();
+			window.setTimeout(skinNativeRoomOnce, 80);
+		});
 		window.addEventListener("orientationchange", function () {
-			window.setTimeout(requestMixerLayoutUpdate, 250);
+			window.setTimeout(function () {
+				requestMixerLayoutUpdate();
+				skinNativeRoomOnce();
+			}, 250);
 		});
 	}
 
@@ -634,6 +668,13 @@
 		if (document.body) {
 			document.body.classList.add("mcast-room-active");
 		}
+		normalizeNativeRoomViewport();
+		var joiningShell = document.getElementById("mcastJoining");
+		if (joiningShell) {
+			joiningShell.classList.add("mcast-ready");
+			joiningShell.style.display = "none";
+		}
+		var roomSurface = ensureMcastRoomSurface();
 		var controlButtons = document.getElementById("controlButtons");
 		if (controlButtons) {
 			controlButtons.classList.remove("hidden");
@@ -649,10 +690,145 @@
 			mainmenu.style.opacity = "1";
 			mainmenu.style.visibility = "visible";
 		}
+		var directorlayout = document.getElementById("directorlayout");
+		if (directorlayout) {
+			directorlayout.classList.add("hidden");
+		}
 		var gridlayout = document.getElementById("gridlayout");
 		if (gridlayout) {
 			gridlayout.classList.remove("hidden", "hidden2", "permahide");
+			gridlayout.style.display = "grid";
+			gridlayout.style.visibility = "visible";
+			gridlayout.style.opacity = "1";
+			ensureLocalVideoOnNativeStage(gridlayout);
+			syncMcastRoomSurfaceState(roomSurface.room, gridlayout);
+		} else if (roomSurface.room) {
+			syncMcastRoomSurfaceState(roomSurface.room, null);
 		}
+	}
+
+	function ensureMcastRoomSurface() {
+		var room = document.getElementById("mcastRoom");
+		if (!room) {
+			room = document.createElement("div");
+			room.id = "mcastRoom";
+			room.setAttribute("aria-label", "MCast room");
+			room.innerHTML = [
+				"<div id=\"mcastRoomStage\"><div id=\"mcastRoomStatus\">Opening camera...</div></div>",
+				"<div id=\"mcastRoomControls\"></div>"
+			].join("");
+			(document.body || document.documentElement).appendChild(room);
+		}
+		var stage = document.getElementById("mcastRoomStage");
+		if (!stage) {
+			stage = document.createElement("div");
+			stage.id = "mcastRoomStage";
+			room.insertBefore(stage, room.firstChild);
+		}
+		var status = document.getElementById("mcastRoomStatus");
+		if (!status) {
+			status = document.createElement("div");
+			status.id = "mcastRoomStatus";
+			status.textContent = "Opening camera...";
+			stage.insertBefore(status, stage.firstChild);
+		}
+		var controls = document.getElementById("mcastRoomControls");
+		if (!controls) {
+			controls = document.createElement("div");
+			controls.id = "mcastRoomControls";
+			room.appendChild(controls);
+		}
+		var gridlayout = document.getElementById("gridlayout");
+		if (gridlayout && gridlayout.parentNode !== stage) {
+			stage.appendChild(gridlayout);
+		}
+		var controlButtons = document.getElementById("controlButtons");
+		if (controlButtons && controlButtons.parentNode !== controls) {
+			controls.appendChild(controlButtons);
+		}
+		return {
+			room: room,
+			stage: stage,
+			controls: controls
+		};
+	}
+
+	function syncMcastRoomSurfaceState(room, gridlayout) {
+		if (!room) {
+			return;
+		}
+		var hasLiveTile = false;
+		if (gridlayout) {
+			var tiles = gridlayout.querySelectorAll("video,canvas,.vidcon,#minipreview,[id^='container_']");
+			hasLiveTile = Array.prototype.some.call(tiles, function (tile) {
+				if (tile.tagName && tile.tagName.toLowerCase() === "video") {
+					return hasPlayableVideoSource(tile);
+				}
+				return tile.offsetWidth > 0 && tile.offsetHeight > 0;
+			});
+		}
+		room.classList.toggle("has-live-video", hasLiveTile);
+	}
+
+	function normalizeNativeRoomViewport() {
+		try {
+			if (typeof session !== "undefined") {
+				session.orientation = false;
+				session.forceRotate = 0;
+			}
+		} catch (error) {}
+		if (!document.body) {
+			return;
+		}
+		document.body.dataset.rotated = "";
+		document.body.style.transform = "none";
+		document.body.style.position = "fixed";
+		document.body.style.top = "0";
+		document.body.style.left = "0";
+		document.body.style.width = "100vw";
+		document.body.style.height = "100dvh";
+		document.body.style.transformOrigin = "initial";
+	}
+
+	function ensureLocalVideoOnNativeStage(stage) {
+		if (!stage) {
+			return;
+		}
+		try {
+			var localVideo = (typeof session !== "undefined" && session.videoElement) ? session.videoElement : document.getElementById("videosource");
+			if (!localVideo || !hasPlayableVideoSource(localVideo)) {
+				return;
+			}
+			localVideo.classList.add("mcast-room-video");
+			localVideo.setAttribute("playsinline", "");
+			localVideo.setAttribute("webkit-playsinline", "");
+			localVideo.autoplay = true;
+			localVideo.muted = true;
+			localVideo.style.display = "block";
+			localVideo.style.visibility = "visible";
+			localVideo.style.opacity = "1";
+			if (localVideo.parentNode !== stage && !stage.contains(localVideo)) {
+				stage.appendChild(localVideo);
+			}
+		} catch (error) {
+			console.warn("MCast could not place the local video in the room stage", error);
+		}
+	}
+
+	function hasPlayableVideoSource(video) {
+		if (!video) {
+			return false;
+		}
+		if (video.src || video.currentSrc) {
+			return true;
+		}
+		var stream = video.srcObject;
+		if (!stream || typeof stream.getTracks !== "function") {
+			return false;
+		}
+		return stream.getTracks().some(function (track) {
+			return track.readyState === "live";
+		});
 	}
 
 	function requestMixerLayoutUpdate() {
