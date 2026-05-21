@@ -49,11 +49,11 @@
 	document.documentElement.classList.add(route === "guest" ? "mcast-guest" : "mcast-vcall");
 
 	if (route === "guest") {
+		installEarlyNativeRotationSuppressor();
 		installGuestExperienceStyles();
 		document.addEventListener("DOMContentLoaded", function () {
 			if (guestRouteResolved) {
 				ensureGuestJoinShell();
-				installMcastOrientationGate();
 			}
 		});
 	}
@@ -348,7 +348,7 @@
 		style.id = "mcastGuestExperienceStyles";
 		style.textContent = [
 			"html.mcast-guest,html.mcast-guest body{background:#0a0d12!important;min-height:100%;letter-spacing:0!important;}",
-			"html.mcast-guest body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;}",
+			"html.mcast-guest body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;transform:none!important;transform-origin:initial!important;position:static!important;top:auto!important;left:auto!important;width:auto!important;height:auto!important;overflow:auto!important;}",
 			"html.mcast-guest #mcastJoining,html.mcast-guest #mcastJoining *{box-sizing:border-box;}",
 			"html.mcast-guest #mcastJoining{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#0a0d12;color:#eef2f7;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:auto;transition:opacity .22s ease,visibility .22s ease;}",
 			"html.mcast-guest #mcastJoining.mcast-ready{opacity:0;visibility:hidden;pointer-events:none;}",
@@ -622,6 +622,21 @@
 			typeof publishWebcam === "function";
 	}
 
+	function installEarlyNativeRotationSuppressor() {
+		var attempts = 0;
+		var timer = window.setInterval(function () {
+			attempts++;
+			suppressNativePageRotationForMcast();
+			normalizeNativeRoomViewport();
+			if (
+				attempts >= 80 ||
+				(typeof window.updateForceRotatedCSS === "function" && window.updateForceRotatedCSS.mcastWrapped)
+			) {
+				window.clearInterval(timer);
+			}
+		}, 100);
+	}
+
 	function installMcastOrientationGate() {
 		if (route !== "guest" || guestJoinPreferences.orientationGateInstalled) {
 			return;
@@ -750,11 +765,7 @@
 
 		rememberMcastNativeOrientation();
 		if (shouldBlockMcastForOrientation()) {
-			guestJoinPreferences.pendingJoinShell = shell;
-			updateMcastOrientationGate();
-			setJoinButtonState(shell, true, getMcastRequestedOrientation() === "portrait" ? "Rotate to portrait" : "Rotate to landscape", true);
-			setShellText(shell, "[data-mcast-status]", "Rotate your phone to match this guest link.");
-			return;
+			normalizeNativeRoomViewport();
 		}
 
 		guestJoinPreferences.joined = true;
@@ -1173,7 +1184,7 @@
 		}
 		var nativeUpdateForceRotatedCSS = window.updateForceRotatedCSS;
 		window.updateForceRotatedCSS = function () {
-			if (route === "guest" && guestJoinPreferences.joined) {
+			if (route === "guest") {
 				normalizeNativeRoomViewport();
 				return;
 			}
