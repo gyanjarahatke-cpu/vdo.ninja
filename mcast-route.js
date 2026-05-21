@@ -16,6 +16,7 @@
 		video: readGuestPreference("video", true),
 		rememberName: readGuestPreference("rememberName", true),
 		joined: false,
+		nativeRoomEntered: false,
 		nativeReady: false,
 		joinStartedAt: 0,
 		readyTimer: null,
@@ -581,6 +582,7 @@
 		var rememberName = rememberInput ? rememberInput.checked : true;
 
 		guestJoinPreferences.joined = true;
+		guestJoinPreferences.nativeRoomEntered = false;
 		guestJoinPreferences.joinStartedAt = Date.now();
 		writeGuestPreference("rememberName", rememberName);
 		writeGuestPreference("audio", guestJoinPreferences.audio);
@@ -625,7 +627,7 @@
 				}
 			}, 1800);
 			window.setTimeout(function () {
-				if (guestJoinPreferences.joined && !hasLiveGuestMedia() && !document.documentElement.classList.contains("mcast-room-active")) {
+				if (guestJoinPreferences.joined && !hasLiveGuestMedia() && !guestJoinPreferences.nativeRoomEntered) {
 					setShellText(shell, "[data-mcast-status]", "Permission was not completed. Allow browser camera/mic access and click Join again.");
 					resetGuestJoinButton(shell);
 				}
@@ -652,7 +654,6 @@
 		if (goButton && videoReady && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
 			try {
 				setShellText(shell, "[data-mcast-status]", "Joining room...");
-				prepareMcastRoomBeforePublish();
 				publishWebcam(false, !!miconly);
 				enterNativeGuestRoom(shell, miconly);
 				applyGuestMediaPreferencesLater();
@@ -676,19 +677,115 @@
 	}
 
 	function enterNativeGuestRoom(shell, miconly) {
-		document.documentElement.classList.add("mcast-room-active");
-		document.body.classList.add("mcast-room-active");
+		guestJoinPreferences.nativeRoomEntered = true;
 		if (shell) {
 			shell.classList.toggle("mcast-video-off", !!miconly || !guestJoinPreferences.video);
 			setShellText(shell, "[data-mcast-status]", "Connected");
 			window.setTimeout(function () {
 				shell.classList.add("mcast-ready");
+				shell.style.display = "none";
 			}, 350);
 		}
-		skinNativeRoomOnce();
-		startNativeRoomSkinSync();
-		scheduleMcastRoomVideoRepairs();
+		showOriginalVdoRoomAfterJoin();
 		window.setTimeout(requestMixerLayoutUpdate, 300);
+		window.setTimeout(showOriginalVdoRoomAfterJoin, 900);
+		window.setTimeout(requestMixerLayoutUpdate, 1200);
+		window.setTimeout(showOriginalVdoRoomAfterJoin, 2500);
+	}
+
+	function showOriginalVdoRoomAfterJoin() {
+		document.documentElement.classList.remove("mcast-room-active");
+		if (document.body) {
+			document.body.classList.remove("mcast-room-active");
+		}
+		if (guestJoinPreferences.roomSkinTimer) {
+			window.clearInterval(guestJoinPreferences.roomSkinTimer);
+			guestJoinPreferences.roomSkinTimer = null;
+		}
+		var mcastRoom = document.getElementById("mcastRoom");
+		var nativeSink = document.getElementById("mcastNativeSink");
+		var gridlayout = document.getElementById("gridlayout");
+		var mainmenu = document.getElementById("mainmenu");
+		if (gridlayout && nativeSink && nativeSink.contains(gridlayout)) {
+			var testtone = document.getElementById("testtone");
+			var restoreParent = (testtone && testtone.parentNode) || (mainmenu && mainmenu.parentNode) || document.body || document.documentElement;
+			restoreParent.insertBefore(gridlayout, testtone || null);
+		}
+		if (mcastRoom) {
+			mcastRoom.remove();
+		}
+		restoreNativeRoomElement(gridlayout, true);
+		restoreNativeRoomElement(document.getElementById("controlButtons"), true);
+		restoreNativeRoomElement(document.getElementById("subControlButtons"), true);
+		normalizeNativeInlineVideoElements(document);
+		if (mainmenu) {
+			mainmenu.classList.remove("permahide");
+			mainmenu.style.removeProperty("transform");
+			mainmenu.style.removeProperty("position");
+			mainmenu.style.removeProperty("inset");
+			mainmenu.style.removeProperty("width");
+			mainmenu.style.removeProperty("height");
+			mainmenu.style.removeProperty("min-width");
+			mainmenu.style.removeProperty("min-height");
+			mainmenu.style.removeProperty("overflow");
+			mainmenu.style.removeProperty("padding");
+		}
+		var joiningShell = document.getElementById("mcastJoining");
+		if (joiningShell && guestJoinPreferences.nativeRoomEntered) {
+			joiningShell.classList.add("mcast-ready");
+			joiningShell.style.display = "none";
+		}
+	}
+
+	function restoreNativeRoomElement(element, show) {
+		if (!element) {
+			return;
+		}
+		element.classList.remove("permahide");
+		if (show) {
+			element.classList.remove("hidden", "hidden2");
+		}
+		[
+			"display",
+			"visibility",
+			"opacity",
+			"pointer-events",
+			"position",
+			"inset",
+			"left",
+			"right",
+			"top",
+			"bottom",
+			"width",
+			"height",
+			"min-width",
+			"min-height",
+			"max-width",
+			"max-height",
+			"margin",
+			"padding",
+			"transform",
+			"z-index"
+		].forEach(function (property) {
+			element.style.removeProperty(property);
+		});
+	}
+
+	function normalizeNativeInlineVideoElements(root) {
+		var videos = [];
+		if (root && root.tagName && root.tagName.toLowerCase() === "video") {
+			videos.push(root);
+		}
+		if (root && root.querySelectorAll) {
+			videos = videos.concat(Array.prototype.slice.call(root.querySelectorAll("video")));
+		}
+		videos.forEach(function (video) {
+			video.playsInline = true;
+			video.setAttribute("playsinline", "");
+			video.setAttribute("webkit-playsinline", "");
+			video.controls = false;
+			video.removeAttribute("controls");
+		});
 	}
 
 	function startNativeRoomSkinSync() {
@@ -1592,6 +1689,7 @@
 
 	function resetGuestJoinButton(shell) {
 		guestJoinPreferences.joined = false;
+		guestJoinPreferences.nativeRoomEntered = false;
 		setJoinButtonState(shell, false, "Join", false);
 	}
 
