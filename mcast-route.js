@@ -19,7 +19,8 @@
 		nativeReady: false,
 		joinStartedAt: 0,
 		readyTimer: null,
-		roomSkinTimer: null
+		roomSkinTimer: null,
+		directPreviewPromise: null
 	};
 	var guestRouteResolved = false;
 	var activeGuestShell = null;
@@ -75,6 +76,10 @@
 	}
 	decoded = applyRouteDefaults(decoded, route);
 	if (route === "guest") {
+		if (!hasGuestRoomTarget(decoded)) {
+			showInviteError("This MCast Studio room link is missing or has expired.");
+			return;
+		}
 		persistResolvedGuestRoute(decoded);
 		persistResolvedGuestRouteInLocation(decoded);
 		cleanNativeDisplayNamePromptParamsFromLocation();
@@ -131,6 +136,11 @@
 			}
 		}
 		return serializeParams(routedParams);
+	}
+
+	function hasGuestRoomTarget(query) {
+		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
+		return !!(routedParams.get("room") || routedParams.get("r"));
 	}
 
 	function disableNativePageRotation(routedParams) {
@@ -564,15 +574,16 @@
 			var miconly = !constraints.video;
 			setShellText(shell, "[data-mcast-status]", "Allow browser camera and microphone permissions...");
 			requestBasicPermissions(constraints, function (nativeMicOnly) {
+				var joinMicOnly = miconly || !guestJoinPreferences.video;
 				try {
-					setupWebcamSelection(nativeMicOnly || miconly);
+					setupWebcamSelection(joinMicOnly);
 				} catch (setupError) {
 					console.error("MCast guest setup failed", setupError);
 					setShellText(shell, "[data-mcast-status]", "Could not prepare media. Check browser permissions and try again.");
 					resetGuestJoinButton(shell);
 					return;
 				}
-				waitForNativeWebcamReadyAndPublish(shell, nativeMicOnly || miconly, 0);
+				waitForNativeWebcamReadyAndPublish(shell, joinMicOnly, 0);
 			}, miconly);
 			window.setTimeout(function () {
 				if (guestJoinPreferences.joined && !hasLiveGuestMedia()) {
@@ -601,6 +612,9 @@
 		var ready = goButton && goButton.dataset && goButton.dataset.ready === "true";
 		var audioReady = goButton && goButton.dataset && goButton.dataset.audioready === "true";
 		var videoReady = miconly || !guestJoinPreferences.video || hasLiveGuestVideo();
+		if (!videoReady && attempt >= 8) {
+			ensureDirectGuestPreviewStream();
+		}
 		if (goButton && videoReady && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
 			try {
 				setShellText(shell, "[data-mcast-status]", "Joining room...");
@@ -879,6 +893,86 @@
 		} catch (error) {
 			return false;
 		}
+	}
+
+	function ensureDirectGuestPreviewStream() {
+		if (!guestJoinPreferences.video || guestJoinPreferences.directPreviewPromise || hasLiveGuestVideo()) {
+			return;
+		}
+		if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+			return;
+		}
+		guestJoinPreferences.directPreviewPromise = navigator.mediaDevices.getUserMedia({
+			audio: !!guestJoinPreferences.audio,
+			video: true
+		}).then(function (stream) {
+			try {
+				if (typeof session !== "undefined") {
+					replaceNativeStream(stream);
+				}
+				var preview = ensurePreviewVideoElement();
+				preview.srcObject = stream;
+				preview.muted = true;
+				preview.autoplay = true;
+				preview.playsInline = true;
+				preview.setAttribute("playsinline", "");
+				preview.setAttribute("webkit-playsinline", "");
+				if (typeof preview.play === "function") {
+					preview.play().catch(function () {});
+				}
+				markNativeGoButtonReady();
+			} catch (error) {
+				console.warn("MCast direct guest preview setup failed", error);
+			}
+		}).catch(function (error) {
+			console.warn("MCast direct guest media request failed", error);
+		}).finally(function () {
+			guestJoinPreferences.directPreviewPromise = null;
+		});
+	}
+
+	function replaceNativeStream(stream) {
+		try {
+			var oldStream = session.streamSrc;
+			if (oldStream && oldStream !== stream && typeof oldStream.getTracks === "function") {
+				oldStream.getTracks().forEach(function (track) {
+					try {
+						track.stop();
+					} catch (error) {}
+				});
+			}
+			session.streamSrc = stream;
+			if (session.videoDevice === 0) {
+				session.videoDevice = 1;
+			}
+			if (guestJoinPreferences.audio && session.audioDevice === 0) {
+				session.audioDevice = 1;
+			}
+		} catch (error) {}
+	}
+
+	function ensurePreviewVideoElement() {
+		var preview = document.getElementById("previewWebcam");
+		if (!preview) {
+			preview = document.createElement("video");
+			preview.id = "previewWebcam";
+			preview.className = "myVideo mirrorControl";
+			var parent = document.getElementById("mcastJoining") || document.getElementById("main") || document.body || document.documentElement;
+			parent.appendChild(preview);
+		}
+		return preview;
+	}
+
+	function markNativeGoButtonReady() {
+		var goButton = document.getElementById("gowebcam");
+		if (!goButton || !goButton.dataset) {
+			return;
+		}
+		goButton.dataset.ready = "true";
+		if (guestJoinPreferences.audio) {
+			goButton.dataset.audioready = "true";
+		}
+		goButton.disabled = false;
 	}
 
 	function requestMixerLayoutUpdate() {
