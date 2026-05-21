@@ -27,6 +27,16 @@
 		directPreviewFailed: false,
 		directPreviewError: "",
 		manualRotation: 0,
+		routeOrientation: "",
+		pendingJoinShell: null,
+		orientationGateInstalled: false,
+		orientationCanvas: null,
+		orientationContext: null,
+		orientationSourceVideo: null,
+		orientationSourceTrackId: "",
+		orientationFrameRequest: 0,
+		normalizedVideoTrack: null,
+		normalizedVideoStream: null,
 		videoRepairScheduled: false,
 		canvasRenderStarted: false
 	};
@@ -43,6 +53,7 @@
 		document.addEventListener("DOMContentLoaded", function () {
 			if (guestRouteResolved) {
 				ensureGuestJoinShell();
+				installMcastOrientationGate();
 			}
 		});
 	}
@@ -84,6 +95,7 @@
 	}
 	decoded = applyRouteDefaults(decoded, route);
 	if (route === "guest") {
+		guestJoinPreferences.routeOrientation = readRequestedOrientationFromQuery(decoded);
 		if (!hasGuestRoomTarget(decoded)) {
 			showInviteError("This MCast Studio room link is missing or has expired.");
 			return;
@@ -152,6 +164,17 @@
 	function hasGuestRoomTarget(query) {
 		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
 		return !!(routedParams.get("room") || routedParams.get("r"));
+	}
+
+	function readRequestedOrientationFromQuery(query) {
+		var routedParams = new URLSearchParams((query || "").replace(/^\?/, ""));
+		if (routedParams.has("forcelandscape") || routedParams.has("forcedlandscape") || routedParams.has("fl")) {
+			return "landscape";
+		}
+		if (routedParams.has("forceportrait") || routedParams.has("forcedportrait") || routedParams.has("fp")) {
+			return "portrait";
+		}
+		return "";
 	}
 
 	function disableNativePageRotation(routedParams) {
@@ -370,6 +393,13 @@
 			"html.mcast-guest .mcast-join-status{min-height:18px;margin-top:12px;color:#64748b;font-size:12px;line-height:1.45;font-weight:650;}",
 			"html.mcast-guest .mcast-join-footer,html.mcast-guest .mcast-terms{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;font-weight:520;}",
 			"html.mcast-guest .mcast-terms{margin-top:18px;}",
+			"html.mcast-guest #mcastOrientationGate{position:fixed!important;inset:0!important;z-index:2147483300!important;display:none!important;place-items:center!important;background:#070b12!important;color:#f8fafc!important;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))!important;text-align:center!important;box-sizing:border-box!important;}",
+			"html.mcast-guest.mcast-orientation-blocked #mcastOrientationGate{display:grid!important;}",
+			"html.mcast-guest .mcast-orientation-card{width:min(420px,100%)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:8px!important;background:#111827!important;padding:24px 22px!important;box-shadow:0 22px 70px rgba(0,0,0,.38)!important;}",
+			"html.mcast-guest .mcast-orientation-icon{display:grid!important;place-items:center!important;width:72px!important;height:72px!important;margin:0 auto 18px!important;border-radius:50%!important;background:#1f2937!important;color:#93c5fd!important;}",
+			"html.mcast-guest .mcast-orientation-icon svg{width:40px!important;height:40px!important;stroke:currentColor!important;stroke-width:1.8!important;fill:none!important;stroke-linecap:round!important;stroke-linejoin:round!important;}",
+			"html.mcast-guest .mcast-orientation-title{font-size:21px!important;line-height:1.2!important;font-weight:780!important;margin:0 0 8px!important;color:#f8fafc!important;}",
+			"html.mcast-guest .mcast-orientation-copy{font-size:14px!important;line-height:1.5!important;font-weight:560!important;margin:0!important;color:#cbd5e1!important;}",
 			"html.mcast-guest.mcast-native-room body{isolation:isolate!important;}",
 			"html.mcast-guest.mcast-native-room #gridlayout{position:relative!important;z-index:1!important;display:block!important;visibility:visible!important;opacity:1!important;}",
 			"html.mcast-guest.mcast-native-room #gridlayout video,html.mcast-guest.mcast-native-room #gridlayout .holder,html.mcast-guest.mcast-native-room #gridlayout .container_holder_video{visibility:visible!important;opacity:1!important;}",
@@ -592,6 +622,123 @@
 			typeof publishWebcam === "function";
 	}
 
+	function installMcastOrientationGate() {
+		if (route !== "guest" || guestJoinPreferences.orientationGateInstalled) {
+			return;
+		}
+		guestJoinPreferences.orientationGateInstalled = true;
+		ensureMcastOrientationGateElement();
+		["resize", "orientationchange"].forEach(function (eventName) {
+			window.addEventListener(eventName, function () {
+				window.setTimeout(handleMcastOrientationStateChange, 80);
+				window.setTimeout(handleMcastOrientationStateChange, 450);
+			});
+		});
+		handleMcastOrientationStateChange();
+	}
+
+	function ensureMcastOrientationGateElement() {
+		if (document.getElementById("mcastOrientationGate") || !document.body) {
+			return document.getElementById("mcastOrientationGate");
+		}
+		var gate = document.createElement("div");
+		gate.id = "mcastOrientationGate";
+		gate.setAttribute("role", "status");
+		gate.setAttribute("aria-live", "polite");
+		gate.innerHTML = [
+			"<div class=\"mcast-orientation-card\">",
+			"<div class=\"mcast-orientation-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><rect x=\"7\" y=\"3\" width=\"10\" height=\"18\" rx=\"2\"></rect><path d=\"M4 8a8 8 0 0 1 13-3\"></path><path d=\"M17 5h-4V1\"></path></svg></div>",
+			"<h2 class=\"mcast-orientation-title\" data-mcast-orientation-title>Rotate your phone</h2>",
+			"<p class=\"mcast-orientation-copy\" data-mcast-orientation-copy>Turn the device to continue.</p>",
+			"</div>"
+		].join("");
+		document.body.appendChild(gate);
+		return gate;
+	}
+
+	function handleMcastOrientationStateChange() {
+		updateMcastOrientationGate();
+		if (guestJoinPreferences.pendingJoinShell && !shouldBlockMcastForOrientation()) {
+			var shell = guestJoinPreferences.pendingJoinShell;
+			guestJoinPreferences.pendingJoinShell = null;
+			setJoinButtonState(shell, false, "Joining...", true);
+			window.setTimeout(function () {
+				startGuestJoinFromShell(shell);
+			}, 80);
+		}
+		if (guestJoinPreferences.joined) {
+			ensureMcastNormalizedPublishStream();
+			scheduleMcastNativeOrientationSync();
+		}
+	}
+
+	function updateMcastOrientationGate() {
+		var requested = getMcastRequestedOrientation();
+		var blocked = shouldBlockMcastForOrientation();
+		document.documentElement.classList.toggle("mcast-orientation-blocked", blocked);
+		var gate = ensureMcastOrientationGateElement();
+		if (!gate) {
+			return;
+		}
+		var title = gate.querySelector("[data-mcast-orientation-title]");
+		var copy = gate.querySelector("[data-mcast-orientation-copy]");
+		if (title) {
+			title.textContent = requested === "portrait" ? "Rotate to portrait" : "Rotate to landscape";
+		}
+		if (copy) {
+			copy.textContent = requested === "portrait"
+				? "This guest link is set for portrait video. Turn the phone upright to continue."
+				: "This guest link is set for landscape video. Turn the phone sideways to continue.";
+		}
+	}
+
+	function shouldBlockMcastForOrientation() {
+		var requested = getMcastRequestedOrientation();
+		return !!(requested && isLikelyMobileGuest() && !isMcastViewportOrientation(requested));
+	}
+
+	function isLikelyMobileGuest() {
+		var ua = (navigator.userAgent || "").toLowerCase();
+		return /iphone|ipad|ipod|android|webos|blackberry|iemobile|opera mini/.test(ua) ||
+			(ua.indexOf("whatsapp") !== -1 && ua.indexOf("mobile") !== -1);
+	}
+
+	function getMcastRequestedOrientation() {
+		if (guestJoinPreferences.routeOrientation === "landscape" || guestJoinPreferences.routeOrientation === "portrait") {
+			return guestJoinPreferences.routeOrientation;
+		}
+		try {
+			if (typeof session !== "undefined" && (session.orientation === "landscape" || session.orientation === "portrait")) {
+				guestJoinPreferences.routeOrientation = session.orientation;
+				return session.orientation;
+			}
+		} catch (error) {}
+		return "";
+	}
+
+	function configureMcastOrientationSession() {
+		var requested = getMcastRequestedOrientation();
+		if (!requested || typeof session === "undefined") {
+			return;
+		}
+		try {
+			session.forceAspectRatio = requested === "landscape" ? 16 / 9 : 9 / 16;
+		} catch (error) {}
+	}
+
+	function isMcastViewportOrientation(requested) {
+		var width = window.innerWidth || document.documentElement.clientWidth || 0;
+		var height = window.innerHeight || document.documentElement.clientHeight || 0;
+		if (window.visualViewport) {
+			width = window.visualViewport.width || width;
+			height = window.visualViewport.height || height;
+		}
+		if (!width || !height) {
+			return true;
+		}
+		return requested === "landscape" ? width >= height : height >= width;
+	}
+
 	function startGuestJoinFromShell(shell) {
 		if (!shell || guestJoinPreferences.joined || !guestJoinPreferences.nativeReady) {
 			return;
@@ -601,9 +748,19 @@
 		var name = nameInput ? nameInput.value.trim().slice(0, 60) : "";
 		var rememberName = rememberInput ? rememberInput.checked : true;
 
+		rememberMcastNativeOrientation();
+		if (shouldBlockMcastForOrientation()) {
+			guestJoinPreferences.pendingJoinShell = shell;
+			updateMcastOrientationGate();
+			setJoinButtonState(shell, true, getMcastRequestedOrientation() === "portrait" ? "Rotate to portrait" : "Rotate to landscape", true);
+			setShellText(shell, "[data-mcast-status]", "Rotate your phone to match this guest link.");
+			return;
+		}
+
 		guestJoinPreferences.joined = true;
 		guestJoinPreferences.nativeRoomEntered = false;
 		guestJoinPreferences.joinStartedAt = Date.now();
+		guestJoinPreferences.manualRotation = 0;
 		writeGuestPreference("rememberName", rememberName);
 		writeGuestPreference("audio", guestJoinPreferences.audio);
 		writeGuestPreference("video", guestJoinPreferences.video);
@@ -624,6 +781,7 @@
 		try {
 			rememberMcastNativeOrientation();
 			suppressNativePageRotationForMcast();
+			configureMcastOrientationSession();
 			session.autostart = false;
 			var constraints = {
 				audio: !!guestJoinPreferences.audio,
@@ -670,6 +828,9 @@
 		var ready = goButton && goButton.dataset && goButton.dataset.ready === "true";
 		var audioReady = goButton && goButton.dataset && goButton.dataset.audioready === "true";
 		var requiresVideo = !miconly && !!guestJoinPreferences.video;
+		if (requiresVideo && hasLiveGuestVideoTrack()) {
+			ensureMcastNormalizedPublishStream();
+		}
 		var videoReady = !requiresVideo || hasPublishableGuestVideo();
 		if (requiresVideo && !videoReady && attempt >= 4) {
 			ensureDirectGuestPreviewStream(shell);
@@ -962,16 +1123,8 @@
 			return;
 		}
 		flipButton.dataset.mcastBound = "1";
-		flipButton.title = "Rotate video";
-		flipButton.setAttribute("aria-label", "Rotate video");
-		flipButton.addEventListener("click", function (event) {
-			if ((event.altKey || event.ctrlKey || event.shiftKey) && hasMultipleCameraChoices()) {
-				return;
-			}
-			event.preventDefault();
-			event.stopImmediatePropagation();
-			cycleMcastLocalRotation();
-		}, true);
+		flipButton.title = "Switch camera";
+		flipButton.setAttribute("aria-label", "Switch camera");
 	}
 
 	function hasMultipleCameraChoices() {
@@ -1061,6 +1214,10 @@
 	function syncMcastNativeOrientation() {
 		try {
 			rememberMcastNativeOrientation();
+			if (ensureMcastNormalizedPublishStream()) {
+				sendMcastPeerRotation(0);
+				return;
+			}
 			if (normalizeMcastRotation(guestJoinPreferences.manualRotation)) {
 				normalizeMcastOutgoingRotation();
 				return;
@@ -1650,6 +1807,13 @@
 			if (typeof session === "undefined") {
 				return;
 			}
+			if (hasMcastNormalizedVideoTrack()) {
+				session.orientation = false;
+				session.forceRotate = 0;
+				session.rotate = 0;
+				sendMcastPeerRotation(0);
+				return;
+			}
 			rememberMcastNativeOrientation();
 			if (!rotation) {
 				restoreMcastNativeOrientation();
@@ -1886,7 +2050,7 @@
 		try {
 			facing = typeof session !== "undefined" && session.facingMode ? session.facingMode : false;
 		} catch (error) {}
-		var firstVideoConstraint = facing ? { facingMode: { ideal: facing } } : true;
+		var firstVideoConstraint = getMcastOrientationVideoConstraints(facing);
 		return navigator.mediaDevices.getUserMedia({
 			audio: false,
 			video: firstVideoConstraint
@@ -1899,6 +2063,261 @@
 				video: true
 			});
 		});
+	}
+
+	function getMcastOrientationVideoConstraints(facing) {
+		var requested = getMcastRequestedOrientation();
+		var video = facing ? { facingMode: { ideal: facing } } : {};
+		if (requested === "landscape") {
+			video.width = { ideal: 1280 };
+			video.height = { ideal: 720 };
+			video.aspectRatio = { ideal: 16 / 9 };
+		} else if (requested === "portrait") {
+			video.width = { ideal: 720 };
+			video.height = { ideal: 1280 };
+			video.aspectRatio = { ideal: 9 / 16 };
+		}
+		return Object.keys(video).length ? video : true;
+	}
+
+	function ensureMcastNormalizedPublishStream() {
+		var requested = getMcastRequestedOrientation();
+		if (!requested || typeof session === "undefined" || !session.streamSrc || typeof session.streamSrc.getVideoTracks !== "function") {
+			return false;
+		}
+		var tracks = session.streamSrc.getVideoTracks();
+		if (!tracks.length) {
+			return false;
+		}
+		var currentTrack = tracks[0];
+		if (currentTrack && currentTrack._mcastNormalized && currentTrack._mcastOrientation === requested) {
+			sendMcastPeerRotation(0);
+			return true;
+		}
+		if (!currentTrack || currentTrack.readyState !== "live" || currentTrack._mcastNormalized) {
+			return false;
+		}
+		var normalizedTrack = createMcastOrientationTrack(currentTrack, requested);
+		if (!normalizedTrack) {
+			return false;
+		}
+		replaceSessionVideoTrackWithoutStoppingRaw(currentTrack, normalizedTrack);
+		try {
+			session.orientation = false;
+			session.forceRotate = 0;
+			session.rotate = 0;
+		} catch (error) {}
+		forceMcastGuestVideoUnmuted();
+		try {
+			if (typeof updateRenderOutpipe === "function") {
+				updateRenderOutpipe();
+			} else if (session.videoElement) {
+				session.videoElement.srcObject = session.streamSrc;
+			}
+		} catch (error) {
+			if (session.videoElement) {
+				session.videoElement.srcObject = session.streamSrc;
+			}
+		}
+		ensureMcastNormalizedTrackAttached(normalizedTrack);
+		if (session.videoElement) {
+			prepareMcastInlineVideo(session.videoElement);
+			playMcastVideo(session.videoElement, true);
+		}
+		var preview = ensurePreviewVideoElement();
+		preview.srcObject = session.videoElement && session.videoElement.srcObject ? session.videoElement.srcObject : session.streamSrc;
+		prepareMcastInlineVideo(preview);
+		playMcastVideo(preview, true);
+		sendMcastPeerRotation(0);
+		return true;
+	}
+
+	function createMcastOrientationTrack(rawTrack, requested) {
+		if (!rawTrack || typeof document === "undefined") {
+			return null;
+		}
+		var canvas = ensureMcastOrientationCanvas(requested);
+		if (!canvas || typeof canvas.captureStream !== "function") {
+			return null;
+		}
+		var sourceVideo = ensureMcastOrientationSourceVideo(rawTrack);
+		if (!sourceVideo) {
+			return null;
+		}
+		startMcastOrientationCanvasLoop(sourceVideo, canvas, requested);
+		var captureStream = canvas.captureStream(30);
+		var track = captureStream && captureStream.getVideoTracks ? captureStream.getVideoTracks()[0] : null;
+		if (!track) {
+			return null;
+		}
+		track._mcastNormalized = true;
+		track._mcastOrientation = requested;
+		track._mcastSourceTrackId = rawTrack.id || "";
+		try {
+			track.contentHint = "motion";
+		} catch (error) {}
+		guestJoinPreferences.normalizedVideoTrack = track;
+		guestJoinPreferences.normalizedVideoStream = captureStream;
+		return track;
+	}
+
+	function ensureMcastOrientationCanvas(requested) {
+		var canvas = guestJoinPreferences.orientationCanvas;
+		if (!canvas) {
+			canvas = document.createElement("canvas");
+			canvas.id = "mcastOrientationCanvas";
+			canvas.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;opacity:0;pointer-events:none;";
+			(document.body || document.documentElement).appendChild(canvas);
+			guestJoinPreferences.orientationCanvas = canvas;
+			guestJoinPreferences.orientationContext = canvas.getContext("2d", { alpha: false });
+		}
+		var target = getMcastOrientationCanvasSize(requested);
+		if (canvas.width !== target.width || canvas.height !== target.height) {
+			canvas.width = target.width;
+			canvas.height = target.height;
+		}
+		return canvas;
+	}
+
+	function ensureMcastOrientationSourceVideo(rawTrack) {
+		var sourceVideo = guestJoinPreferences.orientationSourceVideo;
+		if (!sourceVideo) {
+			sourceVideo = document.createElement("video");
+			sourceVideo.id = "mcastOrientationSource";
+			sourceVideo.muted = true;
+			sourceVideo.autoplay = true;
+			sourceVideo.playsInline = true;
+			sourceVideo.setAttribute("playsinline", "");
+			sourceVideo.setAttribute("webkit-playsinline", "");
+			sourceVideo.style.cssText = "position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;opacity:0;pointer-events:none;";
+			(document.body || document.documentElement).appendChild(sourceVideo);
+			guestJoinPreferences.orientationSourceVideo = sourceVideo;
+		}
+		if (guestJoinPreferences.orientationSourceTrackId !== rawTrack.id) {
+			sourceVideo.srcObject = new MediaStream([rawTrack]);
+			guestJoinPreferences.orientationSourceTrackId = rawTrack.id || "";
+		}
+		playMcastVideo(sourceVideo, true);
+		return sourceVideo;
+	}
+
+	function startMcastOrientationCanvasLoop(sourceVideo, canvas, requested) {
+		var context = guestJoinPreferences.orientationContext || canvas.getContext("2d", { alpha: false });
+		guestJoinPreferences.orientationContext = context;
+		if (!context) {
+			return;
+		}
+		if (guestJoinPreferences.orientationFrameRequest) {
+			window.cancelAnimationFrame(guestJoinPreferences.orientationFrameRequest);
+			guestJoinPreferences.orientationFrameRequest = 0;
+		}
+		var draw = function () {
+			try {
+				drawMcastOrientationFrame(sourceVideo, canvas, context);
+			} catch (error) {}
+			guestJoinPreferences.orientationFrameRequest = window.requestAnimationFrame(draw);
+		};
+		draw();
+	}
+
+	function drawMcastOrientationFrame(sourceVideo, canvas, context) {
+		var sourceWidth = sourceVideo.videoWidth || 0;
+		var sourceHeight = sourceVideo.videoHeight || 0;
+		if (!sourceWidth || !sourceHeight) {
+			context.fillStyle = "#05070b";
+			context.fillRect(0, 0, canvas.width, canvas.height);
+			return;
+		}
+		var targetRatio = canvas.width / canvas.height;
+		var sourceRatio = sourceWidth / sourceHeight;
+		var drawWidth = sourceWidth;
+		var drawHeight = sourceHeight;
+		var sourceX = 0;
+		var sourceY = 0;
+		if (sourceRatio > targetRatio) {
+			drawWidth = sourceHeight * targetRatio;
+			sourceX = (sourceWidth - drawWidth) / 2;
+		} else if (sourceRatio < targetRatio) {
+			drawHeight = sourceWidth / targetRatio;
+			sourceY = (sourceHeight - drawHeight) / 2;
+		}
+		context.fillStyle = "#05070b";
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		context.drawImage(sourceVideo, sourceX, sourceY, drawWidth, drawHeight, 0, 0, canvas.width, canvas.height);
+	}
+
+	function getMcastOrientationCanvasSize(requested) {
+		return requested === "portrait"
+			? { width: 720, height: 1280 }
+			: { width: 1280, height: 720 };
+	}
+
+	function replaceSessionVideoTrackWithoutStoppingRaw(rawTrack, normalizedTrack) {
+		if (!session.streamSrc || typeof session.streamSrc.getVideoTracks !== "function") {
+			session.streamSrc = createMcastMediaStream();
+		}
+		session.streamSrc.getVideoTracks().forEach(function (track) {
+			try {
+				session.streamSrc.removeTrack(track);
+			} catch (error) {}
+			if (track !== rawTrack && track._mcastNormalized) {
+				try {
+					track.stop();
+				} catch (error) {}
+			}
+		});
+		session.streamSrc.addTrack(normalizedTrack);
+	}
+
+	function ensureMcastNormalizedTrackAttached(normalizedTrack) {
+		try {
+			if (!normalizedTrack || normalizedTrack.readyState !== "live" || !session.streamSrc || typeof session.streamSrc.getVideoTracks !== "function") {
+				return;
+			}
+			var attached = session.streamSrc.getVideoTracks().some(function (track) {
+				return track === normalizedTrack;
+			});
+			if (!attached) {
+				session.streamSrc.addTrack(normalizedTrack);
+			}
+		} catch (error) {}
+	}
+
+	function sendMcastPeerRotation(rotation) {
+		try {
+			if (typeof session === "undefined") {
+				return;
+			}
+			session.forceRotate = 0;
+			session.rotate = rotation || 0;
+			if (!session.pcs) {
+				return;
+			}
+			for (var UUID in session.pcs) {
+				if (!Object.prototype.hasOwnProperty.call(session.pcs, UUID)) {
+					continue;
+				}
+				if (session.pcs[UUID] && session.pcs[UUID].rotation !== rotation) {
+					session.pcs[UUID].rotation = rotation;
+					if (typeof session.sendMessage === "function") {
+						session.sendMessage({ rotate_video: rotation }, UUID);
+					}
+				}
+			}
+		} catch (error) {}
+	}
+
+	function hasMcastNormalizedVideoTrack() {
+		try {
+			if (typeof session === "undefined" || !session.streamSrc || typeof session.streamSrc.getVideoTracks !== "function") {
+				return false;
+			}
+			return session.streamSrc.getVideoTracks().some(function (track) {
+				return !!(track && track._mcastNormalized && track.readyState === "live");
+			});
+		} catch (error) {
+			return false;
+		}
 	}
 
 	function attachMcastCameraStream(cameraStream) {
@@ -1920,6 +2339,7 @@
 		if (!hasLiveStreamTrack(session.streamSrc, "video")) {
 			return false;
 		}
+		ensureMcastNormalizedPublishStream();
 		forceMcastGuestVideoUnmuted();
 		try {
 			if (typeof checkBasicStreamsExist === "function") {
@@ -2092,6 +2512,7 @@
 	function resetGuestJoinButton(shell) {
 		guestJoinPreferences.joined = false;
 		guestJoinPreferences.nativeRoomEntered = false;
+		guestJoinPreferences.pendingJoinShell = null;
 		document.documentElement.classList.remove("mcast-native-room");
 		if (document.body) {
 			document.body.classList.remove("mcast-native-room");
