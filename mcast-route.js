@@ -69,6 +69,9 @@
 		cleanTransportRouteParams(params);
 	}
 	decoded = applyRouteDefaults(decoded, route);
+	if (route === "guest") {
+		cleanNativeDisplayNamePromptParamsFromLocation();
+	}
 	applyRouteMetadata(decoded, route);
 	if (typeof session !== "undefined") {
 		session.decrypted = "?" + decoded.replace(/^\?/, "");
@@ -84,6 +87,7 @@
 			setFlag(routedParams, "mcastguest");
 			setFlag(routedParams, "mcastprejoin");
 			routedParams.delete("mcastengine");
+			normalizeGuestNameParams(routedParams);
 			if (!routedParams.has("mcastautojoin")) {
 				routedParams.delete("autostart");
 			}
@@ -99,7 +103,6 @@
 			if (!routedParams.has("roombitrate") && !routedParams.has("rbr")) {
 				routedParams.set("roombitrate", "1200");
 			}
-			applyStoredGuestIdentity(routedParams);
 		} else if (currentRoute === "call") {
 			if (routedParams.has("mcastbridge")) {
 				setFlag(routedParams, "showdirector");
@@ -220,6 +223,7 @@
 		var role = normalizeRouteToken(routedParams.get("mcastrole") || (currentRoute === "guest" ? "participant" : "source"), "participant");
 		var state = normalizeRouteToken(routedParams.get("mcaststate") || "backstage", "backstage");
 		var routing = normalizeRouteToken(routedParams.get("mcastrouting") || "low_bitrate", "low_bitrate");
+		var guestName = normalizeGuestDisplayName(routedParams.get("label") || routedParams.get("l") || "");
 		var root = document.documentElement;
 		root.classList.add("mcast-mode-" + mode);
 		root.classList.add("mcast-role-" + role);
@@ -230,7 +234,8 @@
 			mode: mode,
 			role: role,
 			state: state,
-			routing: routing
+			routing: routing,
+			guestName: guestName
 		};
 		updateRouteTitle(mode, role);
 		updateGuestJoinStatus(mode, state);
@@ -402,7 +407,7 @@
 		var joinButton = shell.querySelector("[data-mcast-join]");
 		var audioButton = shell.querySelector("[data-mcast-audio-toggle]");
 		var videoButton = shell.querySelector("[data-mcast-video-toggle]");
-		var rememberedName = readStoredGuestName();
+		var rememberedName = getInitialGuestName();
 
 		if (nameInput) {
 			nameInput.value = rememberedName;
@@ -894,12 +899,42 @@
 		return parts.join("&");
 	}
 
-	function applyStoredGuestIdentity(routedParams) {
-		var name = readStoredGuestName();
-		if (!name || routedParams.has("label") || routedParams.has("l")) {
-			return;
+	function normalizeGuestNameParams(routedParams) {
+		var explicitName = readFirstGuestNameParam(routedParams, ["label", "l"]);
+		var suggestedName = readFirstGuestNameParam(routedParams, ["defaultlabel", "labelsuggestion", "ls"]);
+		var storedName = readStoredGuestName();
+
+		["label", "l", "defaultlabel", "labelsuggestion", "ls"].forEach(function (key) {
+			routedParams.delete(key);
+		});
+
+		var name = explicitName || storedName || suggestedName;
+		if (name) {
+			routedParams.set("l", name);
 		}
-		routedParams.set("l", name);
+	}
+
+	function readFirstGuestNameParam(routedParams, keys) {
+		for (var index = 0; index < keys.length; index++) {
+			var value = normalizeGuestDisplayName(routedParams.get(keys[index]) || "");
+			if (value) {
+				return value;
+			}
+		}
+		return "";
+	}
+
+	function normalizeGuestDisplayName(value) {
+		var name = (value || "").toString().replace(/_/g, " ");
+		try {
+			name = decodeURIComponent(name);
+		} catch (error) {}
+		return name.replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+	}
+
+	function getInitialGuestName() {
+		var routeName = window.MCastRoute ? normalizeGuestDisplayName(window.MCastRoute.guestName || "") : "";
+		return routeName || readStoredGuestName();
 	}
 
 	function getOrCreateSingleLinkGuestPush(routedParams) {
@@ -1010,6 +1045,32 @@
 			window.history.replaceState({ path: nextUrl }, "", nextUrl);
 		} catch (error) {
 			console.warn("MCast could not clean transport route params", error);
+		}
+	}
+
+	function cleanNativeDisplayNamePromptParamsFromLocation() {
+		try {
+			if (!window.history || typeof window.history.replaceState !== "function") {
+				return;
+			}
+			var currentParams = new URLSearchParams(window.location.search || "");
+			var changed = false;
+			["label", "l", "defaultlabel", "labelsuggestion", "ls"].forEach(function (key) {
+				if (currentParams.has(key)) {
+					currentParams.delete(key);
+					changed = true;
+				}
+			});
+			if (!changed) {
+				return;
+			}
+			var nextQuery = currentParams.toString();
+			var nextUrl = window.location.pathname +
+				(nextQuery ? "?" + nextQuery : "") +
+				(window.location.hash || "");
+			window.history.replaceState({ path: nextUrl }, "", nextUrl);
+		} catch (error) {
+			console.warn("MCast could not clean native display-name params", error);
 		}
 	}
 
