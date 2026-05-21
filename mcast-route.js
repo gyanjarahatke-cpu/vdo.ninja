@@ -22,7 +22,8 @@
 		roomSkinTimer: null,
 		directPreviewPromise: null,
 		manualRotation: 0,
-		videoRepairScheduled: false
+		videoRepairScheduled: false,
+		canvasRenderStarted: false
 	};
 	var guestRouteResolved = false;
 	var activeGuestShell = null;
@@ -372,6 +373,7 @@
 			"html.mcast-guest.mcast-room-active #mcastRoomGrid{position:absolute!important;inset:0!important;z-index:2!important;display:grid!important;gap:12px!important;padding:12px!important;width:100%!important;height:100%!important;align-items:center!important;justify-items:center!important;place-content:center!important;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))!important;background:#070b12!important;}",
 			"html.mcast-guest.mcast-room-active #mcastRoomGrid[data-count='1']{grid-template-columns:minmax(0,min(100%,1320px))!important;}",
 			"html.mcast-guest.mcast-room-active .mcast-video-tile{position:relative!important;display:block!important;width:100%!important;height:100%!important;min-height:0!important;max-height:100%!important;aspect-ratio:16/9!important;border-radius:8px!important;overflow:hidden!important;background:#111827!important;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 18px 52px rgba(0,0,0,.28)!important;}",
+			"html.mcast-guest.mcast-room-active .mcast-render-canvas{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;background:#0b1018!important;transform:none!important;opacity:1!important;visibility:visible!important;pointer-events:none!important;}",
 			"html.mcast-guest.mcast-room-active .mcast-render-video,html.mcast-guest.mcast-room-active .mcast-video-tile>video{display:block!important;position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;background:#0b1018!important;transform:none!important;opacity:1!important;visibility:visible!important;pointer-events:none!important;}",
 			"html.mcast-guest.mcast-room-active .mcast-render-video[data-mcast-manual-rotation='90'],html.mcast-guest.mcast-room-active .mcast-video-tile>video[data-mcast-manual-rotation='90']{transform:rotate(90deg)!important;}",
 			"html.mcast-guest.mcast-room-active .mcast-render-video[data-mcast-manual-rotation='180'],html.mcast-guest.mcast-room-active .mcast-video-tile>video[data-mcast-manual-rotation='180']{transform:rotate(180deg)!important;}",
@@ -975,6 +977,7 @@
 		});
 		roomSurface.grid.dataset.count = String(sources.length);
 		roomSurface.room.classList.toggle("has-live-video", sources.length > 0);
+		ensureMcastCanvasRenderer();
 		var stats = document.getElementById("mcastRoomStats");
 		if (stats) {
 			stats.textContent = sources.length ? sources.length + " connected" : "Connecting";
@@ -1031,42 +1034,124 @@
 			tile = document.createElement("div");
 			tile.className = "mcast-video-tile";
 			tile.dataset.mcastKey = source.key;
-			tile.innerHTML = "<div class=\"mcast-tile-label\"></div>";
+			tile.innerHTML = "<canvas class=\"mcast-render-canvas\"></canvas><div class=\"mcast-tile-label\"></div>";
 			grid.appendChild(tile);
 		}
+		Array.prototype.slice.call(tile.querySelectorAll("video")).forEach(function (video) {
+			video.classList.remove("mcast-render-video");
+			var nativeSink = document.getElementById("mcastNativeSink");
+			if (nativeSink) {
+				nativeSink.appendChild(video);
+			}
+		});
 		var label = tile.querySelector(".mcast-tile-label");
 		if (label) {
 			label.textContent = source.label;
 		}
-		placeMcastSourceVideo(tile, source);
+		syncMcastRenderCanvas(tile.querySelector("canvas"), source);
 	}
 
-	function placeMcastSourceVideo(tile, source) {
-		if (!tile || !source || !source.video) {
+	function syncMcastRenderCanvas(canvas, source) {
+		if (!canvas || !source || !source.video) {
 			return;
 		}
 		var video = source.video;
 		configureMcastRoomVideo(video, source.local);
-		video.classList.add("mcast-render-video");
-		video.autoplay = true;
-		video.playsInline = true;
-		video.disablePictureInPicture = true;
-		video.removeAttribute("controls");
-		video.setAttribute("playsinline", "");
-		video.setAttribute("webkit-playsinline", "");
-		video.setAttribute("controlsList", "nodownload noplaybackrate noremoteplayback");
-		try {
-			video.disableRemotePlayback = true;
-		} catch (error) {}
-		if (source.local) {
-			video.muted = true;
+		video.classList.remove("mcast-render-video");
+		keepMcastSourceVideoOffscreen(video);
+		canvas._mcastSourceVideo = video;
+		canvas._mcastSourceLocal = !!source.local;
+		canvas._mcastSourceRotation = normalizeMcastRotation(source.rotation);
+		if (canvas.dataset) {
+			canvas.dataset.rotated = String(canvas._mcastSourceRotation);
+			if (source.local && canvas._mcastSourceRotation) {
+				canvas.dataset.mcastManualRotation = String(canvas._mcastSourceRotation);
+			} else {
+				delete canvas.dataset.mcastManualRotation;
+			}
 		}
-		if (video.parentNode !== tile) {
-			var label = tile.querySelector(".mcast-tile-label");
-			tile.insertBefore(video, label || null);
-		}
-		applyMcastVideoRotation(video, source.rotation, source.local);
 		playMcastVideo(video);
+	}
+
+	function keepMcastSourceVideoOffscreen(video) {
+		if (!video) {
+			return;
+		}
+		var nativeSink = document.getElementById("mcastNativeSink");
+		if (!nativeSink) {
+			return;
+		}
+		if (!video.isConnected || (video.parentElement && video.parentElement.classList && video.parentElement.classList.contains("mcast-video-tile"))) {
+			nativeSink.appendChild(video);
+		}
+	}
+
+	function ensureMcastCanvasRenderer() {
+		if (guestJoinPreferences.canvasRenderStarted) {
+			return;
+		}
+		guestJoinPreferences.canvasRenderStarted = true;
+		function render() {
+			try {
+				drawMcastCanvasTiles();
+			} catch (error) {}
+			window.requestAnimationFrame(render);
+		}
+		window.requestAnimationFrame(render);
+	}
+
+	function drawMcastCanvasTiles() {
+		var canvases = document.querySelectorAll("#mcastRoomGrid canvas.mcast-render-canvas");
+		Array.prototype.forEach.call(canvases, function (canvas) {
+			drawMcastCanvasTile(canvas);
+		});
+	}
+
+	function drawMcastCanvasTile(canvas) {
+		var video = canvas._mcastSourceVideo;
+		if (!video || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+			return;
+		}
+		var rect = canvas.getBoundingClientRect();
+		var ratio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+		var width = Math.max(1, Math.round(rect.width * ratio));
+		var height = Math.max(1, Math.round(rect.height * ratio));
+		if (canvas.width !== width || canvas.height !== height) {
+			canvas.width = width;
+			canvas.height = height;
+		}
+		var context = canvas.getContext("2d");
+		if (!context) {
+			return;
+		}
+		var rotation = normalizeMcastRotation(canvas._mcastSourceRotation);
+		var rotated = rotation === 90 || rotation === 270;
+		var drawAreaWidth = rotated ? height : width;
+		var drawAreaHeight = rotated ? width : height;
+		var videoRatio = video.videoWidth / video.videoHeight;
+		var areaRatio = drawAreaWidth / drawAreaHeight;
+		var drawWidth = drawAreaWidth;
+		var drawHeight = drawAreaHeight;
+		if (videoRatio > areaRatio) {
+			drawHeight = drawAreaHeight;
+			drawWidth = drawHeight * videoRatio;
+		} else {
+			drawWidth = drawAreaWidth;
+			drawHeight = drawWidth / videoRatio;
+		}
+		context.save();
+		context.clearRect(0, 0, width, height);
+		context.fillStyle = "#0b1018";
+		context.fillRect(0, 0, width, height);
+		context.translate(width / 2, height / 2);
+		if (canvas._mcastSourceLocal) {
+			context.scale(-1, 1);
+		}
+		if (rotation) {
+			context.rotate(rotation * Math.PI / 180);
+		}
+		context.drawImage(video, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+		context.restore();
 	}
 
 	function getMcastRenderLabel(rpc, video, fallback) {
@@ -1255,6 +1340,13 @@
 		video.setAttribute("playsinline", "");
 		video.setAttribute("webkit-playsinline", "");
 		video.autoplay = true;
+		video.controls = false;
+		video.removeAttribute("controls");
+		video.setAttribute("controlsList", "nodownload noplaybackrate noremoteplayback");
+		try {
+			video.disablePictureInPicture = true;
+			video.disableRemotePlayback = true;
+		} catch (error) {}
 		video.style.display = "block";
 		video.style.visibility = "visible";
 		video.style.opacity = "1";
@@ -1353,9 +1445,21 @@
 		if (!video || typeof video.play !== "function") {
 			return;
 		}
+		video.setAttribute("playsinline", "");
+		video.setAttribute("webkit-playsinline", "");
+		video.controls = false;
+		video.removeAttribute("controls");
+		if (shouldAvoidExplicitMobileVideoPlay()) {
+			return;
+		}
 		try {
 			video.play().catch(function () {});
 		} catch (error) {}
+	}
+
+	function shouldAvoidExplicitMobileVideoPlay() {
+		var ua = (navigator.userAgent || "").toLowerCase();
+		return /iphone|ipad|ipod/.test(ua) || (ua.indexOf("whatsapp") !== -1 && ua.indexOf("mobile") !== -1);
 	}
 
 	function hasPlayableVideoSource(video) {
