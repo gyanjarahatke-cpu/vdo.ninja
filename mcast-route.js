@@ -24,6 +24,8 @@
 		inlineVideoGuardTimer: null,
 		inlineVideoGuardObserver: null,
 		directPreviewPromise: null,
+		directPreviewFailed: false,
+		directPreviewError: "",
 		manualRotation: 0,
 		videoRepairScheduled: false,
 		canvasRenderStarted: false
@@ -108,6 +110,7 @@
 			setFlag(routedParams, "mcastprejoin");
 			routedParams.delete("mcastengine");
 			disableNativePageRotation(routedParams);
+			cleanEmptyNativeDeviceParams(routedParams);
 			normalizeGuestNameParams(routedParams);
 			if (!routedParams.has("mcastautojoin")) {
 				routedParams.delete("autostart");
@@ -164,6 +167,23 @@
 			"rotatepage"
 		].forEach(function (key) {
 			routedParams.delete(key);
+		});
+	}
+
+	function cleanEmptyNativeDeviceParams(routedParams) {
+		[
+			"audiodevice",
+			"adevice",
+			"ad",
+			"videodevice",
+			"vdevice",
+			"vd",
+			"device",
+			"d"
+		].forEach(function (key) {
+			if (routedParams.has(key) && !String(routedParams.get(key) || "").trim()) {
+				routedParams.delete(key);
+			}
 		});
 	}
 
@@ -653,9 +673,13 @@
 		var goButton = document.getElementById("gowebcam");
 		var ready = goButton && goButton.dataset && goButton.dataset.ready === "true";
 		var audioReady = goButton && goButton.dataset && goButton.dataset.audioready === "true";
-		var videoReady = miconly || !guestJoinPreferences.video || hasLiveGuestVideo();
-		if (!videoReady && attempt >= 8) {
-			ensureDirectGuestPreviewStream();
+		var requiresVideo = !miconly && !!guestJoinPreferences.video;
+		var videoReady = !requiresVideo || hasLiveGuestVideoTrack();
+		if (requiresVideo && !videoReady && attempt >= 4) {
+			ensureDirectGuestPreviewStream(shell);
+		}
+		if (requiresVideo && !videoReady && attempt > 0 && attempt % 12 === 0) {
+			setShellText(shell, "[data-mcast-status]", guestJoinPreferences.directPreviewFailed ? "Could not start camera. Check browser permissions and try again." : "Starting camera...");
 		}
 		if (goButton && videoReady && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
 			try {
@@ -668,6 +692,12 @@
 				setShellText(shell, "[data-mcast-status]", "Could not join. Check browser permissions and try again.");
 				resetGuestJoinButton(shell);
 			}
+			return;
+		}
+
+		if (requiresVideo && guestJoinPreferences.directPreviewFailed && attempt >= 24) {
+			setShellText(shell, "[data-mcast-status]", "Could not start camera. Check browser permissions and try again.");
+			resetGuestJoinButton(shell);
 			return;
 		}
 
@@ -1648,6 +1678,47 @@
 		});
 	}
 
+	function hasLiveStreamTrack(stream, kind) {
+		if (!stream || typeof stream.getTracks !== "function") {
+			return false;
+		}
+		var tracks = [];
+		if (kind === "video" && typeof stream.getVideoTracks === "function") {
+			tracks = stream.getVideoTracks();
+		} else if (kind === "audio" && typeof stream.getAudioTracks === "function") {
+			tracks = stream.getAudioTracks();
+		} else {
+			tracks = stream.getTracks().filter(function (track) {
+				return track.kind === kind;
+			});
+		}
+		return tracks.some(function (track) {
+			return track && track.readyState === "live";
+		});
+	}
+
+	function hasLiveGuestVideoTrack() {
+		if (!guestJoinPreferences.video) {
+			return false;
+		}
+		try {
+			if (typeof session !== "undefined") {
+				if (hasLiveStreamTrack(session.streamSrc, "video")) {
+					return true;
+				}
+				if (session.videoElement && hasLiveStreamTrack(session.videoElement.srcObject, "video")) {
+					return true;
+				}
+			}
+		} catch (error) {}
+		var preview = document.getElementById("previewWebcam");
+		if (preview && hasLiveStreamTrack(preview.srcObject, "video")) {
+			return true;
+		}
+		var published = document.getElementById("videosource");
+		return !!(published && hasLiveStreamTrack(published.srcObject, "video"));
+	}
+
 	function hasLiveGuestVideo() {
 		if (!guestJoinPreferences.video) {
 			return false;
@@ -1667,40 +1738,147 @@
 		}
 	}
 
-	function ensureDirectGuestPreviewStream() {
-		if (!guestJoinPreferences.video || guestJoinPreferences.directPreviewPromise || hasLiveGuestVideo()) {
+	function ensureDirectGuestPreviewStream(shell) {
+		if (!guestJoinPreferences.video || guestJoinPreferences.directPreviewPromise || hasLiveGuestVideoTrack()) {
 			return;
 		}
 		if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
 			return;
 		}
-		guestJoinPreferences.directPreviewPromise = navigator.mediaDevices.getUserMedia({
-			audio: !!guestJoinPreferences.audio,
-			video: true
-		}).then(function (stream) {
+		guestJoinPreferences.directPreviewFailed = false;
+		guestJoinPreferences.directPreviewError = "";
+		setShellText(shell, "[data-mcast-status]", "Starting camera...");
+		cancelNativeCameraProbe();
+		guestJoinPreferences.directPreviewPromise = requestMcastCameraStream().then(function (stream) {
 			try {
-				if (typeof session !== "undefined") {
-					replaceNativeStream(stream);
-				}
-				var preview = ensurePreviewVideoElement();
-				preview.srcObject = stream;
-				preview.muted = true;
-				preview.autoplay = true;
-				preview.playsInline = true;
-				preview.setAttribute("playsinline", "");
-				preview.setAttribute("webkit-playsinline", "");
-				if (typeof preview.play === "function") {
-					preview.play().catch(function () {});
+				if (!attachMcastCameraStream(stream)) {
+					throw new Error("Camera did not provide a video track.");
 				}
 				markNativeGoButtonReady();
 			} catch (error) {
 				console.warn("MCast direct guest preview setup failed", error);
+				guestJoinPreferences.directPreviewFailed = true;
+				guestJoinPreferences.directPreviewError = error && (error.name || error.message) ? (error.name || error.message) : "setup failed";
+				stopMediaStream(stream);
+				throw error;
 			}
 		}).catch(function (error) {
 			console.warn("MCast direct guest media request failed", error);
+			guestJoinPreferences.directPreviewFailed = true;
+			guestJoinPreferences.directPreviewError = error && (error.name || error.message) ? (error.name || error.message) : "request failed";
 		}).finally(function () {
 			guestJoinPreferences.directPreviewPromise = null;
 		});
+	}
+
+	function requestMcastCameraStream() {
+		var facing = false;
+		try {
+			facing = typeof session !== "undefined" && session.facingMode ? session.facingMode : false;
+		} catch (error) {}
+		var firstVideoConstraint = facing ? { facingMode: { ideal: facing } } : true;
+		return navigator.mediaDevices.getUserMedia({
+			audio: false,
+			video: firstVideoConstraint
+		}).catch(function (firstError) {
+			if (!facing) {
+				throw firstError;
+			}
+			return navigator.mediaDevices.getUserMedia({
+				audio: false,
+				video: true
+			});
+		});
+	}
+
+	function attachMcastCameraStream(cameraStream) {
+		if (!cameraStream || !hasLiveStreamTrack(cameraStream, "video")) {
+			return false;
+		}
+		if (typeof session === "undefined") {
+			return false;
+		}
+		if (!session.streamSrc || typeof session.streamSrc.getTracks !== "function") {
+			session.streamSrc = createMcastMediaStream();
+		}
+		removeVideoTracks(session.streamSrc);
+		cameraStream.getVideoTracks().forEach(function (track) {
+			if (track.readyState === "live") {
+				session.streamSrc.addTrack(track);
+			}
+		});
+		if (!hasLiveStreamTrack(session.streamSrc, "video")) {
+			return false;
+		}
+		try {
+			if (typeof checkBasicStreamsExist === "function") {
+				checkBasicStreamsExist();
+			}
+			if (typeof updateRenderOutpipe === "function") {
+				updateRenderOutpipe();
+			} else if (session.videoElement) {
+				session.videoElement.srcObject = session.streamSrc;
+			}
+		} catch (error) {
+			console.warn("MCast camera render pipe update failed", error);
+			if (session.videoElement) {
+				session.videoElement.srcObject = session.streamSrc;
+			}
+		}
+		var preview = ensurePreviewVideoElement();
+		preview.srcObject = session.videoElement && session.videoElement.srcObject ? session.videoElement.srcObject : session.streamSrc;
+		preview.muted = true;
+		preview.autoplay = true;
+		preview.playsInline = true;
+		preview.setAttribute("playsinline", "");
+		preview.setAttribute("webkit-playsinline", "");
+		playMcastVideo(preview);
+		return hasLiveGuestVideoTrack();
+	}
+
+	function createMcastMediaStream() {
+		if (typeof createMediaStream === "function") {
+			return createMediaStream();
+		}
+		return new MediaStream();
+	}
+
+	function removeVideoTracks(stream) {
+		if (!stream || typeof stream.getVideoTracks !== "function") {
+			return;
+		}
+		stream.getVideoTracks().forEach(function (track) {
+			try {
+				stream.removeTrack(track);
+			} catch (error) {}
+			try {
+				track.stop();
+			} catch (error) {}
+		});
+	}
+
+	function stopMediaStream(stream) {
+		if (!stream || typeof stream.getTracks !== "function") {
+			return;
+		}
+		stream.getTracks().forEach(function (track) {
+			try {
+				track.stop();
+			} catch (error) {}
+		});
+	}
+
+	function cancelNativeCameraProbe() {
+		try {
+			if (typeof getUserMediaRequestID !== "undefined") {
+				getUserMediaRequestID += 1;
+			}
+		} catch (error) {}
+		try {
+			if (typeof activatedPreview !== "undefined") {
+				activatedPreview = true;
+			}
+		} catch (error) {}
 	}
 
 	function replaceNativeStream(stream) {
