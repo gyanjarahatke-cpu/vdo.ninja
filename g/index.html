@@ -46,7 +46,7 @@
 		
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
-		<link rel="stylesheet" href="./main.css?ver=4040" />
+		<link rel="stylesheet" href="./main.css?ver=4041" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
@@ -80,7 +80,7 @@
 		<link rel="stylesheet" href="auth-styles.css">
 
 	</head>
-	<body id="main" class="main hidden" onload="main()">
+	<body id="main" class="main hidden mcast-native-guest" onload="main()">
 		<span itemprop="image" itemscope itemtype="http://schema.org/ImageObject">
 			<link itemprop="url" href="https://vn.mcaststudio.com/media/mcast-share.jpg" />
 		</span>
@@ -95,9 +95,9 @@
 		<span id="electronDragZone" style="display:none;pointer-events: none; z-index:-10; position:absolute;top:0;left:0;width:100%;height:2%;min-height:20px;"></span>
 		<div id="header">
 			
-			<a id="logoname" href="./" style="text-decoration: none; color: white; margin: 0 2px 0px 8px;">
+			<a id="logoname" href="./" style="text-decoration: none; color: white; margin: 0 2px 0px 8px;" aria-label="MCast Studio">
 				<span data-translate="logo-header">
-					<span id="qos">V</span>DO.Ninja 
+					<span id="qos">M</span>Cast Studio
 				</span>
 			</a>
 			<div id="head1">
@@ -539,10 +539,12 @@
 						</div>
 					</div>
 			</div>
-			<div id="container-3"  title="Add your Camera to OBS" onkeyup="enterPressedClick(event,this);"  alt="Add your Camera to OBS" tabindex="1" role="button" aria-pressed="false" class="column columnfade pointer card" onclick="previewWebcam()" style=" overflow-y: auto;">
+			<div id="container-3"  title="Join MCast Studio room" onkeyup="enterPressedClick(event,this);"  alt="Join MCast Studio room" tabindex="1" role="button" aria-pressed="false" class="column columnfade pointer card" onclick="previewWebcam()" style=" overflow-y: auto;">
+				<div class="mcast-native-room-badge">Secure guest room</div>
 				<h2 id="add_camera">
-					<span data-translate="add-your-camera">Add your Camera to OBS</span>
+					<span data-translate="add-your-camera">Join your MCast session</span>
 				</h2>
+				<p class="mcast-native-guest-lead">Check your camera and microphone before entering the room.</p>
 				<div class="container-inner" id="add_camera_inner">
 					<br />
 					<p>
@@ -550,11 +552,11 @@
 					</p>
 					<div id="infof"></div>
 					<button onclick="this.disabled=true;setTimeout(function(){requestBasicPermissions();},20);" id="getPermissions" style="display:none;" data-ready="false" >
-						<span data-translate="ask-for-permissions">Allow Access to Camera/Microphone</span>
+						<span data-translate="ask-for-permissions">Allow camera and microphone</span>
 					</button>
 					<span style="display:block;">
-						<button onclick="publishWebcam(this)" title="Start streaming (Alt + s)" aria-label="Start streaming (Alt + s)" role="button" aria-pressed="false" tabindex="1" id="gowebcam" class="gowebcam" alt="Start Streaming  (Alt + s)" disabled data-audioready="false" data-ready="false" >
-							<span data-translate="waiting-for-camera">Waiting for Camera to Load</span>
+						<button onclick="publishWebcam(this)" title="Join room (Alt + s)" aria-label="Join room (Alt + s)" role="button" aria-pressed="false" tabindex="1" id="gowebcam" class="gowebcam" alt="Join room (Alt + s)" disabled data-audioready="false" data-ready="false" >
+							<span data-translate="waiting-for-camera">Preparing camera...</span>
 						</button>
 					</span>
 					<div id="consentWarning" class="startupWarning hidden">
@@ -562,7 +564,7 @@
 						<p><span data-translate="privacy-disabled">Privacy warning: The director will be able to remotely change your camera, microphone, and URL.</span></p>
 					</div>
 					<div id="guestTips" style="display:none" aria-hidden="true">
-						<p data-translate="for-the-best-possible-experience-make-sure">For the best possible experience, make sure</p>
+						<p data-translate="for-the-best-possible-experience-make-sure">For the best session quality, make sure</p>
 						<ul class="guest-tip-list">
 							<li class="guest-tip-item" data-tip-id="1" data-tip-default="true"><i class="las la-plug"></i><span data-translate="your-device-is-powered">Your device is powered</span></li>
 							<li class="guest-tip-item" data-tip-id="2" data-tip-default="true"><i class="las la-ethernet"></i><span data-translate="your-connection-is-hardwired-instead-of-wifi">Your connection is hardwired instead of wifi</span></li>
