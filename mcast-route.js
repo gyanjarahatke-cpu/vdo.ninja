@@ -156,12 +156,6 @@
 
 	function disableNativePageRotation(routedParams) {
 		[
-			"forcelandscape",
-			"forcedlandscape",
-			"fl",
-			"forceportrait",
-			"forcedportrait",
-			"fp",
 			"rotate",
 			"rotatewindow",
 			"rotatepage"
@@ -628,6 +622,8 @@
 
 	function tryStartNativeGuestWebcamJoin(shell) {
 		try {
+			rememberMcastNativeOrientation();
+			suppressNativePageRotationForMcast();
 			session.autostart = false;
 			var constraints = {
 				audio: !!guestJoinPreferences.audio,
@@ -739,6 +735,7 @@
 			}, 350);
 		}
 		startNativeInlineVideoGuard();
+		scheduleMcastNativeOrientationSync();
 		showOriginalVdoRoomAfterJoin();
 		window.setTimeout(requestMixerLayoutUpdate, 300);
 		window.setTimeout(showOriginalVdoRoomAfterJoin, 900);
@@ -751,6 +748,7 @@
 		if (document.body) {
 			document.body.classList.remove("mcast-room-active");
 		}
+		normalizeNativeRoomViewport();
 		if (guestJoinPreferences.roomSkinTimer) {
 			window.clearInterval(guestJoinPreferences.roomSkinTimer);
 			guestJoinPreferences.roomSkinTimer = null;
@@ -863,12 +861,14 @@
 	function startNativeInlineVideoGuard() {
 		repairNativeVideoLayer();
 		normalizeNativeInlineVideoElements(document);
+		syncMcastNativeOrientation();
 		if (!guestJoinPreferences.inlineVideoGuardTimer) {
 			var passes = 0;
 			guestJoinPreferences.inlineVideoGuardTimer = window.setInterval(function () {
 				passes++;
 				repairNativeVideoLayer();
 				normalizeNativeInlineVideoElements(document);
+				syncMcastNativeOrientation();
 				if (passes >= 40) {
 					window.clearInterval(guestJoinPreferences.inlineVideoGuardTimer);
 					guestJoinPreferences.inlineVideoGuardTimer = null;
@@ -936,10 +936,24 @@
 	function queueMcastRoomRepairPasses(delays) {
 		(delays || [120]).forEach(function (delay) {
 			window.setTimeout(function () {
-				requestMixerLayoutUpdate();
-				skinNativeRoomOnce();
+				if (guestJoinPreferences.nativeRoomEntered) {
+					repairMcastNativeRoomPass();
+				} else {
+					requestMixerLayoutUpdate();
+					skinNativeRoomOnce();
+				}
 			}, delay);
 		});
+	}
+
+	function repairMcastNativeRoomPass() {
+		requestMixerLayoutUpdate();
+		suppressNativePageRotationForMcast();
+		normalizeNativeRoomViewport();
+		repairNativeVideoLayer();
+		normalizeNativeInlineVideoElements(document);
+		syncMcastNativeOrientation();
+		showOriginalVdoRoomAfterJoin();
 	}
 
 	function installMcastRoomControlHandlers() {
@@ -1015,11 +1029,59 @@
 		window.updateForceRotatedCSS.mcastWrapped = true;
 	}
 
+	function rememberMcastNativeOrientation() {
+		try {
+			if (
+				typeof session !== "undefined" &&
+				(session.orientation === "landscape" || session.orientation === "portrait")
+			) {
+				guestJoinPreferences.routeOrientation = session.orientation;
+			}
+		} catch (error) {}
+	}
+
+	function restoreMcastNativeOrientation() {
+		try {
+			if (
+				typeof session !== "undefined" &&
+				!normalizeMcastRotation(guestJoinPreferences.manualRotation) &&
+				(guestJoinPreferences.routeOrientation === "landscape" || guestJoinPreferences.routeOrientation === "portrait")
+			) {
+				session.orientation = guestJoinPreferences.routeOrientation;
+			}
+		} catch (error) {}
+	}
+
+	function scheduleMcastNativeOrientationSync() {
+		[0, 250, 700, 1400, 2600, 4200].forEach(function (delay) {
+			window.setTimeout(syncMcastNativeOrientation, delay);
+		});
+	}
+
+	function syncMcastNativeOrientation() {
+		try {
+			rememberMcastNativeOrientation();
+			if (normalizeMcastRotation(guestJoinPreferences.manualRotation)) {
+				normalizeMcastOutgoingRotation();
+				return;
+			}
+			restoreMcastNativeOrientation();
+			if (
+				typeof session !== "undefined" &&
+				session.orientation &&
+				typeof window.updateForceRotate === "function"
+			) {
+				window.updateForceRotate(true);
+			}
+		} catch (error) {}
+	}
+
 	function skinNativeRoomOnce() {
 		document.documentElement.classList.add("mcast-room-active");
 		if (document.body) {
 			document.body.classList.add("mcast-room-active");
 		}
+		suppressNativePageRotationForMcast();
 		normalizeNativeRoomViewport();
 		var joiningShell = document.getElementById("mcastJoining");
 		if (joiningShell) {
@@ -1036,7 +1098,6 @@
 			subControlButtons.classList.remove("hidden");
 		}
 		installMcastRoomControlHandlers();
-		suppressNativePageRotationForMcast();
 		var mainmenu = document.getElementById("mainmenu");
 		if (mainmenu) {
 			mainmenu.classList.remove("hidden", "hidden2", "permahide", "row");
@@ -1411,13 +1472,6 @@
 
 	function normalizeNativeRoomViewport() {
 		syncMcastViewportClasses();
-		try {
-			if (typeof session !== "undefined") {
-				session.orientation = false;
-				session.forceRotate = 0;
-				session.rotate = normalizeMcastRotation(guestJoinPreferences.manualRotation);
-			}
-		} catch (error) {}
 		if (!document.body) {
 			return;
 		}
@@ -1596,7 +1650,16 @@
 			if (typeof session === "undefined") {
 				return;
 			}
-			session.orientation = false;
+			rememberMcastNativeOrientation();
+			if (!rotation) {
+				restoreMcastNativeOrientation();
+				if (session.orientation && typeof window.updateForceRotate === "function") {
+					window.updateForceRotate(true);
+					return;
+				}
+			} else {
+				session.orientation = false;
+			}
 			session.forceRotate = 0;
 			session.rotate = rotation;
 			if (session.videoElement) {
