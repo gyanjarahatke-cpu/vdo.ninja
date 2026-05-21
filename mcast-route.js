@@ -10,24 +10,30 @@
 	if (!route) {
 		return;
 	}
+
 	var guestJoinPreferences = {
 		audio: readGuestPreference("audio", true),
 		video: readGuestPreference("video", true),
-		joined: false
+		rememberName: readGuestPreference("rememberName", true),
+		joined: false,
+		nativeReady: false,
+		joinStartedAt: 0,
+		readyTimer: null,
+		roomSkinTimer: null
 	};
-	var activeGuestRoomShell = null;
-	var nativeChromeObserver = null;
-	var nativeChromeKeepAliveTimer = null;
+	var guestRouteResolved = false;
+	var activeGuestShell = null;
+
+	installDirectorControlBridge();
 
 	document.documentElement.classList.add("mcast-route");
 	document.documentElement.classList.add(route === "guest" ? "mcast-guest" : "mcast-vcall");
 
 	if (route === "guest") {
-		installGuestShellStyles();
+		installGuestExperienceStyles();
 		document.addEventListener("DOMContentLoaded", function () {
-			ensureGuestJoinShell();
-			if (window.MCastRoute) {
-				updateGuestJoinStatus(window.MCastRoute.mode, window.MCastRoute.state);
+			if (guestRouteResolved) {
+				ensureGuestJoinShell();
 			}
 		});
 	}
@@ -39,6 +45,7 @@
 	var shortCode = route === "call"
 		? params.get("r") || params.get("s") || params.get("code")
 		: params.get("s") || params.get("code") || readShortInviteCodeFromPath(rawPath);
+
 	if (token) {
 		if (route === "call") {
 			showInviteError("This MCast Studio room link is not authorized.");
@@ -67,6 +74,7 @@
 		session.decrypted = "?" + decoded.replace(/^\?/, "");
 		session.nohistory = true;
 	}
+	guestRouteResolved = route === "guest";
 
 	function applyRouteDefaults(query, currentRoute) {
 		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
@@ -75,16 +83,21 @@
 			setFlag(routedParams, "nosettings");
 			setFlag(routedParams, "mcastguest");
 			setFlag(routedParams, "mcastprejoin");
+			routedParams.delete("mcastengine");
 			if (!routedParams.has("mcastautojoin")) {
 				routedParams.delete("autostart");
 			}
-			var mcastMode = normalizeRouteToken(routedParams.get("mcastmode") || "", "");
-			if (!routedParams.has("push") && (mcastMode === "meeting" || mcastMode === "classroom" || mcastMode === "webinar")) {
+
+			var mode = normalizeRouteToken(routedParams.get("mcastmode") || "", "");
+			if (!routedParams.has("push") && (mode === "meeting" || mode === "classroom" || mode === "webinar")) {
 				routedParams.set("push", getOrCreateSingleLinkGuestPush(routedParams));
 				routedParams.set("mcastsinglelink", "1");
 			}
 			if (routedParams.has("mcastautojoin")) {
 				setFlag(routedParams, "autostart");
+			}
+			if (!routedParams.has("roombitrate") && !routedParams.has("rbr")) {
+				routedParams.set("roombitrate", "1200");
 			}
 			applyStoredGuestIdentity(routedParams);
 		} else if (currentRoute === "call") {
@@ -107,6 +120,98 @@
 			}
 		}
 		return serializeParams(routedParams);
+	}
+
+	function installDirectorControlBridge() {
+		if (window.MCastDirectorControl) {
+			return;
+		}
+
+		function normalize(value) {
+			return (value || "").toString().trim().toLowerCase().replace(/\s+/g, "");
+		}
+
+		function findRpc(guestKey) {
+			var expected = normalize(guestKey);
+			if (!expected || !window.session || !window.session.rpcs) {
+				return null;
+			}
+
+			for (var uuid in window.session.rpcs) {
+				if (!Object.prototype.hasOwnProperty.call(window.session.rpcs, uuid)) {
+					continue;
+				}
+				var rpc = window.session.rpcs[uuid];
+				if (!rpc) {
+					continue;
+				}
+				var streamId = normalize(rpc.streamID || rpc.streamId || rpc.id || "");
+				if (streamId === expected) {
+					return { uuid: uuid, rpc: rpc };
+				}
+			}
+			return null;
+		}
+
+		function setParticipantMedia(policy) {
+			policy = policy || {};
+			var match = findRpc(policy.guestKey);
+			if (!match || !match.rpc) {
+				return false;
+			}
+
+			var uuid = match.uuid;
+			var rpc = match.rpc;
+			var audioEnabled = !!policy.audioEnabled;
+			var videoEnabled = !!policy.videoEnabled;
+			var videoQuality = (policy.videoQuality || "").toString().toLowerCase() === "low" ? "low" : "high";
+
+			try {
+				rpc.directorMutedState = audioEnabled ? 0 : 1;
+				if (window.session && typeof window.session.sendRequest === "function") {
+					window.session.sendRequest({ volume: audioEnabled ? 100 : 0, UUID: uuid }, uuid);
+				}
+			} catch (error) {}
+
+			try {
+				var video = rpc.videoElement || document.querySelector('[data-uuid="' + uuid + '"],[data-UUID="' + uuid + '"],#videosource_' + uuid);
+				if (!videoEnabled) {
+					if (typeof pauseVideo === "function" && video) {
+						pauseVideo(video, false);
+					} else if (window.session && typeof window.session.requestRateLimit === "function") {
+						window.session.requestRateLimit(0, uuid, true);
+					}
+					if (video && typeof video.pause === "function") {
+						video.pause();
+					}
+					return true;
+				}
+
+				if (typeof unPauseVideo === "function" && video) {
+					unPauseVideo(video, false);
+				}
+				if (window.session && typeof window.session.requestRateLimit === "function") {
+					window.session.requestRateLimit(videoQuality === "low" ? 300 : false, uuid, false);
+				}
+			} catch (error) {}
+			return true;
+		}
+
+		window.MCastDirectorControl = {
+			setParticipantMedia: setParticipantMedia,
+			applyPolicies: function (policies) {
+				if (!Array.isArray(policies)) {
+					return 0;
+				}
+				var applied = 0;
+				policies.forEach(function (policy) {
+					if (setParticipantMedia(policy)) {
+						applied++;
+					}
+				});
+				return applied;
+			}
+		};
 	}
 
 	function applyRouteMetadata(query, currentRoute) {
@@ -145,99 +250,94 @@
 	}
 
 	function updateRouteTitle(mode, role) {
-		var modeTitle = mode.replace(/_/g, " ").replace(/\b\w/g, function (match) {
-			return match.toUpperCase();
-		});
+		var modeTitle = toTitleCase(mode);
 		if (role === "participant") {
 			document.title = "MCast Studio " + modeTitle;
 		}
 	}
 
-	function installGuestShellStyles() {
-		if (document.getElementById("mcastGuestShellStyles")) {
+	function installGuestExperienceStyles() {
+		if (document.getElementById("mcastGuestExperienceStyles")) {
 			return;
 		}
-
 		var style = document.createElement("style");
-		style.id = "mcastGuestShellStyles";
+		style.id = "mcastGuestExperienceStyles";
 		style.textContent = [
-			"html.mcast-guest,html.mcast-guest body{background:#111315!important;min-height:100%;}",
-			"html.mcast-guest body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;letter-spacing:0!important;overflow:hidden!important;}",
-			"html.mcast-guest #header,html.mcast-guest #mainmenu,html.mcast-guest #head1,html.mcast-guest #head1a,html.mcast-guest #head3,html.mcast-guest #head3a,html.mcast-guest #dropButton,html.mcast-guest #container-1,html.mcast-guest #container-2,html.mcast-guest #container-4,html.mcast-guest #container-5,html.mcast-guest #container-6,html.mcast-guest #container-7,html.mcast-guest #container-8,html.mcast-guest #container-9,html.mcast-guest #credits,html.mcast-guest #legal{display:none!important;}",
-			"html.mcast-guest #mcastJoining{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;color:#eef2f7;background:#111315;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:auto;}",
-			"html.mcast-guest #mcastJoining.mcast-ready{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility .22s ease;}",
-			"html.mcast-guest .mcast-join-panel{width:min(1060px,100%);min-height:min(720px,calc(100dvh - 32px));display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);overflow:hidden;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#1a1d21;box-shadow:0 22px 70px rgba(0,0,0,.34);}",
-			"html.mcast-guest .mcast-join-preview{position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:420px;background:#1b1f25;padding:18px;}",
-			"html.mcast-guest .mcast-join-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;color:#f8fafc;min-width:0;}",
+			"html.mcast-guest,html.mcast-guest body{background:#0a0d12!important;min-height:100%;letter-spacing:0!important;}",
+			"html.mcast-guest body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;}",
+			"html.mcast-guest #mcastJoining,html.mcast-guest #mcastJoining *{box-sizing:border-box;}",
+			"html.mcast-guest #mcastJoining{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;background:#0a0d12;color:#eef2f7;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));pointer-events:auto;transition:opacity .22s ease,visibility .22s ease;}",
+			"html.mcast-guest #mcastJoining.mcast-ready{opacity:0;visibility:hidden;pointer-events:none;}",
+			"html.mcast-guest .mcast-join-panel{width:min(1180px,100%);max-width:100%;min-height:min(720px,calc(100dvh - 32px));display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,440px);overflow:hidden;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:#111722;box-shadow:0 24px 80px rgba(0,0,0,.42);}",
+			"html.mcast-guest .mcast-join-preview{position:relative;min-width:0;min-height:430px;background:#05070b;overflow:hidden;padding:18px;}",
+			"html.mcast-guest .mcast-join-preview:before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(17,24,39,.72),rgba(5,7,11,.08) 34%,rgba(5,7,11,.7));pointer-events:none;}",
+			"html.mcast-guest .mcast-join-topbar{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;}",
 			"html.mcast-guest .mcast-join-brand{display:flex;align-items:center;gap:10px;min-width:0;}",
-			"html.mcast-guest .mcast-join-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.12);overflow:hidden;flex:0 0 auto;}",
+			"html.mcast-guest .mcast-join-mark{display:grid;place-items:center;width:40px;height:40px;border-radius:8px;background:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.12);overflow:hidden;flex:0 0 auto;}",
 			"html.mcast-guest .mcast-join-logo{display:block;width:100%;height:100%;object-fit:cover;}",
-			"html.mcast-guest .mcast-join-brand-title{font-size:14px;font-weight:760;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
-			"html.mcast-guest .mcast-join-brand-subtitle{margin-top:2px;color:#a8b3c2;font-size:12px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
-			"html.mcast-guest .mcast-join-mode{display:inline-flex;align-items:center;gap:7px;max-width:46%;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.07);color:#e8edf5;font-size:12px;font-weight:720;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-join-brand-title{font-size:14px;font-weight:760;line-height:1.15;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-join-brand-subtitle{margin-top:2px;color:#9ca8ba;font-size:12px;font-weight:560;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-join-mode{display:inline-flex;align-items:center;gap:7px;max-width:46%;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(255,255,255,.08);color:#e8edf5;font-size:12px;font-weight:720;padding:7px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
 			"html.mcast-guest .mcast-join-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.16);flex:0 0 auto;}",
-			"html.mcast-guest .mcast-preview-stage{position:absolute;inset:72px 18px 104px 18px;display:grid;place-items:center;border-radius:8px;background:#0b0d10;overflow:hidden;}",
-			"html.mcast-guest .mcast-local-video{position:absolute!important;inset:0!important;display:block!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;margin:0!important;object-fit:cover!important;background:#050607!important;resize:none!important;pointer-events:none!important;}",
-			"html.mcast-guest .mcast-preview-avatar{display:grid;place-items:center;width:118px;height:118px;border-radius:50%;background:#2a3038;color:#d7dde7;font-size:42px;font-weight:760;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}",
-			"html.mcast-guest .mcast-preview-label{position:absolute;left:14px;bottom:12px;max-width:calc(100% - 28px);padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.62);color:#f8fafc;font-size:12px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
-			"html.mcast-guest .mcast-preview-off{position:absolute;inset:0;display:none;place-items:center;background:#0b0d10;color:#a8b3c2;font-size:13px;font-weight:680;text-align:center;padding:24px;}",
-			"html.mcast-guest .mcast-preview-stage.has-video .mcast-preview-avatar,html.mcast-guest .mcast-preview-stage.has-video .mcast-preview-off{display:none!important;}",
+			"html.mcast-guest .mcast-preview-stage{position:absolute;inset:74px 18px 104px;display:grid;place-items:center;border-radius:8px;background:#0b1018;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}",
+			"html.mcast-guest .mcast-preview-avatar{display:grid;place-items:center;width:118px;height:118px;border-radius:50%;background:#202938;color:#d7dde7;font-size:42px;font-weight:760;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}",
+			"html.mcast-guest .mcast-preview-off{position:absolute;inset:0;display:none;place-items:center;background:#0b1018;color:#a8b3c2;font-size:13px;font-weight:680;text-align:center;padding:24px;}",
 			"html.mcast-guest #mcastJoining.mcast-video-off .mcast-preview-off{display:grid;}",
-			"html.mcast-guest .mcast-device-row{position:relative;z-index:1;display:flex;justify-content:center;gap:14px;margin-top:auto;}",
-			"html.mcast-guest .mcast-device-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:128px;height:42px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:#2a2f36;color:#f8fafc;font-size:13px;font-weight:720;cursor:pointer;}",
-			"html.mcast-guest .mcast-device-button:hover{background:#343b44;}",
+			"html.mcast-guest #mcastJoining.mcast-video-off .mcast-preview-avatar{display:none;}",
+			"html.mcast-guest .mcast-preview-label{position:absolute;left:14px;bottom:12px;max-width:calc(100% - 28px);padding:6px 9px;border-radius:6px;background:rgba(0,0,0,.62);color:#f8fafc;font-size:12px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-device-row{position:absolute;left:18px;right:18px;bottom:18px;z-index:2;display:flex;justify-content:center;gap:12px;}",
+			"html.mcast-guest .mcast-device-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:126px;height:42px;border:1px solid rgba(255,255,255,.16);border-radius:999px;background:#252d3a;color:#f8fafc;font-size:13px;font-weight:720;white-space:nowrap;overflow:hidden;cursor:pointer;}",
+			"html.mcast-guest .mcast-device-button span:not(.mcast-device-icon){min-width:0;overflow:hidden;text-overflow:ellipsis;}",
+			"html.mcast-guest .mcast-device-button:hover{background:#303949;}",
 			"html.mcast-guest .mcast-device-button.is-off{background:#b91c1c;border-color:#dc2626;color:#fff;}",
-			"html.mcast-guest .mcast-device-button.is-end{display:none;}",
 			"html.mcast-guest .mcast-device-icon{display:grid;place-items:center;width:20px;height:20px;flex:0 0 auto;}",
 			"html.mcast-guest .mcast-device-icon svg{display:block;width:19px;height:19px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}",
-			"html.mcast-guest .mcast-join-form{display:flex;flex-direction:column;justify-content:center;background:#f7f8fa;color:#1f2937;padding:34px 30px;}",
-			"html.mcast-guest .mcast-join-heading{color:#111827;font-size:26px;line-height:1.18;font-weight:780;margin:0 0 10px 0;}",
-			"html.mcast-guest .mcast-join-message{color:#4b5563;font-size:14px;line-height:1.52;margin:0 0 24px 0;}",
+			"html.mcast-guest .mcast-join-form{display:flex;flex-direction:column;justify-content:center;min-width:0;background:#f7f8fa;color:#1f2937;padding:36px 32px;}",
+			"html.mcast-guest .mcast-join-heading{color:#101827;font-size:28px;line-height:1.16;font-weight:780;margin:0 0 10px;letter-spacing:0;}",
+			"html.mcast-guest .mcast-join-message{color:#4b5563;font-size:14px;line-height:1.52;margin:0 0 24px;font-weight:520;}",
 			"html.mcast-guest .mcast-field{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;}",
 			"html.mcast-guest .mcast-field-label{font-size:12px;font-weight:760;color:#374151;}",
-			"html.mcast-guest .mcast-name-input{height:44px;border:1px solid #cfd5dd;border-radius:6px;background:#fff;color:#111827;font:650 15px Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:0 12px;outline:none;}",
+			"html.mcast-guest .mcast-name-input{height:46px;border:1px solid #cfd5dd;border-radius:6px;background:#fff;color:#111827;font:650 15px Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:0 12px;outline:none;letter-spacing:0;}",
 			"html.mcast-guest .mcast-name-input:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.14);}",
-			"html.mcast-guest .mcast-check-row{display:flex;align-items:center;gap:9px;color:#4b5563;font-size:13px;font-weight:620;margin:2px 0 18px 0;}",
+			"html.mcast-guest .mcast-check-row{display:flex;align-items:center;gap:9px;color:#4b5563;font-size:13px;font-weight:620;margin:2px 0 18px;}",
 			"html.mcast-guest .mcast-check-row input{width:16px;height:16px;accent-color:#2563eb;}",
-			"html.mcast-guest .mcast-join-action{height:46px;border:0;border-radius:6px;background:#2563eb;color:#fff;font-size:15px;font-weight:780;cursor:pointer;}",
+			"html.mcast-guest .mcast-join-action{display:inline-flex;align-items:center;justify-content:center;gap:9px;height:48px;border:0;border-radius:6px;background:#2563eb;color:#fff;font-size:15px;font-weight:780;cursor:pointer;letter-spacing:0;}",
 			"html.mcast-guest .mcast-join-action:hover{background:#1d4ed8;}",
-			"html.mcast-guest .mcast-join-action:disabled{opacity:.65;cursor:default;}",
-			"html.mcast-guest .mcast-join-status{display:flex;align-items:center;gap:10px;margin-top:16px;padding:11px 12px;border:1px solid #dde3ea;border-radius:6px;background:#fff;color:#334155;font-size:13px;font-weight:650;}",
-			"html.mcast-guest .mcast-join-spinner{width:15px;height:15px;border-radius:50%;border:2px solid rgba(37,99,235,.22);border-top-color:#2563eb;animation:mcastSpin .9s linear infinite;flex:0 0 auto;}",
-			"html.mcast-guest .mcast-join-footer{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;}",
-			"html.mcast-guest .mcast-terms{margin-top:18px;color:#6b7280;font-size:11px;line-height:1.45;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room{display:block;padding:0;background:#050607;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;background:#050607;box-shadow:none;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-preview{min-height:100dvh;padding:16px;background:#050607;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-preview-stage{inset:0;border-radius:0;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-topbar{position:relative;z-index:3;padding:0;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-row{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));z-index:2147483002;transform:translateX(-50%);margin:0;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(5,6,7,.72);box-shadow:0 16px 42px rgba(0,0,0,.36);backdrop-filter:blur(12px);}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button{min-width:44px;width:44px;height:44px;padding:0;border-radius:50%;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button.is-end{display:inline-flex;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button.is-end{background:#dc2626;border-color:#ef4444;color:#fff;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-device-button span:not(.mcast-device-icon){display:none;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-form{position:absolute;right:16px;bottom:18px;z-index:3;width:min(360px,calc(100% - 32px));padding:0;background:transparent;color:#f8fafc;pointer-events:none;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-heading,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-message,html.mcast-guest #mcastJoining.mcast-in-room .mcast-field,html.mcast-guest #mcastJoining.mcast-in-room .mcast-check-row,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-action,html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-footer,html.mcast-guest #mcastJoining.mcast-in-room .mcast-terms{display:none!important;}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-status{margin:0;padding:9px 11px;border-color:rgba(255,255,255,.14);background:rgba(5,6,7,.58);color:#f8fafc;box-shadow:0 10px 24px rgba(0,0,0,.25);backdrop-filter:blur(12px);}",
-			"html.mcast-guest #mcastJoining.mcast-in-room .mcast-join-spinner{display:none;}",
-			"html.mcast-room-active body>*:not(#mcastJoining):not(#mcastGuestShellStyles){display:none!important;}",
-			"html.mcast-room-active #logoname,html.mcast-room-active #qos,html.mcast-room-active #header,html.mcast-room-active #mainmenu,html.mcast-room-active #controlButtons,html.mcast-room-active #miniTaskBar,html.mcast-room-active #credits{display:none!important;}",
-			"html.mcast-guest .prompt,html.mcast-guest [role='dialog'],html.mcast-guest .modal,html.mcast-guest #passwordPrompt{z-index:10000!important;}",
+			"html.mcast-guest .mcast-join-action:disabled{opacity:.72;cursor:default;}",
+			"html.mcast-guest .mcast-join-action:before{content:'';display:none;width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.36);border-top-color:#fff;animation:mcastSpin .85s linear infinite;}",
+			"html.mcast-guest .mcast-join-action.is-busy:before{display:block;}",
+			"html.mcast-guest .mcast-join-status{min-height:18px;margin-top:12px;color:#64748b;font-size:12px;line-height:1.45;font-weight:650;}",
+			"html.mcast-guest .mcast-join-footer,html.mcast-guest .mcast-terms{margin-top:16px;color:#6b7280;font-size:11px;line-height:1.45;font-weight:520;}",
+			"html.mcast-guest .mcast-terms{margin-top:18px;}",
+			"html.mcast-guest.mcast-room-active #mcastJoining{opacity:0;visibility:hidden;pointer-events:none;}",
+			"html.mcast-guest.mcast-room-active,html.mcast-guest.mcast-room-active body{background:#05070b!important;overflow:hidden!important;}",
+			"html.mcast-guest.mcast-room-active #header,html.mcast-guest.mcast-room-active #head1,html.mcast-guest.mcast-room-active #head1a,html.mcast-guest.mcast-room-active #head2,html.mcast-guest.mcast-room-active #head3,html.mcast-guest.mcast-room-active #head3a,html.mcast-guest.mcast-room-active #head5,html.mcast-guest.mcast-room-active #head9,html.mcast-guest.mcast-room-active #qos,html.mcast-guest.mcast-room-active #logoname,html.mcast-guest.mcast-room-active #credits,html.mcast-guest.mcast-room-active #legal,html.mcast-guest.mcast-room-active #translateButton{display:none!important;}",
+			"html.mcast-guest.mcast-room-active #container-1,html.mcast-guest.mcast-room-active #container-2,html.mcast-guest.mcast-room-active #container-3,html.mcast-guest.mcast-room-active #container-3a,html.mcast-guest.mcast-room-active #container-4,html.mcast-guest.mcast-room-active #container-5,html.mcast-guest.mcast-room-active #container-6,html.mcast-guest.mcast-room-active #container-7,html.mcast-guest.mcast-room-active #container-8,html.mcast-guest.mcast-room-active #container-9,html.mcast-guest.mcast-room-active #container-10,html.mcast-guest.mcast-room-active #container-11,html.mcast-guest.mcast-room-active #container-12,html.mcast-guest.mcast-room-active #container-13,html.mcast-guest.mcast-room-active #container-14,html.mcast-guest.mcast-room-active #container-15,html.mcast-guest.mcast-room-active #container-16,html.mcast-guest.mcast-room-active #container-17,html.mcast-guest.mcast-room-active #container-18,html.mcast-guest.mcast-room-active #container-19,html.mcast-guest.mcast-room-active #container-20,html.mcast-guest.mcast-room-active #container-21{display:none!important;}",
+			"html.mcast-guest.mcast-room-active #main{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;overflow:hidden!important;background:#05070b!important;}",
+			"html.mcast-guest.mcast-room-active #mainmenu{position:fixed!important;inset:0!important;display:block!important;visibility:visible!important;opacity:1!important;width:100vw!important;min-width:100vw!important;height:100dvh!important;min-height:100dvh!important;overflow:hidden!important;background:#05070b!important;padding:12px 12px 92px!important;box-sizing:border-box!important;}",
+			"html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{position:absolute!important;inset:12px 12px 92px!important;visibility:visible!important;opacity:1!important;width:auto!important;height:auto!important;margin:0!important;overflow:hidden!important;background:#05070b!important;}",
+			"html.mcast-guest.mcast-room-active .vidcon{border-radius:8px!important;background:#111827!important;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 16px 44px rgba(0,0,0,.28)!important;overflow:hidden!important;}",
+			"html.mcast-guest.mcast-room-active video,html.mcast-guest.mcast-room-active canvas{border-radius:8px!important;}",
+			"html.mcast-guest.mcast-room-active video.tile,html.mcast-guest.mcast-room-active .tile{object-fit:cover!important;background:#0b1018!important;}",
+			"html.mcast-guest.mcast-room-active #controlButtons{display:flex!important;position:fixed!important;left:0!important;right:0!important;bottom:max(14px,env(safe-area-inset-bottom))!important;z-index:2147482990!important;width:100%!important;padding:0 12px!important;box-sizing:border-box!important;justify-content:center!important;align-items:center!important;pointer-events:none!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #subControlButtons{display:flex!important;max-width:calc(100vw - 24px)!important;min-width:0!important;min-height:52px!important;gap:6px!important;padding:7px!important;border:1px solid rgba(255,255,255,.13)!important;border-radius:999px!important;background:rgba(10,13,18,.78)!important;box-shadow:0 16px 42px rgba(0,0,0,.36)!important;backdrop-filter:blur(14px)!important;pointer-events:auto!important;align-items:center!important;justify-content:center!important;flex-wrap:nowrap!important;}",
+			"html.mcast-guest.mcast-room-active #subControlButtons button,html.mcast-guest.mcast-room-active #subControlButtons .float,html.mcast-guest.mcast-room-active #subControlButtons a{border-radius:999px!important;min-width:42px!important;min-height:42px!important;}",
+			"html.mcast-guest.mcast-room-active .prompt,html.mcast-guest.mcast-room-active [role='dialog'],html.mcast-guest.mcast-room-active .modal,html.mcast-guest.mcast-room-active #passwordPrompt{z-index:2147483001!important;}",
 			"@keyframes mcastSpin{to{transform:rotate(360deg);}}",
-			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px 14px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{gap:10px;}html.mcast-guest .mcast-device-button{min-width:116px;height:40px;font-size:12px;}}",
-			"@media (orientation:landscape) and (max-height:540px){html.mcast-guest #mcastJoining{padding:8px;}html.mcast-guest .mcast-join-panel{height:calc(100dvh - 16px);min-height:0;grid-template-columns:minmax(0,1fr) 360px;}html.mcast-guest .mcast-join-preview{min-height:0;padding:12px;}html.mcast-guest .mcast-preview-stage{inset:58px 12px 72px 12px;}html.mcast-guest .mcast-preview-avatar{width:88px;height:88px;font-size:32px;}html.mcast-guest .mcast-join-form{padding:20px;}html.mcast-guest .mcast-join-heading{font-size:21px;margin-bottom:7px;}html.mcast-guest .mcast-join-message{font-size:13px;margin-bottom:14px;}html.mcast-guest .mcast-device-button{height:38px;min-width:112px;}html.mcast-guest .mcast-terms,html.mcast-guest .mcast-join-footer{display:none;}}",
-			"@media (max-width:380px){html.mcast-guest .mcast-device-row{gap:8px;}html.mcast-guest .mcast-device-button{min-width:0;flex:1;padding:0 10px;}html.mcast-guest .mcast-join-mode{max-width:42%;}html.mcast-guest .mcast-join-heading{font-size:22px;}}"
+			"@media (max-width:760px){html.mcast-guest #mcastJoining{padding:0;}html.mcast-guest .mcast-join-panel{width:100%;height:100dvh;min-height:100dvh;border:0;border-radius:0;grid-template-columns:1fr;grid-template-rows:minmax(42dvh,1fr) auto;}html.mcast-guest .mcast-join-preview{min-height:42dvh;padding:14px;}html.mcast-guest .mcast-preview-stage{inset:64px 14px 84px;}html.mcast-guest .mcast-join-form{padding:24px 20px 20px;justify-content:flex-start;}html.mcast-guest .mcast-join-heading{font-size:24px;}html.mcast-guest .mcast-device-row{left:14px;right:14px;bottom:14px;gap:10px;}html.mcast-guest .mcast-device-button{min-width:0;flex:1;height:40px;font-size:12px;padding:0 10px;}html.mcast-guest.mcast-room-active #mainmenu{padding:8px 8px 88px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:8px 8px 88px!important;}html.mcast-guest.mcast-room-active #subControlButtons{max-width:calc(100vw - 16px)!important;}}",
+			"@media (orientation:landscape) and (max-height:540px){html.mcast-guest #mcastJoining{padding:8px;}html.mcast-guest .mcast-join-panel{height:calc(100dvh - 16px);min-height:0;grid-template-columns:minmax(0,1fr) minmax(300px,360px);}html.mcast-guest .mcast-join-preview{min-height:0;padding:12px;}html.mcast-guest .mcast-preview-stage{inset:58px 12px 70px;}html.mcast-guest .mcast-preview-avatar{width:88px;height:88px;font-size:32px;}html.mcast-guest .mcast-join-form{padding:18px;}html.mcast-guest .mcast-join-heading{font-size:21px;margin-bottom:7px;}html.mcast-guest .mcast-join-message{font-size:13px;margin-bottom:12px;}html.mcast-guest .mcast-device-row{left:12px;right:12px;bottom:12px;}html.mcast-guest .mcast-device-button{height:38px;min-width:110px;}html.mcast-guest .mcast-terms,html.mcast-guest .mcast-join-footer{display:none;}html.mcast-guest.mcast-room-active #mainmenu{padding:6px 6px 70px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:6px 6px 70px!important;}html.mcast-guest.mcast-room-active #controlButtons{bottom:max(8px,env(safe-area-inset-bottom))!important;}html.mcast-guest.mcast-room-active #subControlButtons{min-height:48px!important;padding:5px!important;}}",
+			"@media (min-width:1200px){html.mcast-guest.mcast-room-active #mainmenu{padding:18px 18px 104px!important;}html.mcast-guest.mcast-room-active #directorlayout,html.mcast-guest.mcast-room-active #gridlayout{inset:18px 18px 104px!important;}}"
 		].join("");
 		document.head.appendChild(style);
 	}
 
 	function ensureGuestJoinShell() {
-		if (route !== "guest") {
+		if (route !== "guest" || !window.MCastRoute) {
 			return null;
 		}
-
 		var existing = document.getElementById("mcastJoining");
 		if (existing) {
+			activeGuestShell = existing;
 			return existing;
 		}
 
@@ -255,7 +355,6 @@
 			"<div class=\"mcast-device-row\" aria-label=\"Device controls\">",
 			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-audio-toggle><span class=\"mcast-device-icon\" data-mcast-audio-icon aria-hidden=\"true\"></span><span data-mcast-audio-label>Mute</span></button>",
 			"<button type=\"button\" class=\"mcast-device-button\" data-mcast-video-toggle><span class=\"mcast-device-icon\" data-mcast-video-icon aria-hidden=\"true\"></span><span data-mcast-video-label>Stop Video</span></button>",
-			"<button type=\"button\" class=\"mcast-device-button is-end\" data-mcast-end title=\"Leave\" aria-label=\"Leave\"><span class=\"mcast-device-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\"><path d=\"M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.7.6 2.5a2 2 0 0 1-.4 2.1L8.1 9.5a16 16 0 0 0 6.4 6.4l1.2-1.2a2 2 0 0 1 2.1-.4c.8.3 1.6.5 2.5.6a2 2 0 0 1 1.7 2Z\"></path><path d=\"M23 1 1 23\"></path></svg></span><span>Leave</span></button>",
 			"</div>",
 			"</div>",
 			"<div class=\"mcast-join-form\">",
@@ -263,20 +362,23 @@
 			"<p class=\"mcast-join-message\" data-mcast-message>Check your name and devices before entering.</p>",
 			"<label class=\"mcast-field\"><span class=\"mcast-field-label\">Your name</span><input class=\"mcast-name-input\" data-mcast-name type=\"text\" autocomplete=\"name\" autocorrect=\"off\" autocapitalize=\"words\" maxlength=\"60\" placeholder=\"Enter your name\"></label>",
 			"<label class=\"mcast-check-row\"><input data-mcast-remember type=\"checkbox\" checked><span>Remember my name on this device</span></label>",
-			"<button type=\"button\" class=\"mcast-join-action\" data-mcast-join>Join</button>",
-			"<div class=\"mcast-join-status\"><span class=\"mcast-join-spinner\"></span><span data-mcast-status>Ready to join</span></div>",
+			"<button type=\"button\" class=\"mcast-join-action is-busy\" data-mcast-join disabled>Preparing room...</button>",
+			"<div class=\"mcast-join-status\" data-mcast-status>Loading secure room...</div>",
 			"<div class=\"mcast-join-footer\">Use headphones when possible. Keep this tab open while the host prepares the session.</div>",
 			"<div class=\"mcast-terms\">By joining, you allow this browser to use your microphone and camera for this MCast Studio session.</div>",
 			"</div>",
 			"</section>"
 		].join("");
 		document.body.appendChild(shell);
+		activeGuestShell = shell;
 		hydrateGuestJoinShell(shell);
+		updateGuestJoinStatus(window.MCastRoute.mode, window.MCastRoute.state);
+		startNativeReadyMonitor(shell);
 		return shell;
 	}
 
 	function updateGuestJoinStatus(mode, state) {
-		if (route !== "guest") {
+		if (route !== "guest" || !document.body) {
 			return;
 		}
 		var shell = ensureGuestJoinShell();
@@ -287,7 +389,11 @@
 		setShellText(shell, "[data-mcast-mode]", profile.modeTitle);
 		setShellText(shell, "[data-mcast-heading]", profile.heading);
 		setShellText(shell, "[data-mcast-message]", profile.message);
-		setShellText(shell, "[data-mcast-status]", profile.status);
+		if (!guestJoinPreferences.nativeReady && !guestJoinPreferences.joined) {
+			setShellText(shell, "[data-mcast-status]", "Preparing room engine...");
+		} else if (!guestJoinPreferences.joined) {
+			setShellText(shell, "[data-mcast-status]", profile.status);
+		}
 	}
 
 	function hydrateGuestJoinShell(shell) {
@@ -296,7 +402,6 @@
 		var joinButton = shell.querySelector("[data-mcast-join]");
 		var audioButton = shell.querySelector("[data-mcast-audio-toggle]");
 		var videoButton = shell.querySelector("[data-mcast-video-toggle]");
-		var endButton = shell.querySelector("[data-mcast-end]");
 		var rememberedName = readStoredGuestName();
 
 		if (nameInput) {
@@ -312,7 +417,7 @@
 			});
 		}
 		if (rememberInput) {
-			rememberInput.checked = readGuestPreference("rememberName", true);
+			rememberInput.checked = guestJoinPreferences.rememberName;
 		}
 		if (joinButton) {
 			joinButton.addEventListener("click", function () {
@@ -336,15 +441,7 @@
 				renderGuestDeviceControls(shell);
 				if (guestJoinPreferences.joined) {
 					forceGuestVideoMuteState(!guestJoinPreferences.video);
-					if (guestJoinPreferences.video) {
-						startLocalVideoMountMonitor(shell);
-					}
 				}
-			});
-		}
-		if (endButton) {
-			endButton.addEventListener("click", function () {
-				endGuestRoom(shell);
 			});
 		}
 
@@ -352,18 +449,56 @@
 		renderGuestDeviceControls(shell);
 	}
 
+	function startNativeReadyMonitor(shell) {
+		if (guestJoinPreferences.readyTimer) {
+			window.clearInterval(guestJoinPreferences.readyTimer);
+		}
+		var attempts = 0;
+		guestJoinPreferences.readyTimer = window.setInterval(function () {
+			attempts++;
+			if (guestJoinPreferences.joined) {
+				window.clearInterval(guestJoinPreferences.readyTimer);
+				guestJoinPreferences.readyTimer = null;
+				return;
+			}
+			if (isNativeGuestJoinReady()) {
+				guestJoinPreferences.nativeReady = true;
+				setJoinButtonState(shell, false, "Join", false);
+				updateGuestJoinStatus(window.MCastRoute.mode, window.MCastRoute.state);
+				window.clearInterval(guestJoinPreferences.readyTimer);
+				guestJoinPreferences.readyTimer = null;
+				return;
+			}
+			if (attempts === 18) {
+				setShellText(shell, "[data-mcast-status]", "Still preparing the secure room...");
+			}
+			if (attempts > 160) {
+				window.clearInterval(guestJoinPreferences.readyTimer);
+				guestJoinPreferences.readyTimer = null;
+				setJoinButtonState(shell, true, "Room unavailable", false);
+				setShellText(shell, "[data-mcast-status]", "Could not prepare the room. Refresh this invite and try again.");
+			}
+		}, 250);
+	}
+
+	function isNativeGuestJoinReady() {
+		return typeof session !== "undefined" &&
+			typeof requestBasicPermissions === "function" &&
+			typeof setupWebcamSelection === "function" &&
+			typeof publishWebcam === "function";
+	}
+
 	function startGuestJoinFromShell(shell) {
-		if (!shell || guestJoinPreferences.joined) {
+		if (!shell || guestJoinPreferences.joined || !guestJoinPreferences.nativeReady) {
 			return;
 		}
-
 		var nameInput = shell.querySelector("[data-mcast-name]");
 		var rememberInput = shell.querySelector("[data-mcast-remember]");
-		var joinButton = shell.querySelector("[data-mcast-join]");
-		var name = nameInput ? nameInput.value.trim() : "";
+		var name = nameInput ? nameInput.value.trim().slice(0, 60) : "";
 		var rememberName = rememberInput ? rememberInput.checked : true;
 
 		guestJoinPreferences.joined = true;
+		guestJoinPreferences.joinStartedAt = Date.now();
 		writeGuestPreference("rememberName", rememberName);
 		writeGuestPreference("audio", guestJoinPreferences.audio);
 		writeGuestPreference("video", guestJoinPreferences.video);
@@ -373,94 +508,22 @@
 			writeStoredGuestName("");
 		}
 
+		updateGuestPreviewName(shell, name);
 		applyGuestNameToNativeSession(name);
+		setJoinButtonState(shell, true, "Joining...", true);
 		setShellText(shell, "[data-mcast-status]", "Starting camera and microphone...");
-		if (joinButton) {
-			joinButton.disabled = true;
-			joinButton.textContent = "Joining...";
-		}
-
-		waitForNativeJoinAndStart(shell, 0);
-	}
-
-	function waitForNativeJoinAndStart(shell, attempt) {
-		if (tryStartNativeGuestJoin(shell)) {
-			return;
-		}
-		if (attempt >= 80) {
-			setShellText(shell, "[data-mcast-status]", "Still preparing. Check browser camera and microphone permissions.");
-			return;
-		}
-		window.setTimeout(function () {
-			waitForNativeJoinAndStart(shell, attempt + 1);
-		}, 250);
-	}
-
-	function tryStartNativeGuestJoin(shell) {
-		if (route === "guest") {
-			return tryStartNativeGuestWebcamJoin(shell);
-		}
-
-		var starter = null;
-		if (typeof window.press2talk === "function") {
-			starter = window.press2talk;
-		} else if (typeof press2talk === "function") {
-			starter = press2talk;
-		}
-		var nativeButton = document.getElementById("press2talk");
-
-		try {
-			if (starter && nativeButton) {
-				Promise.resolve(starter(true)).then(function () {
-					applyGuestMediaPreferencesLater();
-					setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
-					window.setTimeout(function () {
-						shell.classList.add("mcast-ready");
-					}, 450);
-				}).catch(function (error) {
-					console.error("MCast guest join failed", error);
-					setShellText(shell, "[data-mcast-status]", "Could not start media. Check browser permissions and try again.");
-					resetGuestJoinButton(shell);
-				});
-				return true;
-			}
-
-			if (nativeButton && typeof nativeButton.click === "function") {
-				nativeButton.click();
-				applyGuestMediaPreferencesLater();
-				setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
-				window.setTimeout(function () {
-					shell.classList.add("mcast-ready");
-				}, 450);
-				return true;
-			}
-		} catch (error) {
-			console.error("MCast guest join start failed", error);
-			setShellText(shell, "[data-mcast-status]", "Could not start media. Check browser permissions and try again.");
-			resetGuestJoinButton(shell);
-			return true;
-		}
-
-		return false;
+		tryStartNativeGuestWebcamJoin(shell);
 	}
 
 	function tryStartNativeGuestWebcamJoin(shell) {
-		if (typeof session === "undefined") {
-			return false;
-		}
-		if (typeof requestBasicPermissions !== "function" || typeof setupWebcamSelection !== "function" || typeof publishWebcam !== "function") {
-			return false;
-		}
-
 		try {
 			session.autostart = false;
-			applyGuestMediaPreferences();
 			var constraints = {
 				audio: !!guestJoinPreferences.audio,
 				video: !!guestJoinPreferences.video
 			};
 			var miconly = !constraints.video;
-			setShellText(shell, "[data-mcast-status]", "Allow camera and microphone permissions...");
+			setShellText(shell, "[data-mcast-status]", "Allow browser camera and microphone permissions...");
 			requestBasicPermissions(constraints, function (nativeMicOnly) {
 				try {
 					setupWebcamSelection(nativeMicOnly || miconly);
@@ -478,17 +541,15 @@
 				}
 			}, 1800);
 			window.setTimeout(function () {
-				if (guestJoinPreferences.joined && !hasLiveGuestMedia()) {
+				if (guestJoinPreferences.joined && !hasLiveGuestMedia() && !document.documentElement.classList.contains("mcast-room-active")) {
 					setShellText(shell, "[data-mcast-status]", "Permission was not completed. Allow browser camera/mic access and click Join again.");
 					resetGuestJoinButton(shell);
 				}
 			}, 30000);
-			return true;
 		} catch (error) {
 			console.error("MCast guest webcam start failed", error);
 			setShellText(shell, "[data-mcast-status]", "Could not start media. Check browser permissions and try again.");
 			resetGuestJoinButton(shell);
-			return true;
 		}
 	}
 
@@ -504,11 +565,8 @@
 			try {
 				setShellText(shell, "[data-mcast-status]", "Joining room...");
 				publishWebcam(false, !!miconly);
-				enterGuestRoomShell(shell, miconly);
+				enterNativeGuestRoom(shell, miconly);
 				applyGuestMediaPreferencesLater();
-				window.setTimeout(function () {
-					setShellText(shell, "[data-mcast-status]", "Connected. Waiting for host routing...");
-				}, 700);
 			} catch (publishError) {
 				console.error("MCast guest publish failed", publishError);
 				setShellText(shell, "[data-mcast-status]", "Could not join. Check browser permissions and try again.");
@@ -517,7 +575,7 @@
 			return;
 		}
 
-		if (attempt >= 80) {
+		if (attempt >= 100) {
 			setShellText(shell, "[data-mcast-status]", "Could not prepare camera or microphone. Check browser permissions and try again.");
 			resetGuestJoinButton(shell);
 			return;
@@ -528,234 +586,91 @@
 		}, 250);
 	}
 
-	function enterGuestRoomShell(shell, miconly) {
-		if (!shell) {
-			return;
-		}
-		activeGuestRoomShell = shell;
-		shell.classList.add("mcast-in-room");
-		shell.classList.toggle("mcast-video-off", !!miconly || !guestJoinPreferences.video);
-		setShellText(shell, "[data-mcast-status]", "Connected");
-		lockNativeGuestChrome();
-		startNativeChromeSuppressor();
-		startLocalVideoMountMonitor(shell);
-	}
-
-	function endGuestRoom(shell) {
-		guestJoinPreferences.joined = false;
-		try {
-			if (typeof hangup === "function") {
-				hangup(false);
-			} else if (window.hangup && typeof window.hangup === "function") {
-				window.hangup(false);
-			}
-		} catch (error) {
-			console.warn("MCast native hangup failed", error);
-		}
-		stopLocalGuestTracks();
+	function enterNativeGuestRoom(shell, miconly) {
+		document.documentElement.classList.add("mcast-room-active");
+		document.body.classList.add("mcast-room-active");
 		if (shell) {
-			shell.classList.add("mcast-video-off");
-			setShellText(shell, "[data-mcast-status]", "Disconnected");
-			var buttons = shell.querySelectorAll(".mcast-device-button");
-			for (var index = 0; index < buttons.length; index++) {
-				buttons[index].disabled = true;
-			}
+			shell.classList.toggle("mcast-video-off", !!miconly || !guestJoinPreferences.video);
+			setShellText(shell, "[data-mcast-status]", "Connected");
+			window.setTimeout(function () {
+				shell.classList.add("mcast-ready");
+			}, 350);
 		}
+		skinNativeRoomOnce();
+		startNativeRoomSkinSync();
+		window.setTimeout(requestMixerLayoutUpdate, 300);
 	}
 
-	function stopLocalGuestTracks() {
-		try {
-			var video = findLocalGuestVideoElement();
-			var stream = video && video.srcObject;
-			if (stream && typeof stream.getTracks === "function") {
-				var tracks = stream.getTracks();
-				for (var index = 0; index < tracks.length; index++) {
-					tracks[index].stop();
-				}
-			}
-		} catch (error) {
-			console.warn("MCast could not stop local tracks", error);
-		}
-	}
-
-	function lockNativeGuestChrome() {
-		try {
-			var shell = activeGuestRoomShell || document.getElementById("mcastJoining");
-			if (shell && document.body && shell.parentNode !== document.body) {
-				document.body.appendChild(shell);
-			} else if (shell && document.body && document.body.lastElementChild !== shell) {
-				document.body.appendChild(shell);
-			}
-			if (shell) {
-				shell.style.setProperty("display", "block", "important");
-				shell.style.setProperty("visibility", "visible", "important");
-				shell.style.setProperty("opacity", "1", "important");
-				shell.style.setProperty("z-index", "2147483000", "important");
-			}
-			document.documentElement.classList.add("mcast-room-active");
-			document.body.classList.add("mcast-room-active");
-			document.body.style.overflow = "hidden";
-			document.body.style.position = "fixed";
-			document.body.style.inset = "0";
-			document.body.style.width = "100%";
-			hideNativeGuestChromeElements();
-		} catch (error) {
-			console.warn("MCast could not lock native chrome", error);
-		}
-	}
-
-	function startNativeChromeSuppressor() {
-		if (nativeChromeKeepAliveTimer) {
+	function startNativeRoomSkinSync() {
+		if (guestJoinPreferences.roomSkinTimer) {
 			return;
 		}
-		nativeChromeKeepAliveTimer = window.setInterval(function () {
+		var attempts = 0;
+		guestJoinPreferences.roomSkinTimer = window.setInterval(function () {
+			attempts++;
 			if (!guestJoinPreferences.joined) {
-				window.clearInterval(nativeChromeKeepAliveTimer);
-				nativeChromeKeepAliveTimer = null;
-				if (nativeChromeObserver) {
-					nativeChromeObserver.disconnect();
-					nativeChromeObserver = null;
-				}
+				window.clearInterval(guestJoinPreferences.roomSkinTimer);
+				guestJoinPreferences.roomSkinTimer = null;
 				return;
 			}
-			lockNativeGuestChrome();
-			if (activeGuestRoomShell) {
-				mountLocalGuestVideo(activeGuestRoomShell);
+			skinNativeRoomOnce();
+			if (attempts % 8 === 0) {
+				requestMixerLayoutUpdate();
 			}
 		}, 350);
+		window.addEventListener("resize", requestMixerLayoutUpdate);
+		window.addEventListener("orientationchange", function () {
+			window.setTimeout(requestMixerLayoutUpdate, 250);
+		});
+	}
 
-		if (typeof MutationObserver !== "undefined" && document.documentElement) {
-			nativeChromeObserver = new MutationObserver(function () {
-				lockNativeGuestChrome();
-			});
-			nativeChromeObserver.observe(document.documentElement, {
-				childList: true,
-				subtree: true
-			});
+	function skinNativeRoomOnce() {
+		document.documentElement.classList.add("mcast-room-active");
+		if (document.body) {
+			document.body.classList.add("mcast-room-active");
+		}
+		var controlButtons = document.getElementById("controlButtons");
+		if (controlButtons) {
+			controlButtons.classList.remove("hidden");
+		}
+		var subControlButtons = document.getElementById("subControlButtons");
+		if (subControlButtons) {
+			subControlButtons.classList.remove("hidden");
+		}
+		var mainmenu = document.getElementById("mainmenu");
+		if (mainmenu) {
+			mainmenu.classList.remove("hidden", "hidden2", "permahide", "row");
+			mainmenu.style.display = "block";
+			mainmenu.style.opacity = "1";
+			mainmenu.style.visibility = "visible";
+		}
+		var gridlayout = document.getElementById("gridlayout");
+		if (gridlayout) {
+			gridlayout.classList.remove("hidden", "hidden2", "permahide");
 		}
 	}
 
-	function hideNativeGuestChromeElements() {
-		var selectors = [
-			"#header",
-			"#mainmenu",
-			"#logoname",
-			"#qos",
-			"#controlButtons",
-			"#miniTaskBar",
-			"#credits",
-			"#legal",
-			"#container-1",
-			"#container-2",
-			"#container-3",
-			"#container-4",
-			"#container-5",
-			"#container-6",
-			"#container-7",
-			"#container-8",
-			"#container-9"
-		];
-		for (var index = 0; index < selectors.length; index++) {
-			var element = document.querySelector(selectors[index]);
-			if (element) {
-				element.style.setProperty("display", "none", "important");
-				element.style.setProperty("visibility", "hidden", "important");
-			}
-		}
-	}
-
-	function startLocalVideoMountMonitor(shell) {
-		var attempts = 0;
-		var timer = window.setInterval(function () {
-			attempts++;
-			if (mountLocalGuestVideo(shell) || attempts >= 80) {
-				window.clearInterval(timer);
-			}
-		}, 250);
-	}
-
-	function mountLocalGuestVideo(shell) {
-		if (!shell || !guestJoinPreferences.video) {
-			if (shell) {
-				shell.classList.add("mcast-video-off");
-			}
-			return true;
-		}
-		var stage = shell.querySelector(".mcast-preview-stage");
-		if (!stage) {
-			return false;
-		}
-		var video = findLocalGuestVideoElement();
-		if (!video) {
-			return false;
-		}
-		video.classList.add("mcast-local-video");
-		video.muted = true;
-		video.autoplay = true;
-		video.controls = false;
-		video.playsInline = true;
-		video.setAttribute("playsinline", "");
-		video.removeAttribute("draggable");
-		if (video.parentNode !== stage) {
-			stage.appendChild(video);
-		}
-		stage.classList.add("has-video");
-		shell.classList.remove("mcast-video-off");
+	function requestMixerLayoutUpdate() {
 		try {
-			var playResult = video.play();
-			if (playResult && typeof playResult.catch === "function") {
-				playResult.catch(function () {});
+			if (typeof updateMixer === "function") {
+				updateMixer();
 			}
-		} catch (error) {
-			console.warn("MCast local video play failed", error);
-		}
-		return true;
-	}
-
-	function findLocalGuestVideoElement() {
-		if (typeof session !== "undefined" && session.videoElement && isUsableLocalVideo(session.videoElement)) {
-			return session.videoElement;
-		}
-		var preferredIds = ["videosource", "previewWebcam"];
-		for (var preferredIndex = 0; preferredIndex < preferredIds.length; preferredIndex++) {
-			var preferred = document.getElementById(preferredIds[preferredIndex]);
-			if (isUsableLocalVideo(preferred)) {
-				return preferred;
-			}
-		}
-		var videos = document.querySelectorAll("video");
-		for (var index = 0; index < videos.length; index++) {
-			if (isUsableLocalVideo(videos[index])) {
-				return videos[index];
-			}
-		}
-		return null;
-	}
-
-	function isUsableLocalVideo(video) {
-		if (!video || video.closest("#mcastJoining") && video.classList.contains("mcast-local-video")) {
-			return !!video;
-		}
-		var stream = video.srcObject;
-		if (!stream || typeof stream.getTracks !== "function") {
-			return false;
-		}
-		var tracks = stream.getTracks();
-		for (var index = 0; index < tracks.length; index++) {
-			if (tracks[index].readyState === "live") {
-				return true;
-			}
-		}
-		return video.readyState >= 2 && (video.videoWidth > 0 || video.videoHeight > 0);
+		} catch (error) {}
 	}
 
 	function resetGuestJoinButton(shell) {
 		guestJoinPreferences.joined = false;
+		setJoinButtonState(shell, false, "Join", false);
+	}
+
+	function setJoinButtonState(shell, disabled, label, busy) {
 		var joinButton = shell ? shell.querySelector("[data-mcast-join]") : null;
-		if (joinButton) {
-			joinButton.disabled = false;
-			joinButton.textContent = "Join";
+		if (!joinButton) {
+			return;
 		}
+		joinButton.disabled = !!disabled;
+		joinButton.textContent = label || "Join";
+		joinButton.classList.toggle("is-busy", !!busy);
 	}
 
 	function applyGuestMediaPreferencesLater() {
@@ -830,17 +745,11 @@
 		} catch (error) {
 			console.warn("MCast could not set session label", error);
 		}
-		var fields = document.querySelectorAll("input[name='label'],input[name='l'],input[name='name'],input[id='label'],input[id='name'],input[id='username']");
+		var fields = document.querySelectorAll("input[name='label'],input[name='l'],input[name='name'],input[id='label'],input[id='name'],input[id='username'],input[id^='videoname']");
 		for (var index = 0; index < fields.length; index++) {
 			fields[index].value = cleanName;
 			fields[index].dispatchEvent(new Event("input", { bubbles: true }));
 			fields[index].dispatchEvent(new Event("change", { bubbles: true }));
-		}
-		var videoNameFields = document.querySelectorAll("input[id^='videoname']");
-		for (var videoNameIndex = 0; videoNameIndex < videoNameFields.length; videoNameIndex++) {
-			videoNameFields[videoNameIndex].value = cleanName;
-			videoNameFields[videoNameIndex].dispatchEvent(new Event("input", { bubbles: true }));
-			videoNameFields[videoNameIndex].dispatchEvent(new Event("change", { bubbles: true }));
 		}
 		try {
 			if (typeof urlParams !== "undefined" && urlParams && typeof urlParams.set === "function") {
@@ -880,14 +789,14 @@
 	}
 
 	function setShellText(root, selector, value) {
-		var element = root.querySelector(selector);
+		var element = root ? root.querySelector(selector) : null;
 		if (element) {
 			element.textContent = value || "";
 		}
 	}
 
 	function setShellHtml(root, selector, value) {
-		var element = root.querySelector(selector);
+		var element = root ? root.querySelector(selector) : null;
 		if (element) {
 			element.innerHTML = value || "";
 		}
@@ -908,60 +817,48 @@
 		var modeTitle = toTitleCase(mode || "stream_guest");
 		var profiles = {
 			meeting: {
-				heading: "Joining the meeting",
-				message: "Your session will open as soon as the connection is ready.",
-				status: "Connecting to meeting..."
+				heading: "Join the meeting",
+				message: "Check your name and devices before entering the room.",
+				status: "Ready to join"
 			},
 			classroom: {
-				heading: "Classroom waiting room",
-				message: "Your teacher will bring you into the class when ready.",
-				status: "Waiting for teacher approval..."
+				heading: "Join the classroom",
+				message: "Check your name and devices before entering the class.",
+				status: "Ready to join"
 			},
 			stream_guest: {
-				heading: "Joining the green room",
-				message: "The production team will bring you on screen when it is time.",
-				status: "Connecting backstage..."
+				heading: "Join the green room",
+				message: "The production team can prepare your feed before you go live.",
+				status: "Ready to join"
 			},
 			webinar: {
-				heading: "Joining the webinar",
+				heading: "Join the webinar",
 				message: "The host will approve speakers before they appear on screen.",
-				status: "Waiting for host approval..."
+				status: "Ready to join"
 			},
 			podcast: {
 				heading: "Podcast audio check",
 				message: "Keep your microphone ready while the host prepares the recording.",
-				status: "Preparing podcast session..."
+				status: "Ready to join"
 			},
 			remote_interview: {
 				heading: "Interview waiting room",
-				message: "The producer will check your audio and video before the show.",
-				status: "Waiting for producer check..."
+				message: "The producer will check your audio and video before the session.",
+				status: "Ready to join"
 			}
 		};
 		var profile = profiles[mode] || profiles.stream_guest;
-		if (state === "active") {
-			profile = {
-				heading: "You are connected",
-				message: "The host can hear you and will decide when to show video.",
-				status: "Audio route active..."
-			};
-		} else if (state === "raised_hand") {
+		if (state === "raised_hand") {
 			profile = {
 				heading: "Hand raised",
 				message: "The host can see your request and will bring you in when ready.",
-				status: "Waiting in the raise-hand queue..."
-			};
-		} else if (state === "backstage") {
-			profile = {
-				heading: "You are backstage",
-				message: "The production team can prepare your feed before you go live.",
-				status: "Backstage connection active..."
+				status: "Ready to join"
 			};
 		} else if (state === "on_screen") {
 			profile = {
-				heading: "You are on screen",
+				heading: "Join live",
 				message: "Stay ready and keep this browser tab open.",
-				status: "Live route active..."
+				status: "Ready to join"
 			};
 		}
 		return {
@@ -1023,9 +920,7 @@
 			if (window.localStorage) {
 				window.localStorage.setItem(storageKey, generated);
 			}
-		} catch (error) {
-			// Storage can be blocked; the one-time generated id is still valid.
-		}
+		} catch (error) {}
 		return generated;
 	}
 
@@ -1102,7 +997,6 @@
 			if (!window.history || typeof window.history.replaceState !== "function") {
 				return;
 			}
-
 			var cleanParams = new URLSearchParams(sourceParams.toString());
 			cleanParams.delete("t");
 			cleanParams.delete("token");
@@ -1137,7 +1031,6 @@
 					: "This MCast Studio link is not valid.");
 				return "";
 			}
-
 			var payload = JSON.parse(request.responseText || "{}");
 			return (payload.query || "").toString().trim();
 		} catch (error) {
@@ -1158,41 +1051,12 @@
 				showInviteError("This MCast Studio link is not valid.");
 				return "";
 			}
-
 			var payload = JSON.parse(request.responseText || "{}");
 			return (payload.query || "").toString().trim();
 		} catch (error) {
 			console.error("MCast packed route resolve failed", error);
 			showInviteError("This MCast Studio link could not be loaded.");
 			return "";
-		}
-	}
-
-	function startGuestJoinStatusMonitor() {
-		var startedAt = Date.now();
-		var interval = window.setInterval(function () {
-			if (removeGuestJoinStatusIfReady() || (guestJoinPreferences.joined && Date.now() - startedAt > 60000)) {
-				window.clearInterval(interval);
-				removeGuestJoinStatus();
-			}
-		}, 500);
-	}
-
-	function removeGuestJoinStatusIfReady() {
-		var status = document.getElementById("mcastJoining");
-		if (!status) {
-			return true;
-		}
-		if (!document.body) {
-			return false;
-		}
-		return hasLiveGuestMedia();
-	}
-
-	function removeGuestJoinStatus() {
-		var status = document.getElementById("mcastJoining");
-		if (status && status.parentNode) {
-			status.parentNode.removeChild(status);
 		}
 	}
 
@@ -1231,5 +1095,4 @@
 			.replace(/>/g, "&gt;")
 			.replace(/"/g, "&quot;");
 	}
-
 })();

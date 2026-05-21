@@ -10,7 +10,7 @@
 	<body>
 		<p>Loading invite...</p>
 		<script>
-			fetch("/mcast-guest.html?v=1", { cache: "no-store" })
+			fetch("/mcast-guest.html?v=2", { cache: "no-store" })
 				.then(function (response) {
 					if (!response.ok) throw new Error("load failed");
 					return response.text();
