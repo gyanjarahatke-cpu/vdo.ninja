@@ -56,20 +56,27 @@
 		decoded = resolveStoredRoute(shortCode, route);
 	} else if (route === "guest" && search.length > 1) {
 		decoded = search.substring(1);
+	} else if (route === "guest") {
+		decoded = readStoredResolvedGuestRoute();
 	} else if (route === "call") {
 		showInviteError("This MCast Studio room link is not authorized.");
 		return;
 	}
 
 	if (!decoded) {
+		if (route === "guest") {
+			showInviteError("This MCast Studio room link is missing or has expired.");
+		}
 		return;
 	}
 
-	if (token || shortCode) {
+	if ((token || shortCode) && route !== "guest") {
 		cleanTransportRouteParams(params);
 	}
 	decoded = applyRouteDefaults(decoded, route);
 	if (route === "guest") {
+		persistResolvedGuestRoute(decoded);
+		persistResolvedGuestRouteInLocation(decoded);
 		cleanNativeDisplayNamePromptParamsFromLocation();
 	}
 	applyRouteMetadata(decoded, route);
@@ -344,8 +351,8 @@
 			"html.mcast-guest.mcast-room-active #mcastRoomStatus{position:absolute!important;inset:0!important;z-index:1!important;display:grid!important;place-items:center!important;padding:24px!important;color:#a8b3c2!important;font-size:13px!important;font-weight:680!important;text-align:center!important;background:#070b12!important;}",
 			"html.mcast-guest.mcast-room-active #mcastRoom.has-live-video #mcastRoomStatus{display:none!important;}",
 			"html.mcast-guest.mcast-room-active #directorlayout{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}",
-			"html.mcast-guest.mcast-room-active #gridlayout{position:absolute!important;inset:12px 12px 92px!important;display:grid!important;visibility:visible!important;opacity:1!important;width:auto!important;height:auto!important;margin:0!important;overflow:hidden!important;background:#05070b!important;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))!important;gap:12px!important;align-items:center!important;justify-items:center!important;place-content:center!important;transform:none!important;}",
-			"html.mcast-guest.mcast-room-active #mcastRoomStage>#gridlayout{inset:0!important;width:100%!important;height:100%!important;background:#070b12!important;}",
+			"html.mcast-guest.mcast-room-active #gridlayout{position:absolute!important;inset:12px 12px 92px!important;z-index:2!important;display:grid!important;visibility:visible!important;opacity:1!important;width:auto!important;height:auto!important;margin:0!important;overflow:hidden!important;background:#05070b!important;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr))!important;gap:12px!important;align-items:center!important;justify-items:center!important;place-content:center!important;transform:none!important;}",
+			"html.mcast-guest.mcast-room-active #mcastRoomStage>#gridlayout{inset:0!important;z-index:2!important;width:100%!important;height:100%!important;background:#070b12!important;}",
 			"html.mcast-guest.mcast-room-active #gridlayout>video,html.mcast-guest.mcast-room-active #gridlayout>.vidcon,html.mcast-guest.mcast-room-active #gridlayout>#minipreview,html.mcast-guest.mcast-room-active #gridlayout>[id^='container_']{position:relative!important;inset:auto!important;left:auto!important;top:auto!important;right:auto!important;bottom:auto!important;display:block!important;visibility:visible!important;opacity:1!important;width:100%!important;max-width:min(100%,1280px)!important;height:auto!important;min-height:0!important;aspect-ratio:16/9!important;margin:0!important;border-radius:8px!important;background:#111827!important;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 16px 44px rgba(0,0,0,.28)!important;overflow:hidden!important;transform:none!important;}",
 			"html.mcast-guest.mcast-room-active #gridlayout>video,html.mcast-guest.mcast-room-active #gridlayout>.mcast-room-video{object-fit:cover!important;max-height:100%!important;}",
 			"html.mcast-guest.mcast-room-active #gridlayout video,html.mcast-guest.mcast-room-active #gridlayout canvas{width:100%!important;height:100%!important;border-radius:8px!important;object-fit:cover!important;background:#0b1018!important;transform:none!important;}",
@@ -593,7 +600,8 @@
 		var goButton = document.getElementById("gowebcam");
 		var ready = goButton && goButton.dataset && goButton.dataset.ready === "true";
 		var audioReady = goButton && goButton.dataset && goButton.dataset.audioready === "true";
-		if (goButton && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
+		var videoReady = miconly || !guestJoinPreferences.video || hasLiveGuestVideo();
+		if (goButton && videoReady && (ready || miconly || !guestJoinPreferences.video) && (audioReady || !guestJoinPreferences.audio)) {
 			try {
 				setShellText(shell, "[data-mcast-status]", "Joining room...");
 				publishWebcam(false, !!miconly);
@@ -759,15 +767,33 @@
 		}
 		var hasLiveTile = false;
 		if (gridlayout) {
-			var tiles = gridlayout.querySelectorAll("video,canvas,.vidcon,#minipreview,[id^='container_']");
+			var tiles = gridlayout.querySelectorAll("video,canvas,.container_holder_video,.vidcon,#minipreview,[id^='container_']");
 			hasLiveTile = Array.prototype.some.call(tiles, function (tile) {
-				if (tile.tagName && tile.tagName.toLowerCase() === "video") {
-					return hasPlayableVideoSource(tile);
-				}
-				return tile.offsetWidth > 0 && tile.offsetHeight > 0;
+				return hasVisibleVideoTile(tile);
 			});
 		}
 		room.classList.toggle("has-live-video", hasLiveTile);
+	}
+
+	function hasVisibleVideoTile(tile) {
+		if (!tile) {
+			return false;
+		}
+		var tagName = tile.tagName ? tile.tagName.toLowerCase() : "";
+		if (tagName === "video") {
+			return hasPlayableVideoSource(tile);
+		}
+		if (tagName === "canvas") {
+			return tile.offsetWidth > 0 && tile.offsetHeight > 0;
+		}
+		var videos = tile.querySelectorAll ? tile.querySelectorAll("video") : [];
+		for (var index = 0; index < videos.length; index++) {
+			if (hasPlayableVideoSource(videos[index])) {
+				return true;
+			}
+		}
+		var canvases = tile.querySelectorAll ? tile.querySelectorAll("canvas") : [];
+		return canvases.length > 0 && tile.offsetWidth > 0 && tile.offsetHeight > 0;
 	}
 
 	function normalizeNativeRoomViewport() {
@@ -819,16 +845,40 @@
 		if (!video) {
 			return false;
 		}
-		if (video.src || video.currentSrc) {
+		if (video.readyState >= 2 && (video.videoWidth > 0 || video.videoHeight > 0)) {
 			return true;
 		}
 		var stream = video.srcObject;
 		if (!stream || typeof stream.getTracks !== "function") {
-			return false;
+			return !!((video.src || video.currentSrc) && video.readyState >= 2);
+		}
+		if (typeof stream.getVideoTracks === "function") {
+			return stream.getVideoTracks().some(function (track) {
+				return track.readyState === "live";
+			});
 		}
 		return stream.getTracks().some(function (track) {
-			return track.readyState === "live";
+			return track.kind === "video" && track.readyState === "live";
 		});
+	}
+
+	function hasLiveGuestVideo() {
+		if (!guestJoinPreferences.video) {
+			return false;
+		}
+		var preview = document.getElementById("previewWebcam");
+		if (hasPlayableVideoSource(preview)) {
+			return true;
+		}
+		var published = document.getElementById("videosource");
+		if (hasPlayableVideoSource(published)) {
+			return true;
+		}
+		try {
+			return !!(typeof session !== "undefined" && session.videoElement && session.videoElement.isConnected && hasPlayableVideoSource(session.videoElement));
+		} catch (error) {
+			return false;
+		}
 	}
 
 	function requestMixerLayoutUpdate() {
@@ -1250,6 +1300,50 @@
 		}
 	}
 
+	function persistResolvedGuestRoute(query) {
+		try {
+			if (!window.sessionStorage) {
+				return;
+			}
+			window.sessionStorage.setItem("mcastResolvedGuestRoute", serializeParams(new URLSearchParams(query.replace(/^\?/, ""))));
+		} catch (error) {}
+	}
+
+	function readStoredResolvedGuestRoute() {
+		try {
+			if (!window.sessionStorage) {
+				return "";
+			}
+			return (window.sessionStorage.getItem("mcastResolvedGuestRoute") || "").toString().trim();
+		} catch (error) {
+			return "";
+		}
+	}
+
+	function persistResolvedGuestRouteInLocation(query) {
+		try {
+			if (!window.history || typeof window.history.replaceState !== "function") {
+				return;
+			}
+			var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
+			["label", "l", "defaultlabel", "labelsuggestion", "ls", "t", "token", "s", "code"].forEach(function (key) {
+				routedParams.delete(key);
+			});
+			var nextQuery = serializeParams(routedParams);
+			if (!nextQuery) {
+				return;
+			}
+			var nextUrl = window.location.pathname.replace(/\/+$/, "/") +
+				"?" + nextQuery +
+				(window.location.hash || "");
+			if (nextUrl !== window.location.pathname + window.location.search + window.location.hash) {
+				window.history.replaceState({ path: nextUrl }, "", nextUrl);
+			}
+		} catch (error) {
+			console.warn("MCast could not persist the guest room route", error);
+		}
+	}
+
 	function resolveStoredRoute(code, currentRoute) {
 		if (!/^[A-Za-z0-9]{6,16}$/.test(code || "")) {
 			showInviteError("This MCast Studio invitation link is not valid.");
@@ -1318,11 +1412,35 @@
 	}
 
 	function showInviteError(message) {
-		document.addEventListener("DOMContentLoaded", function () {
-			document.body.innerHTML = "<div style=\"display:grid;place-items:center;min-height:100vh;background:#0b0f16;color:#f8d7da;font:500 16px system-ui;text-align:center;padding:24px;\">" +
-				escapeHtml(message) +
-				"</div>";
-		});
+		document.documentElement.classList.add("mcast-route-error");
+		var style = document.getElementById("mcastRouteErrorStyles");
+		if (!style) {
+			style = document.createElement("style");
+			style.id = "mcastRouteErrorStyles";
+			style.textContent = [
+				"html.mcast-route-error,html.mcast-route-error body{margin:0!important;min-height:100%!important;background:#0b0f16!important;overflow:hidden!important;}",
+				"html.mcast-route-error body>*:not(#mcastRouteError){display:none!important;}",
+				"#mcastRouteError{position:fixed!important;inset:0!important;z-index:2147483647!important;display:grid!important;place-items:center!important;background:#0b0f16!important;color:#f8d7da!important;font:500 16px system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;text-align:center!important;padding:24px!important;box-sizing:border-box!important;}"
+			].join("");
+			document.head.appendChild(style);
+		}
+		var render = function () {
+			if (!document.body) {
+				return;
+			}
+			var error = document.getElementById("mcastRouteError");
+			if (!error) {
+				error = document.createElement("div");
+				error.id = "mcastRouteError";
+				document.body.appendChild(error);
+			}
+			error.textContent = message;
+		};
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", render);
+		} else {
+			render();
+		}
 	}
 
 	function escapeHtml(value) {
