@@ -36,7 +36,7 @@
 
 .mcast-desktop__brand-mark,
 .mcast-desktop__logo {
-	background: center / contain no-repeat url("../../media/mcast-logo.png");
+	background: center / contain no-repeat url("../../media/mcast-apple-touch-icon.png");
 }
 
 .mcast-desktop__loading {
@@ -179,10 +179,32 @@
 	width: 40px;
 	height: 40px;
 	border-radius: 10px;
-	object-fit: contain;
+	object-fit: cover;
 	flex: 0 0 auto;
 	transform: none !important;
 	background: #fff;
+}
+
+.mcast-desktop__logo.is-logo-missing {
+	display: none;
+}
+
+.mcast-desktop__logo-fallback {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 12px;
+	background: linear-gradient(135deg, #ff3d6e, #ffb000);
+	color: #fff;
+	font-size: 18px;
+	font-weight: 950;
+	flex: 0 0 auto;
+}
+
+.mcast-desktop__logo.is-logo-missing + .mcast-desktop__logo-fallback {
+	display: inline-flex;
 }
 
 .mcast-desktop__brand-name {
@@ -206,6 +228,7 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
+	margin-left: auto;
 }
 
 .mcast-desktop__top-settings {
@@ -215,7 +238,6 @@
 	gap: 7px;
 	width: 42px;
 	height: 42px;
-	margin-left: 6px;
 	border: 1px solid var(--desktop-line);
 	border-radius: 13px;
 	background: #fff;
@@ -713,7 +735,7 @@
 
 .mcast-desktop__settings-popover {
 	position: absolute;
-	left: 34px;
+	right: 34px;
 	top: 82px;
 	z-index: 8;
 	width: min(360px, calc(100vw - 68px));
@@ -727,14 +749,96 @@
 }
 
 .mcast-desktop[data-step="setup"] .mcast-desktop__settings-popover {
-	left: 50%;
-	top: auto;
-	bottom: 118px;
-	transform: translateX(-50%);
+	right: 34px;
+	top: 82px;
+	bottom: auto;
+	transform: none;
 }
 
 .mcast-desktop__settings-popover[hidden] {
 	display: none;
+}
+
+.mcast-desktop__modal {
+	position: fixed;
+	inset: 0;
+	z-index: 40;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 28px;
+	background: rgba(15, 23, 42, .38);
+	backdrop-filter: blur(10px);
+}
+
+.mcast-desktop__modal[hidden] {
+	display: none;
+}
+
+.mcast-desktop__modal-card {
+	width: min(480px, 100%);
+	display: grid;
+	gap: 18px;
+	padding: 28px;
+	border: 1px solid rgba(226, 232, 240, .9);
+	border-radius: 24px;
+	background: #fff;
+	box-shadow: 0 28px 90px rgba(15, 23, 42, .24);
+	color: var(--desktop-ink);
+}
+
+.mcast-desktop__modal-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 16px;
+	background: #fff4e5;
+	color: #b45309;
+	font-size: 24px;
+	font-weight: 950;
+}
+
+.mcast-desktop__modal-copy h2 {
+	margin: 0 0 8px;
+	font-size: 24px;
+	line-height: 1.15;
+	letter-spacing: 0;
+}
+
+.mcast-desktop__modal-copy p {
+	margin: 0;
+	color: #475467;
+	font-size: 15px;
+	line-height: 1.55;
+}
+
+.mcast-desktop__modal-copy small {
+	display: block;
+	margin-top: 12px;
+	color: #667085;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.mcast-desktop__modal-actions {
+	display: grid;
+	gap: 10px;
+}
+
+.mcast-desktop__button--secondary {
+	background: #fff;
+	color: var(--desktop-ink);
+	border: 1px solid var(--desktop-line-strong);
+	box-shadow: none;
+}
+
+.mcast-desktop__button--ghost {
+	background: transparent;
+	color: #344054;
+	border: 0;
+	box-shadow: none;
 }
 
 @media (max-width: 1180px) {

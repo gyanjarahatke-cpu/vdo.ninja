@@ -91,7 +91,7 @@
 	width: 42px;
 	height: 42px;
 	border-radius: 12px;
-	background: center / contain no-repeat url("../../media/mcast-logo.png");
+	background: center / contain no-repeat url("../../media/mcast-apple-touch-icon.png"), linear-gradient(135deg, #ff3d6e, #ffb000);
 }
 
 .mcast-mobile__ghost-button {

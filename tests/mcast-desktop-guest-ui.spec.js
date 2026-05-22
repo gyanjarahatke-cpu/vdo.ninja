@@ -23,7 +23,18 @@ test("desktop setup is light, simple, and icon-first", async ({ page }) => {
 	await expect(page.locator(".mcast-desktop__setup-card")).toBeVisible();
 	await expect(page.locator("#mcastDesktopMicToggle svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopCameraToggle svg")).toBeVisible();
-	await expect(page.locator("#mcastDesktopSetupSettingsButton svg")).toBeVisible();
+	await expect(page.locator("#mcastDesktopPreviewButton svg")).toBeVisible();
+	await expect(page.locator("#mcastDesktopSetupSettingsButton")).toHaveCount(0);
+	await expect(page.locator("#mcastDesktopSettingsButton svg")).toBeVisible();
+	await expect(page.locator(".mcast-desktop__logo")).toBeVisible();
+	await expect.poll(() => page.locator(".mcast-desktop__logo").evaluate((image) => image.complete && image.naturalWidth > 0), {
+		timeout: 8000
+	}).toBe(true);
+
+	const topOrder = await page.locator(".mcast-desktop__top-actions").evaluate((element) => (
+		Array.from(element.children).map((child) => child.id || child.textContent.trim())
+	));
+	expect(topOrder).toEqual(["mcastDesktopSettingsButton", "mcastDesktopQuality", "mcastDesktopLiveBadge"]);
 
 	const colors = await page.locator("#mcastDesktopGuest").evaluate(() => ({
 		rootBg: getComputedStyle(document.querySelector(".mcast-desktop")).backgroundColor,
@@ -57,4 +68,27 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect(page.locator("#mcastDesktopBackstageMessage")).toBeVisible();
 	const logoTransform = await page.locator(".mcast-desktop__logo").evaluate((element) => getComputedStyle(element).transform);
 	expect(logoTransform).toBe("none");
+});
+
+test("desktop camera errors use the branded MCast recovery modal", async ({ page }) => {
+	await page.goto(baseUrl + "&case=camera-error", { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+	await page.evaluate(() => {
+		window.previewWebcam = function () {
+			const error = new Error("Raw internal device busy detail");
+			error.name = "NotReadableError";
+			return Promise.reject(error);
+		};
+	});
+	await page.locator("#mcastDesktopPreviewButton").click();
+	await expect(page.locator("#mcastDesktopCameraErrorModal")).toBeVisible({ timeout: 6000 });
+	await expect(page.locator("#mcastDesktopCameraErrorTitle")).toHaveText("Camera could not start");
+	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Your camera may already be used by another app");
+	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Try again");
+	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Choose another camera");
+	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Join without camera");
+	await expect(page.locator("#mcastDesktopCameraErrorModal")).not.toContainText("Raw internal device busy detail");
+
+	await page.locator("#mcastDesktopChooseCameraButton").click();
+	await expect(page.locator("#mcastDesktopSettingsPanel")).toBeVisible();
 });

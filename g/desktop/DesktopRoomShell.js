@@ -12,7 +12,8 @@
 		meterFrame: 0,
 		meterContext: null,
 		meterAnalyser: null,
-		lastStatus: ""
+		lastStatus: "",
+		joinWithoutCamera: false
 	};
 
 	var icons = {
@@ -40,6 +41,7 @@
 		removeLegacyBranding();
 		wireDesktopUi();
 		decorateDesktopButtons();
+		guardDesktopLogo();
 		fillDesktopRouteDetails();
 		restoreGuestName();
 		setStep("loading");
@@ -94,9 +96,17 @@
 		on("mcastDesktopRoomMicButton", "click", toggleMute);
 		on("mcastDesktopCameraToggle", "click", toggleCamera);
 		on("mcastDesktopRoomCameraButton", "click", toggleCamera);
-		on("mcastDesktopSetupSettingsButton", "click", toggleSettings);
 		on("mcastDesktopSettingsButton", "click", toggleSettings);
 		on("mcastDesktopLeaveButton", "click", leaveRoom);
+		on("mcastDesktopCameraRetryButton", "click", function () {
+			hideCameraErrorModal();
+			startPreview().catch(function () {});
+		});
+		on("mcastDesktopChooseCameraButton", "click", function () {
+			hideCameraErrorModal();
+			openSettings();
+		});
+		on("mcastDesktopJoinNoCameraButton", "click", joinWithoutCamera);
 	}
 
 	function on(id, type, handler) {
@@ -125,10 +135,13 @@
 
 	async function startPreview() {
 		setButtonBusy("mcastDesktopPreviewButton", true, "Starting...");
-		setStatus("Requesting camera and microphone access...");
+		setStatus(state.joinWithoutCamera ? "Requesting microphone access..." : "Requesting camera and microphone access...");
 		try {
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
+			}
+			if (state.joinWithoutCamera) {
+				applyNoCameraSession();
 			}
 			await window.previewWebcam(false);
 			await waitForPreview(9000);
@@ -138,7 +151,9 @@
 			startAudioMeter();
 			setStatus("Preview is ready. Confirm your setup, then join backstage.");
 		} catch (error) {
+			logDesktop("camera preview error", summarizeError(error));
 			setStatus(getPermissionMessage(error), true);
+			showCameraErrorModal();
 			throw error;
 		} finally {
 			setButtonBusy("mcastDesktopPreviewButton", false, "Preview");
@@ -155,6 +170,9 @@
 		try {
 			if (!state.previewStarted) {
 				await startPreview();
+			}
+			if (state.joinWithoutCamera) {
+				applyNoCameraSession();
 			}
 			applyGuestName();
 			await waitForReadyButton(9000);
@@ -174,7 +192,9 @@
 			syncRoomTiles();
 			updateDesktopControls();
 		} catch (error) {
+			logDesktop("join error", summarizeError(error));
 			setStatus(getPermissionMessage(error), true);
+			showCameraErrorModal();
 		} finally {
 			state.joining = false;
 			setButtonBusy("mcastDesktopJoinButton", false, "Enter studio");
@@ -560,9 +580,68 @@
 
 	function toggleSettings() {
 		var panel = byId("mcastDesktopSettingsPanel");
-		if (panel) {
-			panel.hidden = !panel.hidden;
+		if (panel && panel.hidden) {
+			openSettings();
+		} else if (panel) {
+			panel.hidden = true;
 		}
+	}
+
+	function openSettings() {
+		var panel = byId("mcastDesktopSettingsPanel");
+		if (panel) {
+			panel.hidden = false;
+			syncDevices();
+			var cameraSelect = byId("mcastDesktopCameraSelect");
+			if (cameraSelect) {
+				cameraSelect.focus();
+			}
+		}
+	}
+
+	function hideSettings() {
+		var panel = byId("mcastDesktopSettingsPanel");
+		if (panel) {
+			panel.hidden = true;
+		}
+	}
+
+	function showCameraErrorModal() {
+		var modal = byId("mcastDesktopCameraErrorModal");
+		if (!modal) {
+			return;
+		}
+		hideSettings();
+		modal.hidden = false;
+		window.setTimeout(function () {
+			var retry = byId("mcastDesktopCameraRetryButton");
+			if (retry) {
+				retry.focus();
+			}
+		}, 0);
+	}
+
+	function hideCameraErrorModal() {
+		var modal = byId("mcastDesktopCameraErrorModal");
+		if (modal) {
+			modal.hidden = true;
+		}
+	}
+
+	function joinWithoutCamera() {
+		state.joinWithoutCamera = true;
+		hideCameraErrorModal();
+		applyNoCameraSession();
+		setVideoTracksEnabled(false);
+		joinRoom();
+	}
+
+	function applyNoCameraSession() {
+		if (!window.session) {
+			return;
+		}
+		window.session.videoDevice = 0;
+		window.session.videoMuted = true;
 	}
 
 	function leaveRoom() {
@@ -815,11 +894,24 @@
 		setIconButton("mcastDesktopMicToggle", icons.mic, "Mute");
 		setIconButton("mcastDesktopCameraToggle", icons.camera, "Camera");
 		setIconButton("mcastDesktopPreviewButton", icons.preview, "Preview");
-		setIconButton("mcastDesktopSetupSettingsButton", icons.settings, "Settings");
 		setIconButton("mcastDesktopRoomMicButton", icons.mic, "Mic");
 		setIconButton("mcastDesktopRoomCameraButton", icons.camera, "Camera");
 		setIconButton("mcastDesktopSettingsButton", icons.settings, "Settings");
 		setIconButton("mcastDesktopLeaveButton", icons.leave, "Leave");
+	}
+
+	function guardDesktopLogo() {
+		var logo = document.querySelector(".mcast-desktop__logo");
+		if (!logo) {
+			return;
+		}
+		logo.addEventListener("error", function () {
+			logo.classList.add("is-logo-missing");
+			logo.removeAttribute("src");
+		});
+		if (logo.complete && !logo.naturalWidth) {
+			logo.classList.add("is-logo-missing");
+		}
 	}
 
 	function setIconButton(id, icon, label) {
@@ -852,7 +944,7 @@
 
 	function getPermissionMessage(error) {
 		if (!error) {
-			return "Unable to access camera or microphone.";
+			return "Camera could not start. Check your browser permissions, then try again.";
 		}
 		if (error.name === "NotAllowedError" || error.name === "SecurityError") {
 			return "Camera or microphone permission was blocked. Allow access in the browser prompt, then try again.";
@@ -860,7 +952,15 @@
 		if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
 			return "No matching camera or microphone was found. Check your device settings.";
 		}
-		return error.message || "Unable to access camera or microphone.";
+		return "Camera could not start. Try again, choose another camera, or join without camera.";
+	}
+
+	function summarizeError(error) {
+		return {
+			name: error && error.name,
+			message: error && error.message,
+			constraint: error && error.constraint
+		};
 	}
 
 	function summarizeStream(stream) {

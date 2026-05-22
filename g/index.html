@@ -47,8 +47,8 @@
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4043" />
-		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=6" />
-		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=5" />
+		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=7" />
+		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=6" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
@@ -111,14 +111,15 @@
 			<section class="DesktopRoomShell mcast-desktop__shell" data-desktop-step="studio">
 				<header class="DesktopTopBar mcast-desktop__topbar">
 					<div class="mcast-desktop__brand">
-						<img class="mcast-desktop__logo" src="./media/mcast-logo.png" alt="MCast Studio" />
+						<img class="mcast-desktop__logo" src="./media/mcast-apple-touch-icon.png" alt="" />
+						<span class="mcast-desktop__logo-fallback" aria-hidden="true">M</span>
 						<div>
 							<div class="mcast-desktop__brand-name">MCast Studio</div>
 							<div id="mcastDesktopInviteMeta" class="mcast-desktop__brand-meta">Guest invite</div>
 						</div>
-						<button id="mcastDesktopSettingsButton" type="button" class="mcast-desktop__top-settings" aria-label="Settings">Settings</button>
 					</div>
 					<div class="mcast-desktop__top-actions">
+						<button id="mcastDesktopSettingsButton" type="button" class="mcast-desktop__top-settings" aria-label="Settings">Settings</button>
 						<span id="mcastDesktopQuality" class="mcast-desktop__quality">Secure link</span>
 						<span id="mcastDesktopLiveBadge" class="mcast-desktop__live-badge">Backstage</span>
 					</div>
@@ -142,7 +143,6 @@
 									<button id="mcastDesktopMicToggle" type="button" class="mcast-desktop__icon-button">Mute mic</button>
 									<button id="mcastDesktopCameraToggle" type="button" class="mcast-desktop__icon-button">Camera off</button>
 									<button id="mcastDesktopPreviewButton" type="button" class="mcast-desktop__icon-button">Preview</button>
-									<button id="mcastDesktopSetupSettingsButton" type="button" class="mcast-desktop__icon-button">Settings</button>
 								</div>
 							</div>
 							<div class="mcast-desktop__meter-card">
@@ -217,6 +217,21 @@
 					<div class="mcast-desktop__options">
 						<label><input id="mcastDesktopEchoCancel" type="checkbox" checked /> Echo cancellation</label>
 						<label><input id="mcastDesktopNoiseSuppress" type="checkbox" checked /> Noise suppression</label>
+					</div>
+				</div>
+				<div id="mcastDesktopCameraErrorModal" class="mcast-desktop__modal" role="dialog" aria-modal="true" aria-labelledby="mcastDesktopCameraErrorTitle" hidden>
+					<div class="mcast-desktop__modal-card">
+						<div class="mcast-desktop__modal-icon" aria-hidden="true">!</div>
+						<div class="mcast-desktop__modal-copy">
+							<h2 id="mcastDesktopCameraErrorTitle">Camera could not start</h2>
+							<p>Your camera may already be used by another app, or the browser could not access it.</p>
+							<small>Close apps like Zoom, OBS, browser tabs, or other camera tools, then try again.</small>
+						</div>
+						<div class="mcast-desktop__modal-actions">
+							<button id="mcastDesktopCameraRetryButton" type="button" class="mcast-desktop__button mcast-desktop__button--primary">Try again</button>
+							<button id="mcastDesktopChooseCameraButton" type="button" class="mcast-desktop__button mcast-desktop__button--secondary">Choose another camera</button>
+							<button id="mcastDesktopJoinNoCameraButton" type="button" class="mcast-desktop__button mcast-desktop__button--ghost">Join without camera</button>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -3689,7 +3704,7 @@
 
 		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1415"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1064"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=6"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=7"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=5"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		
