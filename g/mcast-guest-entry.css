@@ -411,6 +411,9 @@ body:not(.mcast-room-active) .mcast-entry__stage-foot {
 	position: relative;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
+	justify-content: center;
+	align-content: center;
+	align-items: stretch;
 	gap: 12px;
 	min-height: 350px;
 	padding: 12px;
@@ -471,6 +474,9 @@ body:not(.mcast-room-active) .mcast-entry__remote-tiles {
 	border: 1px solid var(--mcast-border);
 	background: #030712;
 	aspect-ratio: 16 / 9;
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
 }
 
 .mcast-entry__tile--local {
@@ -478,16 +484,50 @@ body:not(.mcast-room-active) .mcast-entry__remote-tiles {
 }
 
 body.mcast-room-active .mcast-entry__tile--local {
-	min-height: auto;
+	min-height: 0;
 }
 
 body.mcast-room-active .mcast-entry__room-grid {
-	grid-template-columns: minmax(220px, 1fr) minmax(260px, 1.35fr);
-	align-content: start;
+	--mcast-room-tile-min: 220px;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--mcast-room-tile-min)), 1fr));
+	align-content: center;
+	justify-content: center;
 }
 
 body.mcast-room-active .mcast-entry__remote-tiles {
+	display: contents;
+}
+
+body.mcast-room-active .mcast-entry__room-grid[data-tile-count="1"] {
+	grid-template-columns: minmax(240px, min(760px, 100%));
+	grid-auto-rows: auto;
+}
+
+body.mcast-room-active .mcast-entry__room-grid[data-tile-count="2"],
+body.mcast-room-active .mcast-entry__room-grid[data-tile-count="3"],
+body.mcast-room-active .mcast-entry__room-grid[data-tile-count="4"] {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.mcast-room-active .mcast-entry__room-grid[data-tile-count="3"]::after {
+	content: "";
+	display: block;
+	aspect-ratio: 16 / 9;
+}
+
+body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__room-grid {
+	--mcast-room-tile-min: 100%;
+	grid-template-columns: minmax(0, 1fr);
 	align-content: start;
+}
+
+body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__room-grid[data-tile-count="3"]::after {
+	display: none;
+	content: none;
+}
+
+body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid {
+	--mcast-room-tile-min: 260px;
 }
 
 .mcast-entry__tile video {
@@ -547,6 +587,9 @@ body.mcast-room-active .mcast-entry__remote-tiles {
 
 body.mcast-room-active .mcast-entry__waiting.is-visible {
 	display: grid;
+	grid-column: 1 / -1;
+	justify-self: center;
+	width: min(100%, 430px);
 }
 
 .mcast-entry__controls {
@@ -594,6 +637,10 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	border-color: rgba(251, 113, 133, .34);
 	background: rgba(127, 29, 29, .42);
 	color: #fecdd3;
+}
+
+.mcast-entry__control--orientation {
+	display: none;
 }
 
 .mcast-entry__room-status {
@@ -672,6 +719,10 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 
 	body.mcast-room-active .mcast-entry__layout {
 		grid-template-columns: 1fr;
+	}
+
+	body.mcast-room-active .mcast-entry__control--orientation {
+		display: inline-flex;
 	}
 }
 
@@ -758,15 +809,25 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 		min-height: 220px;
 	}
 
-	body.mcast-room-active .mcast-entry__room-grid {
+	body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__room-grid {
 		grid-template-columns: 1fr;
 	}
 
-	.mcast-entry__tile--local {
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid[data-tile-count="2"],
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid[data-tile-count="3"],
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid[data-tile-count="4"] {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	body:not(.mcast-room-active) .mcast-entry__tile--local {
 		min-height: 260px;
 	}
 
-	.mcast-entry__remote-tiles,
+	body.mcast-room-active .mcast-entry__preview,
+	body.mcast-room-active .mcast-entry__preview video {
+		min-height: 0;
+	}
+
 	.mcast-entry__settings {
 		grid-template-columns: 1fr;
 	}
@@ -788,7 +849,7 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 
 	body.mcast-room-active .mcast-entry__controls {
 		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(5, minmax(0, 1fr));
 		width: 100%;
 		gap: 8px;
 	}
@@ -924,8 +985,11 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	}
 
 	.mcast-entry__room-grid {
-		grid-template-columns: minmax(220px, .85fr) minmax(260px, 1.15fr);
 		min-height: 220px;
+	}
+
+	body:not(.mcast-room-active) .mcast-entry__room-grid {
+		grid-template-columns: minmax(220px, .85fr) minmax(260px, 1.15fr);
 	}
 
 	.mcast-entry__stage-head,

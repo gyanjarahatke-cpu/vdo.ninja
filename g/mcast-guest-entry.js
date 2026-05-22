@@ -11,7 +11,9 @@
 		slowTimer: 0,
 		lastError: "",
 		deviceNoticeShown: false,
-		lastLocalStreamDebug: ""
+		lastLocalStreamDebug: "",
+		roomLayoutMode: "",
+		roomLayoutModeManual: false
 	};
 
 	if (document.readyState === "loading") {
@@ -32,6 +34,7 @@
 		installWarningBridge();
 		wireUi();
 		decorateButtons();
+		initRoomLayoutMode();
 		movePreviewVideo();
 		fillRouteDetails();
 		setStatus("Ready when you are. Preview starts only after you allow it.", "ready");
@@ -47,6 +50,8 @@
 		window.addEventListener("offline", function () {
 			setStatus("You appear to be offline. Check your connection, then rejoin.", "error");
 		});
+		window.addEventListener("resize", updateRoomLayoutButton);
+		window.addEventListener("orientationchange", updateRoomLayoutButton);
 	}
 
 	function wireUi() {
@@ -58,6 +63,7 @@
 		var muteButton = byId("mcastMuteButton");
 		var cameraButton = byId("mcastCameraButton");
 		var settingsButton = byId("mcastSettingsButton");
+		var orientationButton = byId("mcastOrientationButton");
 		var leaveButton = byId("mcastLeaveButton");
 		var roomCameraSelect = byId("mcastRoomCameraSelect");
 		var roomMicSelect = byId("mcastRoomMicSelect");
@@ -136,6 +142,9 @@
 		if (settingsButton) {
 			settingsButton.addEventListener("click", toggleSettingsPanel);
 		}
+		if (orientationButton) {
+			orientationButton.addEventListener("click", toggleRoomLayoutMode);
+		}
 		if (leaveButton) {
 			leaveButton.addEventListener("click", leaveRoom);
 		}
@@ -178,6 +187,7 @@
 		setButtonContent(byId("mcastMuteButton"), "mic", "Mute mic");
 		setButtonContent(byId("mcastCameraButton"), "video-off", "Camera off");
 		setButtonContent(byId("mcastSettingsButton"), "settings", "Settings");
+		setButtonContent(byId("mcastOrientationButton"), "landscape", "Landscape");
 		setButtonContent(byId("mcastLeaveButton"), "leave", "Leave");
 	}
 
@@ -246,6 +256,7 @@
 			state.joined = true;
 			document.body.classList.add("mcast-room-active");
 			root.classList.add("is-joined");
+			applyRoomLayoutMode();
 			setRoomView(true);
 			bindLocalVideo("joined");
 			setStatus("You are connected. Keep this tab open while you are on stream.", "ready");
@@ -594,6 +605,7 @@
 			return video.id !== "previewWebcam" && video.id !== "videosource" && video.srcObject;
 		});
 		if (!sources.length && !state.joined) {
+			updateRoomGridState(1, 0);
 			return;
 		}
 		var existing = {};
@@ -620,6 +632,7 @@
 		if (waiting) {
 			waiting.classList.toggle("is-visible", state.joined && sources.length === 0);
 		}
+		updateRoomGridState(state.joined ? sources.length + 1 : 1, sources.length);
 		if (state.joined) {
 			setRoomStatus(sources.length ? sources.length + " remote guest" + (sources.length === 1 ? "" : "s") + " connected" : "Connected - waiting for others");
 		}
@@ -662,6 +675,125 @@
 			settingsButton.setAttribute("aria-expanded", settingsOpen ? "true" : "false");
 			setButtonContent(settingsButton, settingsOpen ? "close" : "settings", settingsOpen ? "Close" : "Settings");
 		}
+		updateRoomLayoutButton();
+	}
+
+	function initRoomLayoutMode() {
+		var stored = "";
+		try {
+			stored = window.sessionStorage.getItem("mcastRoomLayoutMode") || "";
+		} catch (error) {}
+		if (isValidRoomLayoutMode(stored)) {
+			state.roomLayoutModeManual = true;
+			setRoomLayoutMode(stored, false);
+			return;
+		}
+		setRoomLayoutMode(detectInitialRoomLayoutMode(), false);
+	}
+
+	function detectInitialRoomLayoutMode() {
+		var candidates = [
+			readParam("orientation"),
+			readParam("orient"),
+			readParam("roomlayout"),
+			readParam("layout"),
+			window.session && window.session.orientation
+		].map(function (value) {
+			return String(value || "").toLowerCase();
+		});
+		if (candidates.some(function (value) { return value.indexOf("portrait") !== -1; }) || hasParam("portrait") || hasParam("forceportrait") || hasParam("forcedportrait") || hasParam("fp")) {
+			return "portrait";
+		}
+		if (candidates.some(function (value) { return value.indexOf("landscape") !== -1; }) || hasParam("landscape") || hasParam("forcelandscape") || hasParam("forcedlandscape") || hasParam("fl")) {
+			return "landscape";
+		}
+		return isMobileViewport() && window.matchMedia && window.matchMedia("(orientation: portrait)").matches ? "portrait" : "landscape";
+	}
+
+	function toggleRoomLayoutMode() {
+		setRoomLayoutMode(state.roomLayoutMode === "landscape" ? "portrait" : "landscape", true);
+	}
+
+	function setRoomLayoutMode(mode, persist) {
+		if (!isValidRoomLayoutMode(mode)) {
+			mode = "landscape";
+		}
+		state.roomLayoutMode = mode;
+		state.roomLayoutModeManual = state.roomLayoutModeManual || !!persist;
+		document.body.classList.toggle("mcast-room-layout-landscape", mode === "landscape");
+		document.body.classList.toggle("mcast-room-layout-portrait", mode === "portrait");
+		document.body.dataset.mcastRoomLayoutMode = mode;
+		if (root) {
+			root.dataset.roomLayoutMode = mode;
+		}
+		if (persist) {
+			try {
+				window.sessionStorage.setItem("mcastRoomLayoutMode", mode);
+			} catch (error) {}
+		}
+		updateRoomLayoutButton();
+	}
+
+	function applyRoomLayoutMode() {
+		if (!state.roomLayoutMode || !state.roomLayoutModeManual) {
+			setRoomLayoutMode(detectInitialRoomLayoutMode(), false);
+			return;
+		}
+		setRoomLayoutMode(state.roomLayoutMode, false);
+	}
+
+	function updateRoomLayoutButton() {
+		var button = byId("mcastOrientationButton");
+		if (!button) {
+			return;
+		}
+		var nextMode = state.roomLayoutMode === "landscape" ? "portrait" : "landscape";
+		var label = state.roomLayoutMode === "landscape" ? "Portrait" : "Landscape";
+		button.setAttribute("aria-pressed", state.roomLayoutMode === "landscape" ? "true" : "false");
+		button.title = "Switch to " + nextMode + " layout";
+		setButtonContent(button, nextMode, label);
+	}
+
+	function updateRoomGridState(tileCount, remoteCount) {
+		var grid = byId("mcastRoomGrid");
+		if (!grid) {
+			return;
+		}
+		tileCount = Math.max(1, Number(tileCount) || 1);
+		remoteCount = Math.max(0, Number(remoteCount) || 0);
+		grid.dataset.tileCount = String(tileCount);
+		grid.dataset.remoteCount = String(remoteCount);
+		grid.classList.toggle("has-remotes", remoteCount > 0);
+	}
+
+	function readParam(name) {
+		if (window.urlParams && typeof window.urlParams.get === "function") {
+			return window.urlParams.get(name);
+		}
+		try {
+			return new URLSearchParams(window.location.search).get(name);
+		} catch (error) {
+			return "";
+		}
+	}
+
+	function hasParam(name) {
+		if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has(name)) {
+			return true;
+		}
+		try {
+			return new URLSearchParams(window.location.search).has(name);
+		} catch (error) {
+			return false;
+		}
+	}
+
+	function isValidRoomLayoutMode(mode) {
+		return mode === "landscape" || mode === "portrait";
+	}
+
+	function isMobileViewport() {
+		return !!(window.matchMedia && window.matchMedia("(max-width: 920px), (pointer: coarse)").matches);
 	}
 
 	function isMicMuted() {
@@ -928,7 +1060,9 @@
 			settings: "<path d=\"M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z\"></path><path d=\"M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2.1 2.1 0 0 1-3 3l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21a2.1 2.1 0 0 1-4.2 0v-.2a1.8 1.8 0 0 0-1.2-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a2.1 2.1 0 1 1-3-3l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H2a2.1 2.1 0 0 1 0-4.2h.2a1.8 1.8 0 0 0 1.7-1.2 1.8 1.8 0 0 0-.4-2l-.1-.1a2.1 2.1 0 0 1 3-3l.1.1a1.8 1.8 0 0 0 2 .4H8.6A1.8 1.8 0 0 0 9.7 2V2a2.1 2.1 0 0 1 4.2 0v.2a1.8 1.8 0 0 0 1.2 1.7 1.8 1.8 0 0 0 2-.4l.1-.1a2.1 2.1 0 1 1 3 3l-.1.1a1.8 1.8 0 0 0-.4 2v.1A1.8 1.8 0 0 0 22 9.7h0a2.1 2.1 0 0 1 0 4.2h-.2a1.8 1.8 0 0 0-1.7 1.1Z\"></path>",
 			close: "<path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path>",
 			leave: "<path d=\"M10 17l5-5-5-5\"></path><path d=\"M15 12H3\"></path><path d=\"M21 19V5a2 2 0 0 0-2-2h-6\"></path>",
-			join: "<path d=\"M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4\"></path><path d=\"M10 17l5-5-5-5\"></path><path d=\"M15 12H3\"></path>"
+			join: "<path d=\"M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4\"></path><path d=\"M10 17l5-5-5-5\"></path><path d=\"M15 12H3\"></path>",
+			landscape: "<rect x=\"3\" y=\"6\" width=\"18\" height=\"12\" rx=\"2\"></rect><path d=\"M8 21h8\"></path><path d=\"M12 18v3\"></path>",
+			portrait: "<rect x=\"7\" y=\"2\" width=\"10\" height=\"20\" rx=\"2\"></rect><path d=\"M11 18h2\"></path>"
 		};
 		return "<svg class=\"mcast-entry__icon\" viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" + (paths[name] || paths.settings) + "</svg>";
 	}
