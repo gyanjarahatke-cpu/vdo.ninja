@@ -425,7 +425,7 @@ body:not(.mcast-room-active) .mcast-entry__stage-foot {
 	grid-template-columns: minmax(0, 1fr);
 	justify-content: center;
 	align-content: center;
-	align-items: stretch;
+	align-items: center;
 	gap: 12px;
 	min-height: 350px;
 	padding: 12px;
@@ -782,6 +782,13 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid {
 		min-height: 0;
 		align-content: center;
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__tile--portrait {
+		width: auto;
+		height: min(100%, calc(100dvh - 146px));
+		max-width: 100%;
+		justify-self: center;
 	}
 
 	body.mcast-room-active.mcast-room-layout-landscape.mcast-viewport-portrait .mcast-entry__orientation-hint:not([hidden]) {
