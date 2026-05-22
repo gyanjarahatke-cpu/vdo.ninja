@@ -41,6 +41,45 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 	await expect(page.locator("text=Waiting for the room")).toBeHidden();
 });
 
+test("force-landscape params do not rotate mobile setup UI in portrait viewport", async ({ page }) => {
+	await page.goto(baseUrl + "&fl=1&forcelandscape=1", { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 6000 });
+	await page.evaluate(() => {
+		if (typeof window.updateForceRotatedCSS === "function") {
+			window.updateForceRotatedCSS(90);
+		}
+	});
+	await expect.poll(() => page.evaluate(() => ({
+		bodyTransform: getComputedStyle(document.body).transform,
+		rootTransform: getComputedStyle(document.getElementById("mcastMobileGuest")).transform,
+		setupTransform: getComputedStyle(document.querySelector(".mcast-mobile__setup")).transform,
+		setupCardTransform: getComputedStyle(document.querySelector(".mcast-mobile__setup-card")).transform,
+		bodyRotated: document.body.dataset.rotated || ""
+	})), { timeout: 5000 }).toEqual({
+		bodyTransform: "none",
+		rootTransform: "none",
+		setupTransform: "none",
+		setupCardTransform: "none",
+		bodyRotated: ""
+	});
+
+	await page.locator("#mcastMobileAllowButton").click();
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup", { timeout: 12000 });
+	await expect.poll(() => page.evaluate(() => ({
+		bodyTransform: getComputedStyle(document.body).transform,
+		rootTransform: getComputedStyle(document.getElementById("mcastMobileGuest")).transform,
+		setupTransform: getComputedStyle(document.querySelector(".mcast-mobile__setup")).transform,
+		micPanelTransform: getComputedStyle(document.querySelector(".mcast-mobile__mic-panel")).transform,
+		bodyRotated: document.body.dataset.rotated || ""
+	})), { timeout: 5000 }).toEqual({
+		bodyTransform: "none",
+		rootTransform: "none",
+		setupTransform: "none",
+		micPanelTransform: "none",
+		bodyRotated: ""
+	});
+});
+
 test.describe("mobile landscape backstage", () => {
 	test.use({ viewport: { width: 844, height: 390 } });
 

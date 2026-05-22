@@ -40,6 +40,7 @@
 		}
 		document.body.classList.add("mcast-mobile-guest-active");
 		document.documentElement.classList.add("mcast-mobile-guest-active");
+		clearForcedBodyRotation();
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
 		decorateButtons();
@@ -72,6 +73,20 @@
 			showStatus("You appear to be offline. Check your connection and try again.", true);
 		});
 		logMobile("mobile app initialized", getViewportDebug());
+	}
+
+	function clearForcedBodyRotation() {
+		if (!document.body) {
+			return;
+		}
+		document.body.style.transform = "";
+		document.body.style.position = "";
+		document.body.style.top = "";
+		document.body.style.left = "";
+		document.body.style.height = "";
+		document.body.style.width = "";
+		document.body.style.transformOrigin = "";
+		document.body.dataset.rotated = "";
 	}
 
 	function isMobileGuestViewport() {

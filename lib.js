@@ -24550,7 +24550,11 @@ function updateForceRotate(skipLastBit = false) {
 }
 
 function updateForceRotatedCSS(rotateThis = session.forceRotate) {
-	if (document.body && document.body.classList && document.body.classList.contains("mcast-custom-entry")) {
+	if (document.body && document.body.classList && (
+		document.body.classList.contains("mcast-custom-entry") ||
+		document.body.classList.contains("mcast-mobile-guest-active") ||
+		document.body.classList.contains("mcast-desktop-guest-active")
+	)) {
 		document.body.style.transform = "";
 		document.body.style.position = "";
 		document.body.style.top = "";
