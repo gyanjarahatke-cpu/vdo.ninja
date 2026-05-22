@@ -47,7 +47,7 @@
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4043" />
-		<link rel="stylesheet" href="./g/mcast-guest-desktop.css?v=2" />
+		<link rel="stylesheet" href="./g/mcast-guest-desktop.css?v=4" />
 		<link rel="stylesheet" href="./g/mcast-guest-mobile.css?v=2" />
 		<link rel="stylesheet" href="./g/mcast-guest-entry.css?v=13" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
@@ -125,64 +125,46 @@
 				</header>
 
 				<section class="mcast-desktop__setup" data-desktop-panel="setup">
-					<div class="mcast-desktop__setup-card">
-						<div class="mcast-desktop__preview-column">
-							<div id="mcastDesktopPreviewSurface" class="mcast-desktop__preview">
-								<div class="mcast-desktop__preview-empty">
-									<strong>Camera preview</strong>
-									<span>Enable preview when you are ready to grant camera and microphone access.</span>
+					<div class="mcast-desktop__setup-flow">
+						<div class="mcast-desktop__setup-copy">
+							<h1>Let’s set up your studio</h1>
+							<p>Entering the studio will not automatically start the broadcast.</p>
+						</div>
+						<div class="mcast-desktop__setup-card">
+							<div class="mcast-desktop__preview-column">
+								<div id="mcastDesktopPreviewSurface" class="mcast-desktop__preview">
+									<div class="mcast-desktop__preview-empty">
+										<strong>Camera preview</strong>
+										<span>Start preview or enter studio to allow camera and mic access.</span>
+									</div>
+								</div>
+								<div class="mcast-desktop__setup-controls" aria-label="Studio setup controls">
+									<button id="mcastDesktopMicToggle" type="button" class="mcast-desktop__icon-button">Mute mic</button>
+									<button id="mcastDesktopCameraToggle" type="button" class="mcast-desktop__icon-button">Camera off</button>
+									<button id="mcastDesktopPreviewButton" type="button" class="mcast-desktop__icon-button">Preview</button>
+									<button id="mcastDesktopSetupSettingsButton" type="button" class="mcast-desktop__icon-button">Settings</button>
 								</div>
 							</div>
-							<div class="mcast-desktop__meter-row">
-								<span>Mic level</span>
+							<div class="mcast-desktop__meter-card">
+								<div class="mcast-desktop__meter-head">
+									<span>Microphone</span>
+									<strong>Mic check</strong>
+								</div>
 								<div id="mcastDesktopAudioMeter" class="mcast-desktop__meter" aria-hidden="true">
 									<i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
 								</div>
 							</div>
 						</div>
 
-						<aside class="mcast-desktop__setup-panel">
-							<p class="mcast-desktop__eyebrow">Backstage check</p>
-							<h1>Set up before you join</h1>
-							<p class="mcast-desktop__subcopy">Check your name, camera, and audio before entering the studio.</p>
-
+						<div class="mcast-desktop__setup-form">
 							<label class="mcast-desktop__field" for="mcastDesktopGuestName">
 								<span>Display name</span>
 								<input id="mcastDesktopGuestName" class="mcast-desktop__input" type="text" autocomplete="name" maxlength="60" placeholder="Your name" />
 							</label>
+							<button id="mcastDesktopJoinButton" type="button" class="mcast-desktop__button mcast-desktop__button--primary">Enter studio</button>
+						</div>
 
-							<div class="mcast-desktop__toggle-grid">
-								<button id="mcastDesktopMicToggle" type="button" class="mcast-desktop__control">Mute mic</button>
-								<button id="mcastDesktopCameraToggle" type="button" class="mcast-desktop__control">Camera off</button>
-							</div>
-
-							<div class="mcast-desktop__device-grid">
-								<label class="mcast-desktop__field" for="mcastDesktopCameraSelect">
-									<span>Camera</span>
-									<select id="mcastDesktopCameraSelect" class="mcast-desktop__select">
-										<option value="">Camera will appear after permission</option>
-									</select>
-								</label>
-								<label class="mcast-desktop__field" for="mcastDesktopMicSelect">
-									<span>Microphone</span>
-									<select id="mcastDesktopMicSelect" class="mcast-desktop__select">
-										<option value="">Microphone will appear after permission</option>
-									</select>
-								</label>
-							</div>
-
-							<div class="mcast-desktop__options">
-								<label><input id="mcastDesktopEchoCancel" type="checkbox" checked /> Echo cancellation</label>
-								<label><input id="mcastDesktopNoiseSuppress" type="checkbox" checked /> Noise suppression</label>
-							</div>
-
-							<div class="mcast-desktop__actions">
-								<button id="mcastDesktopPreviewButton" type="button" class="mcast-desktop__button mcast-desktop__button--secondary">Enable preview</button>
-								<button id="mcastDesktopJoinButton" type="button" class="mcast-desktop__button mcast-desktop__button--primary">Join backstage</button>
-							</div>
-
-							<div id="mcastDesktopStatus" class="mcast-desktop__status" role="status" aria-live="polite">Loading your secure invite...</div>
-						</aside>
+						<div id="mcastDesktopStatus" class="mcast-desktop__status" role="status" aria-live="polite">Loading your secure invite...</div>
 					</div>
 				</section>
 
@@ -195,8 +177,8 @@
 							<div id="mcastDesktopRemoteTiles" class="mcast-desktop__remote-tiles" aria-live="polite"></div>
 						</div>
 						<div id="mcastDesktopBackstageMessage" class="mcast-desktop__backstage-card">
-							<strong>You are backstage</strong>
-							<span>The host will add you to the stream shortly. Keep this tab open.</span>
+							<strong>Backstage</strong>
+							<span>Ready for host</span>
 						</div>
 					</div>
 
@@ -206,35 +188,47 @@
 							<strong id="mcastDesktopRoomState">Ready backstage</strong>
 							<p id="mcastDesktopRoomHint">Your camera and microphone are connected.</p>
 						</div>
-						<div class="mcast-desktop__side-card">
-							<span class="mcast-desktop__side-label">Participants</span>
-							<strong id="mcastDesktopParticipantCount">1 guest</strong>
-							<p>Remote guests appear on the studio stage as they connect.</p>
-						</div>
 					</aside>
 
 					<div class="mcast-desktop__bottom-bar">
 						<button id="mcastDesktopRoomMicButton" type="button" class="mcast-desktop__round-control">Mute</button>
 						<button id="mcastDesktopRoomCameraButton" type="button" class="mcast-desktop__round-control">Camera</button>
+						<button id="mcastDesktopRoomChatButton" type="button" class="mcast-desktop__round-control">Chat</button>
 						<button id="mcastDesktopSettingsButton" type="button" class="mcast-desktop__round-control">Settings</button>
 						<button id="mcastDesktopLeaveButton" type="button" class="mcast-desktop__round-control mcast-desktop__round-control--danger">Leave</button>
 					</div>
-
-					<div id="mcastDesktopSettingsPanel" class="mcast-desktop__settings-popover" hidden>
-						<label class="mcast-desktop__field" for="mcastDesktopRoomCameraSelect">
-							<span>Camera</span>
-							<select id="mcastDesktopRoomCameraSelect" class="mcast-desktop__select">
-								<option value="">Camera will appear after permission</option>
-							</select>
-						</label>
-						<label class="mcast-desktop__field" for="mcastDesktopRoomMicSelect">
-							<span>Microphone</span>
-							<select id="mcastDesktopRoomMicSelect" class="mcast-desktop__select">
-								<option value="">Microphone will appear after permission</option>
-							</select>
-						</label>
-					</div>
 				</section>
+
+				<div id="mcastDesktopSettingsPanel" class="mcast-desktop__settings-popover" hidden>
+					<label class="mcast-desktop__field" for="mcastDesktopCameraSelect">
+						<span>Camera</span>
+						<select id="mcastDesktopCameraSelect" class="mcast-desktop__select">
+							<option value="">Camera will appear after permission</option>
+						</select>
+					</label>
+					<label class="mcast-desktop__field" for="mcastDesktopMicSelect">
+						<span>Microphone</span>
+						<select id="mcastDesktopMicSelect" class="mcast-desktop__select">
+							<option value="">Microphone will appear after permission</option>
+						</select>
+					</label>
+					<label class="mcast-desktop__field" for="mcastDesktopRoomCameraSelect">
+						<span>Room camera</span>
+						<select id="mcastDesktopRoomCameraSelect" class="mcast-desktop__select">
+							<option value="">Camera will appear after permission</option>
+						</select>
+					</label>
+					<label class="mcast-desktop__field" for="mcastDesktopRoomMicSelect">
+						<span>Room microphone</span>
+						<select id="mcastDesktopRoomMicSelect" class="mcast-desktop__select">
+							<option value="">Microphone will appear after permission</option>
+						</select>
+					</label>
+					<div class="mcast-desktop__options">
+						<label><input id="mcastDesktopEchoCancel" type="checkbox" checked /> Echo cancellation</label>
+						<label><input id="mcastDesktopNoiseSuppress" type="checkbox" checked /> Noise suppression</label>
+					</div>
+				</div>
 			</section>
 		</main>
 		<main id="mcastMobileGuest" class="mcast-mobile" aria-label="MCast mobile guest studio">
@@ -3804,7 +3798,7 @@
 
 		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1415"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1064"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-desktop.js?v=3"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-desktop.js?v=4"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-mobile.js?v=3"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-entry.js?v=13"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>

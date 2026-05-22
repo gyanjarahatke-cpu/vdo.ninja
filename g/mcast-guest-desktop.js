@@ -15,6 +15,15 @@
 		lastStatus: ""
 	};
 
+	var icons = {
+		mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v4a4 4 0 0 0 4 4Z"/><path d="M19 10a7 7 0 0 1-14 0"/><path d="M12 17v4"/><path d="M8 21h8"/></svg>',
+		camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l5-3v10l-5-3v3H4V7h11v3Z"/></svg>',
+		settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06A1.8 1.8 0 0 0 8.4 19.3a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.8 14.7 1.8 1.8 0 0 0 2.15 13H2a2.1 2.1 0 0 1 0-4.2h.15A1.8 1.8 0 0 0 3.8 7.7a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2.1 2.1 0 1 1 6.37 2.7l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.5 1.45V1.4a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.1H21a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z"/></svg>',
+		preview: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>',
+		chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-6.2A8 8 0 1 1 21 12Z"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>',
+		leave: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg>'
+	};
+
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", init);
 	} else {
@@ -31,6 +40,7 @@
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
 		wireDesktopUi();
+		decorateDesktopButtons();
 		fillDesktopRouteDetails();
 		restoreGuestName();
 		setStep("loading");
@@ -85,7 +95,11 @@
 		on("mcastDesktopRoomMicButton", "click", toggleMute);
 		on("mcastDesktopCameraToggle", "click", toggleCamera);
 		on("mcastDesktopRoomCameraButton", "click", toggleCamera);
+		on("mcastDesktopSetupSettingsButton", "click", toggleSettings);
 		on("mcastDesktopSettingsButton", "click", toggleSettings);
+		on("mcastDesktopRoomChatButton", "click", function () {
+			setStatus("Chat is disabled for this guest room.");
+		});
 		on("mcastDesktopLeaveButton", "click", leaveRoom);
 	}
 
@@ -131,7 +145,7 @@
 			setStatus(getPermissionMessage(error), true);
 			throw error;
 		} finally {
-			setButtonBusy("mcastDesktopPreviewButton", false, "Enable preview");
+			setButtonBusy("mcastDesktopPreviewButton", false, "Preview");
 		}
 	}
 
@@ -167,7 +181,7 @@
 			setStatus(getPermissionMessage(error), true);
 		} finally {
 			state.joining = false;
-			setButtonBusy("mcastDesktopJoinButton", false, "Join backstage");
+			setButtonBusy("mcastDesktopJoinButton", false, "Enter studio");
 		}
 	}
 
@@ -437,7 +451,7 @@
 		});
 		var tileCount = Math.max(1, sources.length + 1);
 		grid.dataset.tileCount = String(tileCount);
-		byId("mcastDesktopParticipantCount").textContent = tileCount + (tileCount === 1 ? " guest" : " guests");
+		setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
 		if (state.joined && sources.length > 0 && state.step !== "live") {
 			setStep("live");
 			setRoomState("Live room", "Guests are connected on the studio stage.");
@@ -552,7 +566,11 @@
 			return;
 		}
 		button.disabled = !!busy;
-		button.textContent = label;
+		if (button.classList.contains("mcast-desktop__icon-button") || button.classList.contains("mcast-desktop__round-control")) {
+			setButtonText(id, label);
+		} else {
+			button.textContent = label;
+		}
 	}
 
 	function disableLegacyAuxiliaryModules() {
@@ -746,7 +764,51 @@
 	}
 
 	function setButtonText(id, text) {
-		setText(id, text);
+		var button = byId(id);
+		if (!button) {
+			return;
+		}
+		var icon = button.dataset.icon || "";
+		if (icon) {
+			button.dataset.label = text;
+			button.innerHTML = icon + "<span>" + escapeHtml(text) + "</span>";
+			button.setAttribute("aria-label", text);
+		} else {
+			button.textContent = text;
+		}
+	}
+
+	function decorateDesktopButtons() {
+		setIconButton("mcastDesktopMicToggle", icons.mic, "Mute");
+		setIconButton("mcastDesktopCameraToggle", icons.camera, "Camera");
+		setIconButton("mcastDesktopPreviewButton", icons.preview, "Preview");
+		setIconButton("mcastDesktopSetupSettingsButton", icons.settings, "Settings");
+		setIconButton("mcastDesktopRoomMicButton", icons.mic, "Mic");
+		setIconButton("mcastDesktopRoomCameraButton", icons.camera, "Camera");
+		setIconButton("mcastDesktopRoomChatButton", icons.chat, "Chat");
+		setIconButton("mcastDesktopSettingsButton", icons.settings, "More");
+		setIconButton("mcastDesktopLeaveButton", icons.leave, "Leave");
+	}
+
+	function setIconButton(id, icon, label) {
+		var button = byId(id);
+		if (!button) {
+			return;
+		}
+		button.dataset.icon = icon;
+		setButtonText(id, label);
+	}
+
+	function escapeHtml(value) {
+		return String(value || "").replace(/[&<>"']/g, function (character) {
+			return {
+				"&": "&amp;",
+				"<": "&lt;",
+				">": "&gt;",
+				'"': "&quot;",
+				"'": "&#39;"
+			}[character];
+		});
 	}
 
 	function toggleClass(id, className, enabled) {
