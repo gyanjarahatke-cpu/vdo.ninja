@@ -273,6 +273,19 @@ body.mcast-room-active .mcast-entry__stage {
 	transition: transform .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease;
 }
 
+.mcast-entry__button-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcast-entry__icon {
+	width: 18px;
+	height: 18px;
+	flex: 0 0 auto;
+}
+
 .mcast-entry__button:hover {
 	transform: translateY(-1px);
 }
@@ -369,6 +382,10 @@ body.mcast-room-active .mcast-entry__stage {
 	border-top: 1px solid var(--mcast-border);
 	border-bottom: 0;
 	flex-wrap: wrap;
+}
+
+body:not(.mcast-room-active) .mcast-entry__stage-foot {
+	display: none;
 }
 
 .mcast-entry__stage-title {
@@ -549,11 +566,28 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	font-size: 13px;
 	font-weight: 850;
 	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 0 13px;
+	transition: transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease, opacity .16s ease;
+}
+
+.mcast-entry__control:hover {
+	transform: translateY(-1px);
+}
+
+.mcast-entry__control:disabled {
+	cursor: progress;
+	opacity: .66;
+	transform: none;
 }
 
 .mcast-entry__control.is-off {
 	border-color: rgba(251, 113, 133, .42);
 	color: #fecdd3;
+	background: rgba(127, 29, 29, .28);
 }
 
 .mcast-entry__control--danger {
@@ -569,6 +603,14 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	line-height: 1.25;
 	font-weight: 850;
 	white-space: nowrap;
+}
+
+.mcast-entry__room-status.is-connected {
+	color: #bbf7d0;
+}
+
+.mcast-entry__room-status.is-disconnected {
+	color: #fecdd3;
 }
 
 .mcast-entry__settings {
@@ -593,7 +635,8 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	animation: mcast-spin .75s linear infinite;
 }
 
-.mcast-entry__button:not(.is-loading) .mcast-entry__spinner {
+.mcast-entry__button:not(.is-loading) .mcast-entry__spinner,
+.mcast-entry__control:not(.is-loading) .mcast-entry__spinner {
 	display: none;
 }
 
@@ -636,6 +679,7 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	.mcast-entry {
 		grid-template-rows: auto 1fr;
 		gap: 12px;
+		padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
 	}
 
 	.mcast-entry__topbar {
@@ -647,19 +691,33 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	}
 
 	.mcast-entry__panel {
-		padding: 18px;
+		padding: 16px;
 		border-radius: 10px;
-		gap: 16px;
+		gap: 12px;
+	}
+
+	.mcast-entry__copy {
+		gap: 6px;
 	}
 
 	.mcast-entry__title {
-		font-size: 28px;
+		font-size: 24px;
 		line-height: 1.05;
 	}
 
 	.mcast-entry__subtitle {
-		font-size: 14px;
-		line-height: 1.45;
+		font-size: 13px;
+		line-height: 1.35;
+	}
+
+	.mcast-entry__form {
+		gap: 12px;
+	}
+
+	.mcast-entry__input,
+	.mcast-entry__select,
+	.mcast-entry__button {
+		min-height: 42px;
 	}
 
 	.mcast-entry__devices,
@@ -667,13 +725,18 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 		grid-template-columns: 1fr;
 	}
 
+	body:not(.mcast-room-active) .mcast-entry__devices {
+		grid-template-columns: 1fr 1fr;
+	}
+
 	.mcast-entry__stage {
 		min-height: 420px;
 		border-radius: 10px;
+		order: -1;
 	}
 
-	body.mcast-room-active .mcast-entry__stage {
-		order: -1;
+	body:not(.mcast-room-active) .mcast-entry__stage {
+		min-height: 300px;
 	}
 
 	.mcast-entry__preview,
@@ -681,9 +744,18 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 		min-height: 260px;
 	}
 
+	body:not(.mcast-room-active) .mcast-entry__preview,
+	body:not(.mcast-room-active) .mcast-entry__preview video {
+		min-height: 205px;
+	}
+
 	.mcast-entry__room-grid {
 		min-height: 280px;
 		padding: 8px;
+	}
+
+	body:not(.mcast-room-active) .mcast-entry__room-grid {
+		min-height: 220px;
 	}
 
 	body.mcast-room-active .mcast-entry__room-grid {
@@ -708,9 +780,113 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	.mcast-entry__control {
 		width: 100%;
 	}
+
+	body.mcast-room-active .mcast-entry__stage-foot {
+		position: sticky;
+		bottom: 0;
+	}
+
+	body.mcast-room-active .mcast-entry__controls {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		width: 100%;
+		gap: 8px;
+	}
+
+	body.mcast-room-active .mcast-entry__control {
+		min-width: 0;
+		width: 100%;
+		min-height: 48px;
+		padding: 0 8px;
+		flex-direction: column;
+		gap: 4px;
+		font-size: 11px;
+	}
+
+	body.mcast-room-active .mcast-entry__control .mcast-entry__icon {
+		width: 19px;
+		height: 19px;
+	}
 }
 
-@media (orientation: landscape) and (max-height: 520px) {
+@media (orientation: landscape) and (max-height: 520px) and (min-width: 641px) and (max-width: 919px) {
+	.mcast-entry {
+		padding: 10px;
+		gap: 8px;
+	}
+
+	.mcast-entry__topbar {
+		max-width: none;
+	}
+
+	.mcast-entry__layout {
+		max-width: none;
+		grid-template-columns: minmax(260px, .88fr) minmax(280px, 1.12fr);
+		gap: 12px;
+		align-items: start;
+	}
+
+	.mcast-entry__panel {
+		padding: 16px;
+		gap: 12px;
+	}
+
+	.mcast-entry__copy {
+		gap: 6px;
+	}
+
+	.mcast-entry__title {
+		font-size: 25px;
+		line-height: 1.05;
+	}
+
+	.mcast-entry__subtitle {
+		font-size: 13px;
+		line-height: 1.35;
+	}
+
+	.mcast-entry__form {
+		gap: 12px;
+	}
+
+	.mcast-entry__input,
+	.mcast-entry__select,
+	.mcast-entry__button {
+		min-height: 40px;
+	}
+
+	.mcast-entry__actions {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 8px;
+	}
+
+	.mcast-entry__button {
+		min-width: 0;
+		padding: 0 10px;
+	}
+
+	.mcast-entry__stage {
+		min-height: calc(100vh - 84px);
+		min-height: calc(100dvh - 84px);
+	}
+
+	.mcast-entry__stage-head {
+		padding: 10px 12px;
+	}
+
+	.mcast-entry__room-grid {
+		min-height: 220px;
+		padding: 8px;
+	}
+
+	.mcast-entry__preview,
+	.mcast-entry__preview video {
+		min-height: 200px;
+	}
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (min-width: 920px) {
 	.mcast-entry {
 		padding: 10px;
 		gap: 10px;

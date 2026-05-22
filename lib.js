@@ -24550,6 +24550,17 @@ function updateForceRotate(skipLastBit = false) {
 }
 
 function updateForceRotatedCSS(rotateThis = session.forceRotate) {
+	if (document.body && document.body.classList && document.body.classList.contains("mcast-custom-entry")) {
+		document.body.style.transform = "";
+		document.body.style.position = "";
+		document.body.style.top = "";
+		document.body.style.left = "";
+		document.body.style.height = "";
+		document.body.style.width = "";
+		document.body.style.transformOrigin = "";
+		document.body.dataset.rotated = "";
+		return;
+	}
 	if (rotateThis == 270) {
 		document.body.setAttribute("style", "transform: rotate(270deg);position: absolute;top: 100vh;left: 0;height: 100vw;width: 100vh;transform-origin: 0 0;");
 		document.body.dataset.rotated = "1";

@@ -10,7 +10,8 @@
 		tilePoll: 0,
 		slowTimer: 0,
 		lastError: "",
-		deviceNoticeShown: false
+		deviceNoticeShown: false,
+		lastLocalStreamDebug: ""
 	};
 
 	if (document.readyState === "loading") {
@@ -30,12 +31,16 @@
 		removeLegacyBranding();
 		installWarningBridge();
 		wireUi();
+		decorateButtons();
 		movePreviewVideo();
 		fillRouteDetails();
 		setStatus("Ready when you are. Preview starts only after you allow it.", "ready");
 		restoreGuestName();
 		state.devicePoll = window.setInterval(syncDevices, 900);
-		state.tilePoll = window.setInterval(syncRoomTiles, 1400);
+		state.tilePoll = window.setInterval(function () {
+			bindLocalVideo("poll");
+			syncRoomTiles();
+		}, 900);
 		window.addEventListener("online", function () {
 			setStatus(state.joined ? "Connection restored. Rejoining if needed." : "Connection restored. You can join now.", "ready");
 		});
@@ -91,18 +96,41 @@
 		}
 		if (muteButton) {
 			muteButton.addEventListener("click", function (event) {
+				setLoading("mcastMuteButton", true);
 				if (typeof window.toggleMute === "function") {
 					window.toggleMute(false, event);
+				} else {
+					setAudioTracksEnabled(isMicMuted());
+					if (window.session) {
+						window.session.muted = !isMicMuted();
+					}
 				}
-				window.setTimeout(updateControlStates, 120);
+				window.setTimeout(function () {
+					setAudioTracksEnabled(!isMicMuted());
+					updateControlStates();
+					logLocalStreamState("mic-toggle");
+					setLoading("mcastMuteButton", false);
+				}, 160);
 			});
 		}
 		if (cameraButton) {
 			cameraButton.addEventListener("click", function () {
+				setLoading("mcastCameraButton", true);
 				if (typeof window.toggleVideoMute === "function") {
 					window.toggleVideoMute();
+				} else {
+					setVideoTracksEnabled(isCameraOff());
+					if (window.session) {
+						window.session.videoMuted = !isCameraOff();
+					}
 				}
-				window.setTimeout(updateControlStates, 120);
+				window.setTimeout(function () {
+					setVideoTracksEnabled(!isCameraOff());
+					bindLocalVideo("camera-toggle");
+					updateControlStates();
+					logLocalStreamState("camera-toggle");
+					setLoading("mcastCameraButton", false);
+				}, 160);
 			});
 		}
 		if (settingsButton) {
@@ -144,6 +172,15 @@
 		preview.addEventListener("playing", markPreviewReady);
 	}
 
+	function decorateButtons() {
+		setButtonContent(byId("mcastPreviewButton"), "camera", "Enable preview");
+		setButtonContent(byId("mcastJoinButton"), "join", "Join room");
+		setButtonContent(byId("mcastMuteButton"), "mic", "Mute mic");
+		setButtonContent(byId("mcastCameraButton"), "video-off", "Camera off");
+		setButtonContent(byId("mcastSettingsButton"), "settings", "Settings");
+		setButtonContent(byId("mcastLeaveButton"), "leave", "Leave");
+	}
+
 	function fillRouteDetails() {
 		var meta = byId("mcastInviteMeta");
 		if (!meta || !window.MCastRoute) {
@@ -166,7 +203,7 @@
 			await window.previewWebcam(false);
 			await waitForPreview(9000);
 			state.previewStarted = true;
-			markPreviewReady();
+			bindLocalVideo("preview-ready");
 			syncDevices();
 			await reportDeviceHealth();
 			if (!state.lastError) {
@@ -203,11 +240,14 @@
 				await waitForFunction("publishWebcam", 4500);
 			}
 			setStatus("Joining the MCast room...", "busy");
+			bindLocalVideo("pre-publish");
 			await window.publishWebcam(nativeButton || false);
+			await waitForLocalStream(5000);
 			state.joined = true;
 			document.body.classList.add("mcast-room-active");
 			root.classList.add("is-joined");
 			setRoomView(true);
+			bindLocalVideo("joined");
 			setStatus("You are connected. Keep this tab open while you are on stream.", "ready");
 			setRoomStatus("Connected");
 			updateControlStates();
@@ -430,6 +470,10 @@
 		nativeSelect.value = value;
 		dispatchNativeChange(nativeSelect);
 		setTemporaryStatus("Switching camera...", "busy", 1200);
+		window.setTimeout(function () {
+			bindLocalVideo("camera-change");
+			logLocalStreamState("camera-change");
+		}, 900);
 	}
 
 	function selectNativeMic(value) {
@@ -444,6 +488,100 @@
 			dispatchNativeChange(input);
 		});
 		setTemporaryStatus("Switching microphone...", "busy", 1200);
+		window.setTimeout(function () {
+			logLocalStreamState("mic-change");
+		}, 900);
+	}
+
+	function bindLocalVideo(reason) {
+		var surface = byId("mcastPreviewSurface");
+		if (!surface) {
+			return false;
+		}
+		var video = getLocalVideoElement();
+		var stream = getLocalStream(video);
+		if (!video && stream) {
+			video = document.createElement("video");
+			video.id = "mcastLocalVideo";
+			video.autoplay = true;
+			video.playsInline = true;
+			video.muted = true;
+		}
+		if (!video) {
+			logLocalStreamState(reason || "local-bind");
+			return false;
+		}
+		video.setAttribute("playsinline", "");
+		video.setAttribute("autoplay", "");
+		video.muted = true;
+		video.dataset.mcastLocal = "true";
+		if (stream && video.srcObject !== stream) {
+			video.srcObject = stream;
+		}
+		if (video.parentNode !== surface) {
+			surface.appendChild(video);
+		}
+		if (video.srcObject) {
+			root.classList.add("has-preview");
+			state.previewStarted = true;
+			video.play().catch(function () {});
+		}
+		logLocalStreamState(reason || "local-bind");
+		return !!video.srcObject;
+	}
+
+	function getLocalVideoElement() {
+		var sessionVideo = window.session && window.session.videoElement;
+		if (sessionVideo && sessionVideo.nodeName === "VIDEO") {
+			return sessionVideo;
+		}
+		return byId("videosource") || byId("previewWebcam") || byId("mcastLocalVideo");
+	}
+
+	function getLocalStream(video) {
+		var candidates = [
+			video && video.srcObject,
+			window.session && window.session.streamSrc,
+			window.session && window.session.videoElement && window.session.videoElement.srcObject,
+			byId("previewWebcam") && byId("previewWebcam").srcObject,
+			window.session && window.session.streamSrcClone
+		];
+		for (var i = 0; i < candidates.length; i += 1) {
+			if (isUsableStream(candidates[i])) {
+				return candidates[i];
+			}
+		}
+		return null;
+	}
+
+	function isUsableStream(stream) {
+		return !!(stream && typeof stream.getTracks === "function" && stream.getTracks().some(isLiveTrack));
+	}
+
+	function waitForLocalStream(timeout) {
+		return waitUntil(function () {
+			return !!getLocalStream(getLocalVideoElement());
+		}, timeout);
+	}
+
+	function setAudioTracksEnabled(enabled) {
+		var stream = getLocalStream(getLocalVideoElement());
+		if (!stream || typeof stream.getAudioTracks !== "function") {
+			return;
+		}
+		stream.getAudioTracks().forEach(function (track) {
+			track.enabled = !!enabled;
+		});
+	}
+
+	function setVideoTracksEnabled(enabled) {
+		var stream = getLocalStream(getLocalVideoElement());
+		if (!stream || typeof stream.getVideoTracks !== "function") {
+			return;
+		}
+		stream.getVideoTracks().forEach(function (track) {
+			track.enabled = !!enabled;
+		});
 	}
 
 	function syncRoomTiles() {
@@ -505,16 +643,43 @@
 	function updateControlStates() {
 		var muteButton = byId("mcastMuteButton");
 		var cameraButton = byId("mcastCameraButton");
-		if (muteButton && window.session) {
-			var muted = !!window.session.muted;
+		var settingsButton = byId("mcastSettingsButton");
+		if (muteButton) {
+			var muted = isMicMuted();
 			muteButton.classList.toggle("is-off", muted);
-			muteButton.textContent = muted ? "Unmute mic" : "Mute mic";
+			muteButton.setAttribute("aria-pressed", muted ? "true" : "false");
+			setButtonContent(muteButton, muted ? "mic-off" : "mic", muted ? "Unmute mic" : "Mute mic");
 		}
-		if (cameraButton && window.session) {
-			var videoOff = !!window.session.videoMuted;
+		if (cameraButton) {
+			var videoOff = isCameraOff();
 			cameraButton.classList.toggle("is-off", videoOff);
-			cameraButton.textContent = videoOff ? "Camera on" : "Camera off";
+			cameraButton.setAttribute("aria-pressed", videoOff ? "true" : "false");
+			setButtonContent(cameraButton, videoOff ? "video" : "video-off", videoOff ? "Camera on" : "Camera off");
 		}
+		if (settingsButton) {
+			var panel = byId("mcastSettingsPanel");
+			var settingsOpen = !!(panel && !panel.hidden);
+			settingsButton.setAttribute("aria-expanded", settingsOpen ? "true" : "false");
+			setButtonContent(settingsButton, settingsOpen ? "close" : "settings", settingsOpen ? "Close" : "Settings");
+		}
+	}
+
+	function isMicMuted() {
+		if (window.session && typeof window.session.muted !== "undefined") {
+			return !!window.session.muted;
+		}
+		var stream = getLocalStream(getLocalVideoElement());
+		var tracks = stream && stream.getAudioTracks ? stream.getAudioTracks() : [];
+		return !!(tracks.length && tracks.every(function (track) { return !track.enabled; }));
+	}
+
+	function isCameraOff() {
+		if (window.session && typeof window.session.videoMuted !== "undefined") {
+			return !!window.session.videoMuted;
+		}
+		var stream = getLocalStream(getLocalVideoElement());
+		var tracks = stream && stream.getVideoTracks ? stream.getVideoTracks() : [];
+		return !!(tracks.length && tracks.every(function (track) { return !track.enabled; }));
 	}
 
 	function toggleSettingsPanel() {
@@ -527,9 +692,9 @@
 		panel.hidden = nextHidden;
 		if (button) {
 			button.classList.toggle("is-off", !nextHidden);
-			button.textContent = nextHidden ? "Settings" : "Close settings";
 		}
 		syncDevices();
+		updateControlStates();
 	}
 
 	function leaveRoom() {
@@ -618,13 +783,38 @@
 			localLabel.textContent = displayName;
 			localLabel.title = displayName;
 		}
+		bindLocalVideo(isJoined ? "room-view" : "preview-view");
 	}
 
 	function setRoomStatus(message) {
 		var status = byId("mcastRoomStatus");
 		if (status) {
 			status.textContent = message;
+			status.classList.toggle("is-connected", /^connected|live/i.test(message || ""));
+			status.classList.toggle("is-disconnected", /not connected|leaving|offline/i.test(message || ""));
 		}
+	}
+
+	function logLocalStreamState(reason) {
+		var video = getLocalVideoElement();
+		var stream = getLocalStream(video);
+		var videoTracks = stream && stream.getVideoTracks ? stream.getVideoTracks() : [];
+		var audioTracks = stream && stream.getAudioTracks ? stream.getAudioTracks() : [];
+		var details = {
+			reason: reason || "state",
+			hasLocalStream: !!stream,
+			videoTracksCount: videoTracks.length,
+			audioTracksCount: audioTracks.length,
+			videoTracksEnabled: videoTracks.map(function (track) { return !!track.enabled; }),
+			audioTracksEnabled: audioTracks.map(function (track) { return !!track.enabled; }),
+			videoElementAttached: !!(video && video.parentNode === byId("mcastPreviewSurface"))
+		};
+		var signature = JSON.stringify(details);
+		if (signature === state.lastLocalStreamDebug) {
+			return;
+		}
+		state.lastLocalStreamDebug = signature;
+		console.info("MCast local stream state", details);
 	}
 
 	function installWarningBridge() {
@@ -716,6 +906,43 @@
 		}
 		button.disabled = !!isLoading;
 		button.classList.toggle("is-loading", !!isLoading);
+	}
+
+	function setButtonContent(button, iconName, label) {
+		if (!button || (button.dataset.iconName === iconName && button.dataset.label === label)) {
+			return;
+		}
+		button.dataset.iconName = iconName;
+		button.dataset.label = label;
+		button.setAttribute("aria-label", label);
+		button.innerHTML = "<span class=\"mcast-entry__spinner\" aria-hidden=\"true\"></span>" + iconSvg(iconName) + "<span class=\"mcast-entry__button-label\">" + escapeHtml(label) + "</span>";
+	}
+
+	function iconSvg(name) {
+		var paths = {
+			camera: "<path d=\"M15 10l4.6-2.8A1 1 0 0 1 21 8.1v7.8a1 1 0 0 1-1.4.9L15 14v-4Z\"></path><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"></rect>",
+			"video-off": "<path d=\"M10.7 6H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 1.7-.9\"></path><path d=\"M16 10l3.6-2.2A1 1 0 0 1 21 8.7v6.6\"></path><path d=\"M3 3l18 18\"></path>",
+			video: "<path d=\"M15 10l4.6-2.8A1 1 0 0 1 21 8.1v7.8a1 1 0 0 1-1.4.9L15 14v-4Z\"></path><rect x=\"3\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"></rect>",
+			mic: "<path d=\"M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z\"></path><path d=\"M19 11a7 7 0 0 1-14 0\"></path><path d=\"M12 18v3\"></path>",
+			"mic-off": "<path d=\"M9 9v3a3 3 0 0 0 5.1 2.1\"></path><path d=\"M15 9.3V6a3 3 0 0 0-5.1-2.1\"></path><path d=\"M19 11a7 7 0 0 1-9.1 6.7\"></path><path d=\"M5 11a7 7 0 0 0 3.2 5.9\"></path><path d=\"M12 18v3\"></path><path d=\"M3 3l18 18\"></path>",
+			settings: "<path d=\"M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z\"></path><path d=\"M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2.1 2.1 0 0 1-3 3l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21a2.1 2.1 0 0 1-4.2 0v-.2a1.8 1.8 0 0 0-1.2-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a2.1 2.1 0 1 1-3-3l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H2a2.1 2.1 0 0 1 0-4.2h.2a1.8 1.8 0 0 0 1.7-1.2 1.8 1.8 0 0 0-.4-2l-.1-.1a2.1 2.1 0 0 1 3-3l.1.1a1.8 1.8 0 0 0 2 .4H8.6A1.8 1.8 0 0 0 9.7 2V2a2.1 2.1 0 0 1 4.2 0v.2a1.8 1.8 0 0 0 1.2 1.7 1.8 1.8 0 0 0 2-.4l.1-.1a2.1 2.1 0 1 1 3 3l-.1.1a1.8 1.8 0 0 0-.4 2v.1A1.8 1.8 0 0 0 22 9.7h0a2.1 2.1 0 0 1 0 4.2h-.2a1.8 1.8 0 0 0-1.7 1.1Z\"></path>",
+			close: "<path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path>",
+			leave: "<path d=\"M10 17l5-5-5-5\"></path><path d=\"M15 12H3\"></path><path d=\"M21 19V5a2 2 0 0 0-2-2h-6\"></path>",
+			join: "<path d=\"M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4\"></path><path d=\"M10 17l5-5-5-5\"></path><path d=\"M15 12H3\"></path>"
+		};
+		return "<svg class=\"mcast-entry__icon\" viewBox=\"0 0 24 24\" aria-hidden=\"true\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" + (paths[name] || paths.settings) + "</svg>";
+	}
+
+	function escapeHtml(value) {
+		return String(value || "").replace(/[&<>"']/g, function (char) {
+			return {
+				"&": "&amp;",
+				"<": "&lt;",
+				">": "&gt;",
+				"\"": "&quot;",
+				"'": "&#39;"
+			}[char];
+		});
 	}
 
 	function markPreviewReady() {
