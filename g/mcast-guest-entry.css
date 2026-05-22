@@ -567,7 +567,7 @@ body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__tile--portrait:n
 }
 
 body.mcast-room-active.mobile-portrait-mode .mcast-entry__tile video {
-	object-fit: cover;
+	object-fit: cover !important;
 }
 
 body.mcast-room-active.mobile-landscape-mode .mcast-entry__tile.is-orientation-mismatch video {
