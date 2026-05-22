@@ -1,4 +1,6 @@
 const { test, expect } = require("@playwright/test");
+const fs = require("fs");
+const path = require("path");
 
 const baseUrl = process.env.MCAST_TEST_URL || "http://127.0.0.1:8089/g/?push=mcast-mobile-regression&room=mcast-mobile-regression";
 
@@ -19,7 +21,7 @@ test.use({
 test("mobile guest flow owns the route and reaches backstage", async ({ page }) => {
 	await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastMobileGuest")).toBeVisible();
-	await expect(page.locator("#mcastGuestEntry")).toBeHidden();
+	await expect(page.locator("#mcastGuestEntry")).toHaveCount(0);
 	await expect(page.locator("#mcastDesktopGuest")).toBeHidden();
 
 	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 6000 });
@@ -40,6 +42,27 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 	await expect(page.locator("#mcastMobileChatButton")).toHaveCount(0);
 	await expect(page.locator("#mcastMobileLeaveButton svg")).toBeVisible();
 	await expect(page.locator("text=Waiting for the room")).toBeHidden();
+});
+
+test("guest route uses separated desktop and mobile shell assets", async ({ page }) => {
+	const html = fs.readFileSync(path.join(__dirname, "..", "g", "index.html"), "utf8");
+	expect(html).toContain("./g/desktop/DesktopRoomShell.css");
+	expect(html).toContain("./g/desktop/DesktopRoomShell.js");
+	expect(html).toContain("./g/mobile/MobileRoomShell.css");
+	expect(html).toContain("./g/mobile/MobileRoomShell.js");
+	expect(html).not.toContain("mcast-guest-entry");
+	expect(html).not.toContain("id=\"mcastGuestEntry\"");
+
+	await page.goto(baseUrl + "&case=architecture", { waitUntil: "domcontentloaded" });
+	await expect(page.locator(".DesktopRoomShell")).toHaveCount(1);
+	await expect(page.locator(".DesktopTopBar")).toHaveCount(1);
+	await expect(page.locator(".DesktopStageLayout")).toHaveCount(1);
+	await expect(page.locator(".DesktopBottomControls")).toHaveCount(1);
+	await expect(page.locator(".MobileRoomShell")).toHaveCount(1);
+	await expect(page.locator(".MobileTopBar")).toHaveCount(1);
+	await expect(page.locator(".MobileStageLayout")).toHaveCount(1);
+	await expect(page.locator(".MobileBottomControls")).toHaveCount(1);
+	await expect(page.locator(".mcast-entry, #mcastGuestEntry")).toHaveCount(0);
 });
 
 test("force-landscape params do not rotate mobile setup UI in portrait viewport", async ({ page }) => {

@@ -47,9 +47,8 @@
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4043" />
-		<link rel="stylesheet" href="./g/mcast-guest-desktop.css?v=5" />
-		<link rel="stylesheet" href="./g/mcast-guest-mobile.css?v=3" />
-		<link rel="stylesheet" href="./g/mcast-guest-entry.css?v=13" />
+		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=6" />
+		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=5" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
@@ -109,8 +108,8 @@
 				</div>
 			</section>
 
-			<section class="mcast-desktop__shell" data-desktop-step="studio">
-				<header class="mcast-desktop__topbar">
+			<section class="DesktopRoomShell mcast-desktop__shell" data-desktop-step="studio">
+				<header class="DesktopTopBar mcast-desktop__topbar">
 					<div class="mcast-desktop__brand">
 						<img class="mcast-desktop__logo" src="./media/mcast-logo.png" alt="MCast Studio" />
 						<div>
@@ -169,8 +168,8 @@
 					</div>
 				</section>
 
-				<section class="mcast-desktop__room" data-desktop-panel="room">
-					<div class="mcast-desktop__stage-wrap">
+				<section class="DesktopBackstage mcast-desktop__room" data-desktop-panel="room">
+					<div class="DesktopStageLayout mcast-desktop__stage-wrap">
 						<div id="mcastDesktopRoomGrid" class="mcast-desktop__stage-grid">
 							<article id="mcastDesktopLocalTile" class="mcast-desktop__tile mcast-desktop__tile--local">
 								<div class="mcast-desktop__tile-label">You</div>
@@ -183,7 +182,7 @@
 						</div>
 					</div>
 
-					<div class="mcast-desktop__bottom-bar">
+					<div class="DesktopBottomControls mcast-desktop__bottom-bar">
 						<button id="mcastDesktopRoomMicButton" type="button" class="mcast-desktop__round-control">Mute</button>
 						<button id="mcastDesktopRoomCameraButton" type="button" class="mcast-desktop__round-control">Camera</button>
 						<button id="mcastDesktopLeaveButton" type="button" class="mcast-desktop__round-control mcast-desktop__round-control--danger">Leave</button>
@@ -307,8 +306,8 @@
 				</div>
 			</section>
 
-			<section class="mcast-mobile__backstage" data-mobile-step="backstage">
-				<header class="mcast-mobile__dark-top">
+			<section class="MobileRoomShell MobileBackstage mcast-mobile__backstage" data-mobile-step="backstage">
+				<header class="MobileTopBar mcast-mobile__dark-top">
 					<div class="mcast-mobile__brand mcast-mobile__brand--dark">
 						<div class="mcast-mobile__logo" aria-hidden="true"></div>
 						<div>
@@ -317,7 +316,7 @@
 						</div>
 					</div>
 				</header>
-				<div class="mcast-mobile__backstage-layout">
+				<div class="MobileStageLayout mcast-mobile__backstage-layout">
 					<div class="mcast-mobile__stage-area">
 						<div class="mcast-mobile__stage-card">
 							<div class="mcast-mobile__stage-mark">WELCOME</div>
@@ -336,111 +335,13 @@
 						</div>
 					</aside>
 				</div>
-				<nav class="mcast-mobile__bottom-bar" aria-label="Mobile guest controls">
+				<nav class="MobileBottomControls mcast-mobile__bottom-bar" aria-label="Mobile guest controls">
 					<button id="mcastMobileRoomMicButton" type="button" class="mcast-mobile__control">Mic</button>
 					<button id="mcastMobileRoomCameraButton" type="button" class="mcast-mobile__control">Camera</button>
 					<button id="mcastMobileMoreButton" type="button" class="mcast-mobile__control">More</button>
 					<button id="mcastMobileLeaveButton" type="button" class="mcast-mobile__control mcast-mobile__control--leave">Leave</button>
 				</nav>
 				<div id="mcastMobileBackstageStatus" class="mcast-mobile__toast" role="status" aria-live="polite"></div>
-			</section>
-		</main>
-		<main id="mcastGuestEntry" class="mcast-entry" aria-label="MCast guest invite">
-			<header class="mcast-entry__topbar">
-				<div class="mcast-entry__brand">
-					<div class="mcast-entry__logo" aria-hidden="true"></div>
-					<div class="mcast-entry__brand-text">
-						<div class="mcast-entry__brand-name">MCast Studio</div>
-						<div class="mcast-entry__brand-meta">Secure guest invite</div>
-					</div>
-				</div>
-				<div id="mcastInviteMeta" class="mcast-entry__invite-meta">Guest invite</div>
-			</header>
-			<section class="mcast-entry__layout">
-				<div class="mcast-entry__panel">
-					<div class="mcast-entry__copy">
-						<p class="mcast-entry__eyebrow">Backstage check</p>
-						<h1 class="mcast-entry__title">Join the live room</h1>
-						<p class="mcast-entry__subtitle">Enter your name, choose your devices, and join when you are ready. Camera and microphone access starts only after you enable preview or join.</p>
-					</div>
-					<div class="mcast-entry__form">
-						<label class="mcast-entry__field" for="mcastGuestName">
-							<span class="mcast-entry__label">Display name</span>
-							<input id="mcastGuestName" class="mcast-entry__input" type="text" autocomplete="name" maxlength="60" placeholder="Your name" />
-						</label>
-						<div class="mcast-entry__devices">
-							<label class="mcast-entry__field" for="mcastCameraSelect">
-								<span class="mcast-entry__label">Camera</span>
-								<select id="mcastCameraSelect" class="mcast-entry__select">
-									<option value="">Camera will appear after permission</option>
-								</select>
-							</label>
-							<label class="mcast-entry__field" for="mcastMicSelect">
-								<span class="mcast-entry__label">Microphone</span>
-								<select id="mcastMicSelect" class="mcast-entry__select">
-									<option value="">Microphone will appear after permission</option>
-								</select>
-							</label>
-						</div>
-						<div class="mcast-entry__actions">
-							<button id="mcastPreviewButton" type="button" class="mcast-entry__button mcast-entry__button--secondary">
-								<span class="mcast-entry__spinner" aria-hidden="true"></span>
-								<span>Enable preview</span>
-							</button>
-							<button id="mcastJoinButton" type="button" class="mcast-entry__button mcast-entry__button--primary">
-								<span class="mcast-entry__spinner" aria-hidden="true"></span>
-								<span>Join room</span>
-							</button>
-						</div>
-						<div id="mcastStatus" class="mcast-entry__status" role="status" aria-live="polite">
-							<span class="mcast-entry__status-dot" aria-hidden="true"></span>
-							<span data-status-text>Loading your secure invite...</span>
-						</div>
-					</div>
-				</div>
-				<div class="mcast-entry__stage">
-					<div class="mcast-entry__stage-head">
-						<p id="mcastStageTitle" class="mcast-entry__stage-title">Camera preview</p>
-						<span id="mcastConnectionPill" class="mcast-entry__pill">Private until you join</span>
-					</div>
-					<div id="mcastRoomGrid" class="mcast-entry__room-grid">
-						<article id="mcastLocalTile" class="mcast-entry__tile mcast-entry__tile--local">
-							<div id="mcastPreviewSurface" class="mcast-entry__preview">
-								<div class="mcast-entry__preview-empty">Your camera preview will appear here after you grant access.</div>
-							</div>
-							<div id="mcastLocalTileLabel" class="mcast-entry__tile-label">You</div>
-						</article>
-						<div id="mcastRemoteTiles" class="mcast-entry__remote-tiles" aria-live="polite"></div>
-						<div id="mcastWaitingState" class="mcast-entry__waiting">
-							<strong>Waiting for the room</strong>
-							<span>Other guests will appear here as soon as they connect.</span>
-						</div>
-					</div>
-					<div class="mcast-entry__stage-foot">
-						<div class="mcast-entry__controls">
-							<button id="mcastMuteButton" type="button" class="mcast-entry__control">Mute mic</button>
-							<button id="mcastCameraButton" type="button" class="mcast-entry__control">Camera off</button>
-							<button id="mcastSettingsButton" type="button" class="mcast-entry__control">Settings</button>
-							<button id="mcastOrientationButton" type="button" class="mcast-entry__control mcast-entry__control--orientation">Landscape</button>
-							<button id="mcastLeaveButton" type="button" class="mcast-entry__control mcast-entry__control--danger">Leave</button>
-						</div>
-						<div id="mcastRoomStatus" class="mcast-entry__room-status">Not connected</div>
-						<div id="mcastSettingsPanel" class="mcast-entry__settings" hidden>
-							<label class="mcast-entry__field" for="mcastRoomCameraSelect">
-								<span class="mcast-entry__label">Camera</span>
-								<select id="mcastRoomCameraSelect" class="mcast-entry__select">
-									<option value="">Camera will appear after permission</option>
-								</select>
-							</label>
-							<label class="mcast-entry__field" for="mcastRoomMicSelect">
-								<span class="mcast-entry__label">Microphone</span>
-								<select id="mcastRoomMicSelect" class="mcast-entry__select">
-									<option value="">Microphone will appear after permission</option>
-								</select>
-							</label>
-						</div>
-					</div>
-				</div>
 			</section>
 		</main>
 		<input id="zoomSlider" type="range" style="display: none;" />
@@ -3788,9 +3689,8 @@
 
 		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1415"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1064"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-desktop.js?v=5"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-mobile.js?v=4"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-entry.js?v=13"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=6"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=5"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		
 	</body>
