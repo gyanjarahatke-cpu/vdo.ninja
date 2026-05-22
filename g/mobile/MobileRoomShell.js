@@ -459,15 +459,21 @@
 	}
 
 	function toggleMute(event) {
-		if (typeof window.toggleMute === "function") {
-			window.toggleMute(false, event || window.event);
-		} else {
-			setAudioTracksEnabled(isMicMuted());
-			if (window.session) {
-				window.session.muted = !isMicMuted();
-			}
+		var start = now();
+		logMobile("mute clicked", { muted: isMicMuted(), at: start });
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
 		}
-		window.setTimeout(updateControls, 160);
+		var nextEnabled = isMicMuted();
+		setAudioTracksEnabled(nextEnabled);
+		if (window.session) {
+			window.session.muted = !nextEnabled;
+		}
+		logMobile("track enabled changed", { enabled: nextEnabled, elapsedMs: Math.round(now() - start) });
+		updateControls();
+		logMobile("UI state updated", { muted: !nextEnabled, elapsedMs: Math.round(now() - start) });
+		syncNativeMuteStateInBackground(!nextEnabled);
 	}
 
 	function toggleCamera() {
@@ -786,6 +792,16 @@
 		}
 	}
 
+	function syncNativeMuteStateInBackground(muted) {
+		window.setTimeout(function () {
+			try {
+				if (window.session) {
+					window.session.muted = !!muted;
+				}
+			} catch (error) {}
+		}, 0);
+	}
+
 	function setVideoTracksEnabled(enabled) {
 		var stream = getLocalStream(getLocalVideoElement());
 		if (stream && stream.getVideoTracks) {
@@ -912,6 +928,10 @@
 		try {
 			console.info("[MCast mobile guest]", message, details || {});
 		} catch (error) {}
+	}
+
+	function now() {
+		return window.performance && typeof window.performance.now === "function" ? window.performance.now() : Date.now();
 	}
 
 	function cssEscape(value) {

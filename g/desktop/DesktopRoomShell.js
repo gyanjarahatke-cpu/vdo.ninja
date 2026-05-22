@@ -385,15 +385,21 @@
 	}
 
 	function toggleMute(event) {
-		if (typeof window.toggleMute === "function") {
-			window.toggleMute(false, event || window.event);
-		} else {
-			setAudioTracksEnabled(isMicMuted());
-			if (window.session) {
-				window.session.muted = !isMicMuted();
-			}
+		var start = now();
+		logDesktop("mute clicked", { muted: isMicMuted(), at: start });
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
 		}
-		window.setTimeout(updateDesktopControls, 160);
+		var nextEnabled = isMicMuted();
+		setAudioTracksEnabled(nextEnabled);
+		if (window.session) {
+			window.session.muted = !nextEnabled;
+		}
+		logDesktop("track enabled changed", { enabled: nextEnabled, elapsedMs: Math.round(now() - start) });
+		updateDesktopControls();
+		logDesktop("UI state updated", { muted: !nextEnabled, elapsedMs: Math.round(now() - start) });
+		syncNativeMuteStateInBackground(!nextEnabled);
 	}
 
 	function toggleCamera() {
@@ -440,12 +446,14 @@
 		if (!room || !grid) {
 			return;
 		}
+		updateLocalTileLabel(getStoredGuestName() || getSessionGuestName() || "You");
 		var sources = Array.prototype.filter.call(document.querySelectorAll("video"), function (video) {
 			return video.id !== "previewWebcam" &&
 				video.id !== "videosource" &&
 				video.id !== "mcastDesktopLocalVideo" &&
 				video.dataset.mcastDesktopClone !== "true" &&
-				video.srcObject;
+				video.srcObject &&
+				!isLocalVideoSource(video);
 		});
 		var existing = {};
 		Array.prototype.forEach.call(room.querySelectorAll("[data-source-id]"), function (tile) {
@@ -460,7 +468,7 @@
 				clone.play().catch(function () {});
 			}
 			var label = tile.querySelector(".mcast-desktop__tile-label");
-			label.textContent = getRemoteLabel(source, index);
+			label.textContent = getRemoteLabel(source);
 			delete existing[id];
 		});
 		Object.keys(existing).forEach(function (id) {
@@ -492,20 +500,25 @@
 		return tile;
 	}
 
-	function getRemoteLabel(source, index) {
+	function getRemoteLabel(source) {
 		var candidates = [
 			source && source.getAttribute && source.getAttribute("data-label"),
 			source && source.dataset && source.dataset.label,
+			source && source.dataset && source.dataset.name,
+			source && source.dataset && source.dataset.displayName,
+			source && source.dataset && source.dataset.nick,
 			source && source.getAttribute && source.getAttribute("aria-label"),
+			source && source.getAttribute && source.getAttribute("data-name"),
+			source && source.getAttribute && source.getAttribute("data-display-name"),
 			source && source.title
 		];
 		for (var i = 0; i < candidates.length; i += 1) {
 			var value = String(candidates[i] || "").trim();
-			if (value && value.toLowerCase() !== "guest") {
+			if (value && value.toLowerCase() !== "guest" && value.toLowerCase() !== "remote guest") {
 				return value.slice(0, 60);
 			}
 		}
-		return "Remote guest " + (index + 1);
+		return "Guest";
 	}
 
 	function applyGuestName() {
@@ -548,6 +561,10 @@
 		} catch (error) {
 			return "";
 		}
+	}
+
+	function getSessionGuestName() {
+		return String((window.session && window.session.label) || (window.MCastRoute && window.MCastRoute.guestName) || "").trim().slice(0, 60);
 	}
 
 	function restoreGuestName() {
@@ -763,6 +780,25 @@
 		return null;
 	}
 
+	function isLocalVideoSource(video) {
+		if (!video) {
+			return false;
+		}
+		if (video.closest && video.closest("#mcastDesktopLocalTile, #mcastDesktopPreviewSurface")) {
+			return true;
+		}
+		var stream = video.srcObject;
+		var localStream = getLocalStream(getLocalVideoElement());
+		if (stream && localStream && (stream === localStream || stream.id === localStream.id)) {
+			return true;
+		}
+		var sessionVideo = window.session && window.session.videoElement;
+		if (sessionVideo && video === sessionVideo) {
+			return true;
+		}
+		return false;
+	}
+
 	function isUsableStream(stream) {
 		return !!(stream && typeof stream.getTracks === "function" && stream.getTracks().some(isLiveTrack));
 	}
@@ -796,6 +832,16 @@
 				track.enabled = !!enabled;
 			});
 		}
+	}
+
+	function syncNativeMuteStateInBackground(muted) {
+		window.setTimeout(function () {
+			try {
+				if (window.session) {
+					window.session.muted = !!muted;
+				}
+			} catch (error) {}
+		}, 0);
 	}
 
 	function setVideoTracksEnabled(enabled) {
@@ -975,6 +1021,10 @@
 		try {
 			console.info("[MCast desktop guest]", message, details || {});
 		} catch (error) {}
+	}
+
+	function now() {
+		return window.performance && typeof window.performance.now === "function" ? window.performance.now() : Date.now();
 	}
 
 	function cssEscape(value) {

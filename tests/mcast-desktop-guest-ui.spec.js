@@ -35,6 +35,29 @@ test("desktop setup is light, simple, and icon-first", async ({ page }) => {
 		Array.from(element.children).map((child) => child.id || child.textContent.trim())
 	));
 	expect(topOrder).toEqual(["mcastDesktopSettingsButton", "mcastDesktopQuality", "mcastDesktopLiveBadge"]);
+	const settingsBox = await page.locator("#mcastDesktopSettingsButton").evaluate((button) => {
+		const buttonRect = button.getBoundingClientRect();
+		const iconRect = button.querySelector("svg").getBoundingClientRect();
+		const style = getComputedStyle(button);
+		return {
+			display: style.display,
+			alignItems: style.alignItems,
+			justifyContent: style.justifyContent,
+			width: Math.round(buttonRect.width),
+			height: Math.round(buttonRect.height),
+			centerOffsetX: Math.abs((iconRect.left + iconRect.width / 2) - (buttonRect.left + buttonRect.width / 2)),
+			centerOffsetY: Math.abs((iconRect.top + iconRect.height / 2) - (buttonRect.top + buttonRect.height / 2))
+		};
+	});
+	expect(settingsBox).toMatchObject({
+		display: "flex",
+		alignItems: "center",
+		justifyContent: "center",
+		width: 42,
+		height: 42
+	});
+	expect(settingsBox.centerOffsetX).toBeLessThan(1);
+	expect(settingsBox.centerOffsetY).toBeLessThan(1);
 
 	const colors = await page.locator("#mcastDesktopGuest").evaluate(() => ({
 		rootBg: getComputedStyle(document.querySelector(".mcast-desktop")).backgroundColor,
@@ -66,6 +89,63 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect(page.locator("#mcastDesktopLeaveButton svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopLocalTile .mcast-desktop__tile-label")).toHaveText("Desktop Guest");
 	await expect(page.locator("#mcastDesktopBackstageMessage")).toBeVisible();
+	await page.evaluate(() => {
+		const localVideo = document.querySelector("#mcastDesktopLocalTile video");
+		const duplicate = document.createElement("video");
+		duplicate.id = "unexpected-local-source";
+		duplicate.srcObject = localVideo && localVideo.srcObject;
+		document.body.appendChild(duplicate);
+	});
+	await page.waitForTimeout(1100);
+	await expect(page.locator("#mcastDesktopLocalTile .mcast-desktop__tile-label")).toHaveText("Desktop Guest");
+	await expect(page.locator("#mcastDesktopRemoteTiles .mcast-desktop__tile-label", { hasText: /Remote guest 1/i })).toHaveCount(0);
+
+	await page.evaluate(() => {
+		const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+		window.__mcastGumCallsAfterMute = 0;
+		navigator.mediaDevices.getUserMedia = function () {
+			window.__mcastGumCallsAfterMute += 1;
+			return original.apply(this, arguments);
+		};
+	});
+	const muteResult = await page.locator("#mcastDesktopRoomMicButton").evaluate((button) => {
+		const video = document.querySelector("#mcastDesktopLocalTile video");
+		const track = video && video.srcObject && video.srcObject.getAudioTracks()[0];
+		const beforeEnabled = track && track.enabled;
+		const start = performance.now();
+		button.click();
+		const elapsed = performance.now() - start;
+		return {
+			beforeEnabled,
+			afterEnabled: track && track.enabled,
+			elapsed,
+			label: button.textContent,
+			isOff: button.classList.contains("is-off")
+		};
+	});
+	expect(muteResult.beforeEnabled).toBe(true);
+	expect(muteResult.afterEnabled).toBe(false);
+	expect(muteResult.elapsed).toBeLessThan(100);
+	expect(muteResult.isOff).toBe(true);
+	expect(muteResult.label).toContain("Unmute");
+	const unmuteResult = await page.locator("#mcastDesktopRoomMicButton").evaluate((button) => {
+		const video = document.querySelector("#mcastDesktopLocalTile video");
+		const track = video && video.srcObject && video.srcObject.getAudioTracks()[0];
+		const start = performance.now();
+		button.click();
+		const elapsed = performance.now() - start;
+		return {
+			afterEnabled: track && track.enabled,
+			elapsed,
+			label: button.textContent,
+			isOff: button.classList.contains("is-off")
+		};
+	});
+	expect(unmuteResult.afterEnabled).toBe(true);
+	expect(unmuteResult.elapsed).toBeLessThan(100);
+	expect(unmuteResult.isOff).toBe(false);
+	expect(unmuteResult.label).toContain("Mute");
+	await expect.poll(() => page.evaluate(() => window.__mcastGumCallsAfterMute || 0), { timeout: 1000 }).toBe(0);
 	const logoTransform = await page.locator(".mcast-desktop__logo").evaluate((element) => getComputedStyle(element).transform);
 	expect(logoTransform).toBe("none");
 });

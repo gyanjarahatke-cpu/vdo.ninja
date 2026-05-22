@@ -232,12 +232,13 @@
 }
 
 .mcast-desktop__top-settings {
-	display: inline-flex;
+	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 7px;
 	width: 42px;
 	height: 42px;
+	padding: 0;
 	border: 1px solid var(--desktop-line);
 	border-radius: 13px;
 	background: #fff;
@@ -245,8 +246,11 @@
 	font: inherit;
 	font-size: 0;
 	font-weight: 900;
+	line-height: 1;
 	cursor: pointer;
 	box-shadow: 0 8px 18px rgba(16, 24, 40, .06);
+	appearance: none;
+	box-sizing: border-box;
 }
 
 .mcast-desktop[data-step="backstage"] .mcast-desktop__top-settings,
@@ -258,13 +262,19 @@
 }
 
 .mcast-desktop__top-settings svg {
+	display: block;
 	width: 21px;
 	height: 21px;
+	flex: 0 0 auto;
 	fill: none;
 	stroke: currentColor;
 	stroke-width: 2;
 	stroke-linecap: round;
 	stroke-linejoin: round;
+}
+
+.mcast-desktop__top-settings span {
+	display: none;
 }
 
 .mcast-desktop__quality,
