@@ -29,6 +29,9 @@
 		if (!root) {
 			return;
 		}
+		if (isDesktopGuestViewport() && document.getElementById("mcastDesktopGuest")) {
+			return;
+		}
 		document.body.classList.add("mcast-custom-entry");
 		document.documentElement.classList.add("mcast-custom-entry");
 		disableLegacyAuxiliaryModules();
@@ -920,6 +923,10 @@
 
 	function isMobileViewport() {
 		return !!(window.matchMedia && window.matchMedia("(max-width: 920px), (pointer: coarse)").matches);
+	}
+
+	function isDesktopGuestViewport() {
+		return !!(window.matchMedia && window.matchMedia("(min-width: 921px) and (hover: hover) and (pointer: fine)").matches);
 	}
 
 	function updateTileOrientations() {

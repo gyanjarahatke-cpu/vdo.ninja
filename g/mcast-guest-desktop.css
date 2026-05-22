@@ -1,0 +1,649 @@
+@media (min-width: 921px) and (hover: hover) and (pointer: fine) {
+	#mcastGuestEntry {
+		display: none !important;
+	}
+}
+
+@media (max-width: 920px), (hover: none), (pointer: coarse) {
+	#mcastDesktopGuest {
+		display: none !important;
+	}
+}
+
+.mcast-desktop {
+	--desktop-bg: #070b12;
+	--desktop-panel: rgba(15, 23, 36, .82);
+	--desktop-panel-strong: rgba(18, 27, 42, .95);
+	--desktop-line: rgba(167, 185, 214, .18);
+	--desktop-line-strong: rgba(167, 185, 214, .28);
+	--desktop-text: #f7fbff;
+	--desktop-muted: #9ba9bd;
+	--desktop-soft: #c6d2e3;
+	--desktop-accent: #2f80ed;
+	--desktop-good: #22c55e;
+	--desktop-danger: #fb7185;
+	position: fixed;
+	inset: 0;
+	z-index: 2147483000;
+	min-height: 100vh;
+	min-height: 100dvh;
+	overflow: hidden;
+	background:
+		radial-gradient(circle at 12% 16%, rgba(47, 128, 237, .18), transparent 30%),
+		radial-gradient(circle at 78% 8%, rgba(34, 197, 94, .10), transparent 26%),
+		linear-gradient(135deg, #060914 0%, #0d1420 42%, #05070c 100%);
+	color: var(--desktop-text);
+	font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.mcast-desktop *,
+.mcast-desktop *::before,
+.mcast-desktop *::after {
+	box-sizing: border-box;
+}
+
+.mcast-desktop__loading {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	gap: 22px;
+	padding: 48px;
+	text-align: center;
+	transition: opacity .25s ease, visibility .25s ease;
+}
+
+.mcast-desktop[data-step="setup"] .mcast-desktop__loading,
+.mcast-desktop[data-step="backstage"] .mcast-desktop__loading,
+.mcast-desktop[data-step="live"] .mcast-desktop__loading {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.mcast-desktop__brand-mark,
+.mcast-desktop__logo {
+	background: center / contain no-repeat url("../media/mcast-logo.png");
+}
+
+.mcast-desktop__brand-mark {
+	width: 92px;
+	height: 92px;
+	filter: drop-shadow(0 18px 42px rgba(47, 128, 237, .28));
+}
+
+.mcast-desktop__loader-orbit {
+	position: relative;
+	width: 168px;
+	height: 168px;
+	border-radius: 999px;
+	border: 1px solid rgba(167, 185, 214, .16);
+}
+
+.mcast-desktop__loader-orbit span {
+	position: absolute;
+	inset: 18px;
+	border-radius: inherit;
+	border: 1px solid transparent;
+	border-top-color: rgba(47, 128, 237, .9);
+	animation: mcast-desktop-spin 1.2s linear infinite;
+}
+
+.mcast-desktop__loader-orbit span:nth-child(2) {
+	inset: 38px;
+	border-top-color: rgba(34, 197, 94, .85);
+	animation-duration: 1.7s;
+	animation-direction: reverse;
+}
+
+.mcast-desktop__loader-orbit span:nth-child(3) {
+	inset: 58px;
+	border-top-color: rgba(255, 255, 255, .65);
+	animation-duration: 2.1s;
+}
+
+@keyframes mcast-desktop-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.mcast-desktop__loading-copy h1 {
+	margin: 0;
+	font-size: clamp(34px, 5vw, 58px);
+	line-height: .98;
+	letter-spacing: 0;
+}
+
+.mcast-desktop__loading-copy p {
+	margin: 10px 0 0;
+	color: var(--desktop-muted);
+	font-size: 16px;
+	font-weight: 700;
+}
+
+.mcast-desktop__eyebrow {
+	margin: 0 0 10px;
+	color: #93c5fd;
+	font-size: 12px;
+	line-height: 1;
+	font-weight: 900;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+}
+
+.mcast-desktop__shell {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-rows: 74px 1fr;
+	min-height: 0;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity .25s ease, visibility .25s ease;
+}
+
+.mcast-desktop[data-step="setup"] .mcast-desktop__shell,
+.mcast-desktop[data-step="backstage"] .mcast-desktop__shell,
+.mcast-desktop[data-step="live"] .mcast-desktop__shell {
+	opacity: 1;
+	visibility: visible;
+	pointer-events: auto;
+}
+
+.mcast-desktop__topbar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+	padding: 18px 34px;
+	border-bottom: 1px solid var(--desktop-line);
+	background: rgba(4, 8, 14, .7);
+	backdrop-filter: blur(18px);
+}
+
+.mcast-desktop__brand {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+}
+
+.mcast-desktop__logo {
+	width: 38px;
+	height: 38px;
+	border-radius: 10px;
+}
+
+.mcast-desktop__brand-name {
+	font-size: 15px;
+	font-weight: 900;
+}
+
+.mcast-desktop__brand-meta {
+	margin-top: 2px;
+	color: var(--desktop-muted);
+	font-size: 12px;
+	font-weight: 800;
+}
+
+.mcast-desktop__top-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.mcast-desktop__quality,
+.mcast-desktop__live-badge {
+	display: inline-flex;
+	align-items: center;
+	min-height: 30px;
+	padding: 0 11px;
+	border-radius: 999px;
+	border: 1px solid var(--desktop-line);
+	background: rgba(255, 255, 255, .04);
+	color: var(--desktop-soft);
+	font-size: 12px;
+	font-weight: 900;
+}
+
+.mcast-desktop__live-badge {
+	border-color: rgba(34, 197, 94, .32);
+	background: rgba(34, 197, 94, .12);
+	color: #bbf7d0;
+}
+
+.mcast-desktop__setup,
+.mcast-desktop__room {
+	grid-row: 2;
+	min-height: 0;
+	padding: 34px;
+}
+
+.mcast-desktop__setup {
+	display: none;
+	place-items: center;
+}
+
+.mcast-desktop[data-step="setup"] .mcast-desktop__setup {
+	display: grid;
+}
+
+.mcast-desktop__setup-card {
+	width: min(1180px, 100%);
+	display: grid;
+	grid-template-columns: minmax(520px, 1.35fr) minmax(360px, .8fr);
+	gap: 22px;
+	padding: 18px;
+	border: 1px solid var(--desktop-line-strong);
+	border-radius: 22px;
+	background: linear-gradient(145deg, rgba(15, 23, 42, .72), rgba(8, 13, 23, .88));
+	box-shadow: 0 28px 90px rgba(0, 0, 0, .36);
+}
+
+.mcast-desktop__preview-column {
+	display: grid;
+	grid-template-rows: minmax(360px, 1fr) auto;
+	gap: 14px;
+	min-width: 0;
+}
+
+.mcast-desktop__preview,
+.mcast-desktop__tile {
+	position: relative;
+	overflow: hidden;
+	border-radius: 18px;
+	border: 1px solid rgba(167, 185, 214, .20);
+	background: #020617;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .03);
+}
+
+.mcast-desktop__preview {
+	display: grid;
+	place-items: center;
+	aspect-ratio: 16 / 9;
+	min-height: 360px;
+}
+
+.mcast-desktop__preview video,
+.mcast-desktop__tile video {
+	position: static !important;
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	max-height: none !important;
+	object-fit: cover !important;
+	background: #020617;
+}
+
+.mcast-desktop__preview-empty {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	gap: 8px;
+	padding: 32px;
+	text-align: center;
+	color: var(--desktop-muted);
+	font-weight: 800;
+}
+
+.mcast-desktop.has-preview .mcast-desktop__preview-empty {
+	display: none;
+}
+
+.mcast-desktop__preview-empty strong {
+	color: var(--desktop-text);
+	font-size: 24px;
+}
+
+.mcast-desktop__meter-row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 48px;
+	padding: 12px 14px;
+	border: 1px solid var(--desktop-line);
+	border-radius: 14px;
+	background: rgba(255, 255, 255, .04);
+	color: var(--desktop-muted);
+	font-size: 12px;
+	font-weight: 900;
+}
+
+.mcast-desktop__meter {
+	display: grid;
+	grid-template-columns: repeat(8, 1fr);
+	align-items: end;
+	gap: 5px;
+	flex: 1;
+	height: 24px;
+}
+
+.mcast-desktop__meter i {
+	display: block;
+	height: 20%;
+	border-radius: 999px;
+	background: rgba(148, 163, 184, .35);
+	transition: height .08s linear, background .12s ease;
+}
+
+.mcast-desktop__meter[data-level="1"] i:nth-child(-n+2),
+.mcast-desktop__meter[data-level="2"] i:nth-child(-n+4),
+.mcast-desktop__meter[data-level="3"] i:nth-child(-n+6),
+.mcast-desktop__meter[data-level="4"] i:nth-child(-n+8) {
+	height: 100%;
+	background: linear-gradient(180deg, #86efac, #22c55e);
+}
+
+.mcast-desktop__setup-panel,
+.mcast-desktop__side-card,
+.mcast-desktop__settings-popover {
+	border: 1px solid var(--desktop-line);
+	border-radius: 18px;
+	background: var(--desktop-panel);
+	backdrop-filter: blur(22px);
+}
+
+.mcast-desktop__setup-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 24px;
+}
+
+.mcast-desktop__setup-panel h1 {
+	margin: 0;
+	font-size: 32px;
+	line-height: 1;
+}
+
+.mcast-desktop__subcopy {
+	margin: -6px 0 4px;
+	color: var(--desktop-muted);
+	font-size: 14px;
+	line-height: 1.45;
+	font-weight: 700;
+}
+
+.mcast-desktop__field {
+	display: grid;
+	gap: 7px;
+	color: var(--desktop-muted);
+	font-size: 12px;
+	font-weight: 900;
+}
+
+.mcast-desktop__input,
+.mcast-desktop__select {
+	width: 100%;
+	min-height: 44px;
+	border: 1px solid var(--desktop-line-strong);
+	border-radius: 12px;
+	background: rgba(4, 8, 14, .78);
+	color: var(--desktop-text);
+	font: inherit;
+	font-size: 14px;
+	font-weight: 750;
+	padding: 0 13px;
+	outline: none;
+}
+
+.mcast-desktop__input:focus,
+.mcast-desktop__select:focus {
+	border-color: rgba(47, 128, 237, .72);
+	box-shadow: 0 0 0 4px rgba(47, 128, 237, .12);
+}
+
+.mcast-desktop__toggle-grid,
+.mcast-desktop__device-grid,
+.mcast-desktop__actions {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+
+.mcast-desktop__control,
+.mcast-desktop__button,
+.mcast-desktop__round-control {
+	border: 1px solid var(--desktop-line-strong);
+	border-radius: 12px;
+	background: rgba(255, 255, 255, .055);
+	color: var(--desktop-text);
+	font: inherit;
+	font-size: 13px;
+	font-weight: 900;
+	cursor: pointer;
+}
+
+.mcast-desktop__control,
+.mcast-desktop__button {
+	min-height: 44px;
+}
+
+.mcast-desktop__button--primary {
+	border: 0;
+	background: linear-gradient(135deg, #2f80ed, #0ea5e9);
+	box-shadow: 0 16px 36px rgba(47, 128, 237, .30);
+}
+
+.mcast-desktop__button--secondary {
+	background: rgba(255, 255, 255, .07);
+}
+
+.mcast-desktop__control.is-off,
+.mcast-desktop__round-control.is-off {
+	border-color: rgba(251, 113, 133, .42);
+	color: #fecdd3;
+	background: rgba(127, 29, 29, .28);
+}
+
+.mcast-desktop__options {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+	color: var(--desktop-muted);
+	font-size: 12px;
+	font-weight: 800;
+}
+
+.mcast-desktop__options label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.mcast-desktop__status {
+	min-height: 42px;
+	padding: 12px 14px;
+	border-radius: 12px;
+	background: rgba(255, 255, 255, .045);
+	color: var(--desktop-soft);
+	font-size: 13px;
+	line-height: 1.35;
+	font-weight: 800;
+}
+
+.mcast-desktop__room {
+	display: none;
+	grid-template-columns: minmax(0, 1fr) 310px;
+	grid-template-rows: minmax(0, 1fr) auto;
+	gap: 18px;
+}
+
+.mcast-desktop[data-step="backstage"] .mcast-desktop__room,
+.mcast-desktop[data-step="live"] .mcast-desktop__room {
+	display: grid;
+}
+
+.mcast-desktop__stage-wrap {
+	position: relative;
+	min-height: 0;
+	display: grid;
+}
+
+.mcast-desktop__stage-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	align-content: center;
+	gap: 14px;
+	min-height: 0;
+	padding: 16px;
+	border: 1px solid rgba(167, 185, 214, .16);
+	border-radius: 22px;
+	background: rgba(2, 6, 23, .72);
+}
+
+.mcast-desktop__stage-grid[data-tile-count="1"] {
+	grid-template-columns: minmax(420px, min(920px, 100%));
+	justify-content: center;
+}
+
+.mcast-desktop__tile {
+	aspect-ratio: 16 / 9;
+	min-width: 0;
+}
+
+.mcast-desktop__tile-label {
+	position: absolute;
+	left: 12px;
+	bottom: 12px;
+	max-width: calc(100% - 24px);
+	padding: 7px 10px;
+	border-radius: 999px;
+	background: rgba(2, 6, 23, .72);
+	color: var(--desktop-text);
+	font-size: 12px;
+	font-weight: 900;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcast-desktop__remote-tiles {
+	display: contents;
+}
+
+.mcast-desktop__backstage-card {
+	position: absolute;
+	left: 28px;
+	top: 28px;
+	max-width: 340px;
+	padding: 16px 18px;
+	border: 1px solid rgba(147, 197, 253, .22);
+	border-radius: 16px;
+	background: rgba(15, 23, 42, .78);
+	box-shadow: 0 18px 48px rgba(0, 0, 0, .22);
+}
+
+.mcast-desktop[data-step="live"] .mcast-desktop__backstage-card {
+	display: none;
+}
+
+.mcast-desktop__backstage-card strong,
+.mcast-desktop__backstage-card span {
+	display: block;
+}
+
+.mcast-desktop__backstage-card strong {
+	font-size: 18px;
+}
+
+.mcast-desktop__backstage-card span {
+	margin-top: 6px;
+	color: var(--desktop-muted);
+	font-size: 13px;
+	line-height: 1.4;
+	font-weight: 750;
+}
+
+.mcast-desktop__side-panel {
+	display: grid;
+	align-content: start;
+	gap: 14px;
+	min-height: 0;
+}
+
+.mcast-desktop__side-card {
+	padding: 18px;
+}
+
+.mcast-desktop__side-label {
+	display: block;
+	margin-bottom: 10px;
+	color: #93c5fd;
+	font-size: 11px;
+	font-weight: 900;
+	text-transform: uppercase;
+	letter-spacing: .12em;
+}
+
+.mcast-desktop__side-card strong {
+	display: block;
+	font-size: 18px;
+}
+
+.mcast-desktop__side-card p {
+	margin: 8px 0 0;
+	color: var(--desktop-muted);
+	font-size: 13px;
+	line-height: 1.42;
+	font-weight: 750;
+}
+
+.mcast-desktop__bottom-bar {
+	grid-column: 1 / -1;
+	justify-self: center;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px;
+	border: 1px solid var(--desktop-line);
+	border-radius: 18px;
+	background: rgba(4, 8, 14, .72);
+	backdrop-filter: blur(18px);
+	box-shadow: 0 18px 54px rgba(0, 0, 0, .30);
+}
+
+.mcast-desktop__round-control {
+	min-width: 92px;
+	min-height: 44px;
+	padding: 0 15px;
+}
+
+.mcast-desktop__round-control--danger {
+	border-color: rgba(251, 113, 133, .36);
+	background: rgba(127, 29, 29, .42);
+	color: #fecdd3;
+}
+
+.mcast-desktop__settings-popover {
+	position: absolute;
+	right: 34px;
+	bottom: 96px;
+	width: 320px;
+	display: grid;
+	gap: 14px;
+	padding: 18px;
+	z-index: 4;
+}
+
+.mcast-desktop__settings-popover[hidden] {
+	display: none;
+}
+
+@media (max-width: 1180px) {
+	.mcast-desktop__setup-card {
+		grid-template-columns: 1fr;
+		max-width: 840px;
+	}
+
+	.mcast-desktop__room {
+		grid-template-columns: 1fr;
+	}
+
+	.mcast-desktop__side-panel {
+		display: none;
+	}
+}
