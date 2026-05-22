@@ -1,0 +1,721 @@
+@media (min-width: 921px) and (hover: hover) and (pointer: fine) {
+	#mcastMobileGuest {
+		display: none !important;
+	}
+}
+
+@media (max-width: 920px), (hover: none), (pointer: coarse) {
+	#mcastGuestEntry {
+		display: none !important;
+	}
+}
+
+.mcast-mobile {
+	--mobile-blue: #1967e9;
+	--mobile-ink: #111827;
+	--mobile-muted: #5f6876;
+	--mobile-line: #d9dee8;
+	--mobile-dark: #0d1118;
+	--mobile-stage: #10141c;
+	--mobile-panel: #293244;
+	position: fixed;
+	inset: 0;
+	z-index: 2147483100;
+	width: 100%;
+	min-height: 100vh;
+	min-height: 100dvh;
+	overflow: hidden;
+	background: #fff;
+	color: var(--mobile-ink);
+	font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.mcast-mobile *,
+.mcast-mobile *::before,
+.mcast-mobile *::after {
+	box-sizing: border-box;
+}
+
+.mcast-mobile [data-mobile-step] {
+	display: none;
+}
+
+.mcast-mobile[data-step="entering"] [data-mobile-step="entering"],
+.mcast-mobile[data-step="permission"] [data-mobile-step="permission"],
+.mcast-mobile[data-step="setup"] [data-mobile-step="setup"],
+.mcast-mobile[data-step="backstage"] [data-mobile-step="backstage"] {
+	display: flex;
+}
+
+.mcast-mobile__light-screen,
+.mcast-mobile__setup,
+.mcast-mobile__backstage {
+	position: absolute;
+	inset: 0;
+	min-height: 100vh;
+	min-height: 100dvh;
+}
+
+.mcast-mobile__light-screen {
+	flex-direction: column;
+	background: #fff;
+}
+
+.mcast-mobile__light-top,
+.mcast-mobile__dark-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: calc(16px + env(safe-area-inset-top)) 20px 12px;
+	flex: 0 0 auto;
+}
+
+.mcast-mobile__brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+	color: var(--mobile-ink);
+	font-size: 16px;
+	font-weight: 850;
+}
+
+.mcast-mobile__brand--dark {
+	color: #fff;
+}
+
+.mcast-mobile__brand small {
+	display: block;
+	margin-top: 2px;
+	color: rgba(255, 255, 255, .62);
+	font-size: 11px;
+	font-weight: 750;
+}
+
+.mcast-mobile__logo {
+	width: 42px;
+	height: 42px;
+	border-radius: 12px;
+	background: center / contain no-repeat url("../media/mcast-logo.png");
+}
+
+.mcast-mobile__ghost-button {
+	min-width: 44px;
+	min-height: 36px;
+	border: 0;
+	background: transparent;
+	color: var(--mobile-muted);
+	font: inherit;
+	font-weight: 850;
+}
+
+.mcast-mobile__center,
+.mcast-mobile__permission-center {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	padding: 28px 28px calc(44px + env(safe-area-inset-bottom));
+}
+
+.mcast-mobile__enter-illustration {
+	position: relative;
+	width: min(78vw, 330px);
+	aspect-ratio: 1.55;
+	margin-bottom: 42px;
+	border-radius: 26px;
+	background:
+		linear-gradient(135deg, rgba(25, 103, 233, .12), rgba(14, 165, 233, .05)),
+		#edf4ff;
+	overflow: hidden;
+}
+
+.mcast-mobile__enter-illustration span {
+	position: absolute;
+	left: 50%;
+	bottom: 0;
+	width: 92px;
+	height: 128px;
+	border-radius: 42px 42px 0 0;
+	background: #0f274d;
+	transform: translateX(-50%);
+}
+
+.mcast-mobile__enter-illustration i {
+	position: absolute;
+	left: 24%;
+	bottom: 34px;
+	width: 76px;
+	height: 76px;
+	border-radius: 50%;
+	background:
+		radial-gradient(circle at 64% 44%, #22c55e 0 4px, transparent 5px),
+		linear-gradient(180deg, #fff, #f8fbff);
+	box-shadow: 0 12px 30px rgba(15, 23, 42, .12);
+}
+
+.mcast-mobile__center h1,
+.mcast-mobile__permission-center h1,
+.mcast-mobile__setup-copy h1 {
+	margin: 0;
+	color: var(--mobile-ink);
+	font-size: clamp(30px, 8vw, 38px);
+	line-height: 1.08;
+	letter-spacing: 0;
+	font-weight: 850;
+}
+
+.mcast-mobile__center p,
+.mcast-mobile__permission-center p,
+.mcast-mobile__setup-copy p {
+	margin: 12px 0 0;
+	color: #2f3541;
+	font-size: 18px;
+	line-height: 1.36;
+	font-weight: 550;
+}
+
+.mcast-mobile__permission-center {
+	gap: 22px;
+}
+
+.mcast-mobile__permission-center span {
+	color: var(--mobile-muted);
+	font-size: 18px;
+	font-weight: 650;
+}
+
+.mcast-mobile__primary {
+	width: 100%;
+	min-height: 58px;
+	border: 0;
+	border-radius: 7px;
+	background: var(--mobile-blue);
+	color: #fff;
+	font: inherit;
+	font-size: 20px;
+	font-weight: 850;
+	box-shadow: 0 10px 24px rgba(25, 103, 233, .18);
+}
+
+.mcast-mobile__primary:disabled {
+	opacity: .68;
+}
+
+.mcast-mobile__status {
+	min-height: 22px;
+	color: #b91c1c;
+	font-size: 13px;
+	line-height: 1.35;
+	font-weight: 750;
+}
+
+.mcast-mobile__setup {
+	flex-direction: column;
+	background: #fff;
+	overflow: hidden;
+}
+
+.mcast-mobile__setup-scroll {
+	flex: 1;
+	overflow: auto;
+	-webkit-overflow-scrolling: touch;
+	padding: 18px 20px calc(28px + env(safe-area-inset-bottom));
+}
+
+.mcast-mobile__setup-copy {
+	text-align: center;
+	margin-bottom: 22px;
+}
+
+.mcast-mobile__setup-copy h1 {
+	font-size: clamp(28px, 7vw, 36px);
+}
+
+.mcast-mobile__setup-card {
+	display: grid;
+	grid-template-columns: minmax(0, 1.45fr) minmax(112px, .72fr);
+	min-height: 174px;
+	border: 1px solid var(--mobile-line);
+	border-radius: 7px;
+	overflow: hidden;
+	background: #f8fafc;
+}
+
+.mcast-mobile__setup-preview,
+.mcast-mobile__self-preview {
+	position: relative;
+	overflow: hidden;
+	background: #101114;
+}
+
+.mcast-mobile__setup-preview {
+	min-height: 174px;
+}
+
+.mcast-mobile__setup-preview video,
+.mcast-mobile__self-preview video {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	max-height: none !important;
+	object-fit: cover !important;
+	background: #101114;
+}
+
+.mcast-mobile__setup-preview video.mcast-mobile-video-corrected,
+.mcast-mobile__self-preview video.mcast-mobile-video-corrected {
+	position: absolute !important;
+	top: 50% !important;
+	left: 50% !important;
+	width: var(--mcast-mobile-corrected-width, 100%) !important;
+	height: var(--mcast-mobile-corrected-height, 100%) !important;
+	transform: translate(-50%, -50%) rotate(90deg) !important;
+	transform-origin: center center !important;
+}
+
+.mcast-mobile__setup-preview video.mcast-mobile-video-corrected.mcast-mobile-video-mirrored,
+.mcast-mobile__self-preview video.mcast-mobile-video-corrected.mcast-mobile-video-mirrored {
+	transform: translate(-50%, -50%) rotate(90deg) scaleX(-1) !important;
+}
+
+.mcast-mobile__setup-preview video.mcast-mobile-video-mirrored:not(.mcast-mobile-video-corrected),
+.mcast-mobile__self-preview video.mcast-mobile-video-mirrored:not(.mcast-mobile-video-corrected) {
+	transform: scaleX(-1) !important;
+}
+
+.mcast-mobile__preview-empty {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	color: rgba(255, 255, 255, .72);
+	font-size: 13px;
+	font-weight: 800;
+}
+
+.mcast-mobile.has-preview .mcast-mobile__preview-empty {
+	display: none;
+}
+
+.mcast-mobile__mic-panel {
+	display: grid;
+	place-items: center;
+	align-content: center;
+	gap: 12px;
+	padding: 16px 10px;
+	background: #f8fafc;
+	color: #168036;
+	text-align: center;
+}
+
+.mcast-mobile__mic-icon {
+	width: 28px;
+	height: 38px;
+	border: 4px solid #66717f;
+	border-top: 0;
+	border-radius: 0 0 18px 18px;
+}
+
+.mcast-mobile__mic-meter {
+	position: relative;
+	width: 42px;
+	height: 92px;
+	border: 2px solid #c8ced7;
+	border-radius: 8px;
+	background: #fff;
+	overflow: hidden;
+}
+
+.mcast-mobile__mic-meter i {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 20%;
+	background: #168036;
+	transition: height .08s linear;
+}
+
+.mcast-mobile__mic-panel strong {
+	font-size: 17px;
+	line-height: 1.15;
+}
+
+.mcast-mobile__setup-controls {
+	position: relative;
+	z-index: 2;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	width: min(420px, calc(100% - 40px));
+	margin: -1px auto 24px;
+	border: 1px solid var(--mobile-line);
+	border-radius: 4px;
+	background: #fff;
+	box-shadow: 0 10px 26px rgba(15, 23, 42, .12);
+}
+
+.mcast-mobile__tool {
+	min-height: 74px;
+	border: 0;
+	border-right: 1px solid var(--mobile-line);
+	background: transparent;
+	color: #3f4653;
+	font: inherit;
+	font-size: 14px;
+	font-weight: 750;
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.mcast-mobile__tool:last-child {
+	border-right: 0;
+}
+
+.mcast-mobile__tool svg,
+.mcast-mobile__control svg {
+	width: 22px;
+	height: 22px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.mcast-mobile__tool.is-off {
+	color: #b91c1c;
+}
+
+.mcast-mobile__settings {
+	display: grid;
+	gap: 8px;
+	margin: -10px 0 18px;
+	padding: 14px;
+	border: 1px solid var(--mobile-line);
+	border-radius: 12px;
+	background: #f8fafc;
+}
+
+.mcast-mobile__settings[hidden] {
+	display: none;
+}
+
+.mcast-mobile__settings label,
+.mcast-mobile__name-field span {
+	color: #434b58;
+	font-size: 16px;
+	font-weight: 650;
+}
+
+.mcast-mobile__settings select,
+.mcast-mobile__name-field input {
+	width: 100%;
+	min-height: 52px;
+	border: 1px solid #9ea6b2;
+	border-radius: 6px;
+	background: #fff;
+	color: var(--mobile-ink);
+	font: inherit;
+	font-size: 17px;
+	padding: 0 12px;
+}
+
+.mcast-mobile__info {
+	margin: 0 18px 24px;
+	text-align: center;
+	color: #4b5563;
+	font-size: 18px;
+	line-height: 1.42;
+	font-weight: 500;
+}
+
+.mcast-mobile__name-field {
+	display: grid;
+	gap: 10px;
+	margin-bottom: 28px;
+}
+
+.mcast-mobile__terms {
+	margin: 24px 10px 0;
+	color: #5f6876;
+	text-align: center;
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.mcast-mobile__backstage {
+	flex-direction: column;
+	background: var(--mobile-panel);
+	color: #fff;
+	overflow: hidden;
+}
+
+.mcast-mobile__dark-top {
+	min-height: calc(58px + env(safe-area-inset-top));
+	background: #fff;
+	color: var(--mobile-ink);
+	padding-bottom: 10px;
+}
+
+.mcast-mobile__brand--dark {
+	color: var(--mobile-ink);
+}
+
+.mcast-mobile__brand--dark small {
+	color: #6b7280;
+}
+
+.mcast-mobile__backstage-layout {
+	flex: 1;
+	min-height: 0;
+	display: grid;
+	grid-template-rows: minmax(220px, .88fr) minmax(260px, 1fr);
+	padding-bottom: calc(92px + env(safe-area-inset-bottom));
+}
+
+.mcast-mobile__stage-area {
+	min-height: 0;
+	background: #0f1013;
+}
+
+.mcast-mobile__stage-card {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	background:
+		linear-gradient(135deg, rgba(255, 255, 255, .025), transparent 38%),
+		#101114;
+}
+
+.mcast-mobile__stage-mark {
+	position: absolute;
+	left: 18px;
+	top: 18px;
+	padding: 7px 10px;
+	border-radius: 8px;
+	background: rgba(25, 103, 233, .18);
+	color: #dbeafe;
+	font-size: 12px;
+	font-weight: 900;
+	letter-spacing: .08em;
+}
+
+.mcast-mobile__side {
+	min-height: 0;
+	display: grid;
+	align-content: start;
+	gap: 14px;
+	padding: 14px;
+}
+
+.mcast-mobile__self-preview {
+	width: 138px;
+	aspect-ratio: 4 / 3;
+	border-radius: 7px;
+	background: #111827;
+	box-shadow: 0 10px 26px rgba(0, 0, 0, .24);
+}
+
+.mcast-mobile__self-preview span {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 5px 7px;
+	background: rgba(0, 0, 0, .42);
+	color: #fff;
+	font-size: 14px;
+	font-weight: 750;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mcast-mobile__backstage-card {
+	display: grid;
+	grid-template-columns: 82px 1fr;
+	max-width: 100%;
+	border-radius: 6px;
+	overflow: hidden;
+	background: #131a28;
+	box-shadow: 0 14px 34px rgba(0, 0, 0, .18);
+}
+
+.mcast-mobile__door-icon {
+	display: grid;
+	place-items: center;
+	background: rgba(255, 255, 255, .18);
+}
+
+.mcast-mobile__door-icon::before {
+	content: "";
+	width: 28px;
+	height: 34px;
+	border: 4px solid #fff;
+	border-right-width: 8px;
+	border-radius: 3px;
+	opacity: .95;
+}
+
+.mcast-mobile__backstage-card > div:last-child {
+	padding: 17px 15px;
+}
+
+.mcast-mobile__backstage-card strong {
+	display: block;
+	font-size: 18px;
+	line-height: 1.15;
+}
+
+.mcast-mobile__backstage-card p {
+	margin: 7px 0 0;
+	color: rgba(255, 255, 255, .88);
+	font-size: 16px;
+	line-height: 1.42;
+}
+
+.mcast-mobile__bottom-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 20;
+	display: grid;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 8px;
+	padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+	background: #0b101a;
+	border-top: 1px solid rgba(255, 255, 255, .08);
+}
+
+.mcast-mobile__control {
+	min-width: 0;
+	min-height: 58px;
+	border: 0;
+	border-radius: 8px;
+	background: #151c2a;
+	color: #fff;
+	font: inherit;
+	font-size: 11px;
+	font-weight: 800;
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+
+.mcast-mobile__control.is-off {
+	background: #3a1720;
+	color: #fecdd3;
+}
+
+.mcast-mobile__control--leave {
+	background: #dc2626;
+	color: #fff;
+}
+
+.mcast-mobile__toast {
+	position: fixed;
+	left: 14px;
+	right: 14px;
+	bottom: calc(90px + env(safe-area-inset-bottom));
+	z-index: 21;
+	display: none;
+	padding: 10px 12px;
+	border-radius: 12px;
+	background: rgba(15, 23, 42, .90);
+	color: #fff;
+	text-align: center;
+	font-size: 13px;
+	font-weight: 750;
+}
+
+.mcast-mobile__toast.is-visible {
+	display: block;
+}
+
+@media (orientation: landscape) and (max-width: 920px), (orientation: landscape) and (hover: none) {
+	.mcast-mobile__dark-top {
+		position: fixed;
+		left: 0;
+		top: 0;
+		z-index: 14;
+		width: 100%;
+		min-height: calc(48px + env(safe-area-inset-top));
+		padding-top: calc(8px + env(safe-area-inset-top));
+		padding-bottom: 8px;
+		background: rgba(255, 255, 255, .96);
+	}
+
+	.mcast-mobile__backstage-layout {
+		grid-template-columns: minmax(0, 1fr) minmax(210px, 280px);
+		grid-template-rows: 1fr;
+		gap: 0;
+		padding-top: calc(48px + env(safe-area-inset-top));
+		padding-bottom: calc(76px + env(safe-area-inset-bottom));
+	}
+
+	.mcast-mobile__stage-area {
+		min-height: 0;
+	}
+
+	.mcast-mobile__side {
+		background: var(--mobile-panel);
+		border-left: 1px solid rgba(255, 255, 255, .12);
+		padding: 14px;
+		overflow: auto;
+	}
+
+	.mcast-mobile__self-preview {
+		width: 100%;
+		max-width: 180px;
+		justify-self: center;
+	}
+
+	.mcast-mobile__backstage-card {
+		grid-template-columns: 1fr;
+	}
+
+	.mcast-mobile__door-icon {
+		display: none;
+	}
+
+	.mcast-mobile__bottom-bar {
+		left: 0;
+		right: 0;
+		grid-template-columns: repeat(5, minmax(72px, 104px));
+		justify-content: center;
+		padding-top: 8px;
+		padding-bottom: calc(8px + env(safe-area-inset-bottom));
+	}
+
+	.mcast-mobile__control {
+		min-height: 48px;
+	}
+}
+
+@media (max-width: 360px) {
+	.mcast-mobile__setup-scroll {
+		padding-left: 14px;
+		padding-right: 14px;
+	}
+
+	.mcast-mobile__setup-card {
+		grid-template-columns: minmax(0, 1.35fr) 104px;
+	}
+
+	.mcast-mobile__bottom-bar {
+		gap: 6px;
+		padding-left: 8px;
+		padding-right: 8px;
+	}
+}

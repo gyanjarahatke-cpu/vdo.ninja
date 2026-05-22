@@ -29,6 +29,9 @@
 		if (!root) {
 			return;
 		}
+		if (document.getElementById("mcastMobileGuest")) {
+			return;
+		}
 		if (isDesktopGuestViewport() && document.getElementById("mcastDesktopGuest")) {
 			return;
 		}
