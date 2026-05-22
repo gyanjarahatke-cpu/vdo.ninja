@@ -78,6 +78,8 @@
 			var mode = normalizeRouteToken(routedParams.get("mcastmode") || "", "");
 			var shouldAutostart = routedParams.has("mcastautojoin");
 			setFlag(routedParams, "webcam");
+			preserveGuestAutostartIntent(routedParams);
+			disableGuestAuxiliaryUiParams(routedParams);
 			removeMcastGuestShellParams(routedParams);
 			cleanEmptyNativeDeviceParams(routedParams);
 			normalizeGuestNameParams(routedParams);
@@ -86,8 +88,10 @@
 				routedParams.set("push", getOrCreateSingleLinkGuestPush(routedParams));
 			}
 			if (shouldAutostart) {
-				setFlag(routedParams, "autostart");
+				routedParams.set("mcastrequestedautostart", "1");
 			}
+			removeGuestAutostartParams(routedParams);
+			disableGuestAuxiliaryUiParams(routedParams);
 			removeMcastGuestShellParams(routedParams);
 		} else if (currentRoute === "call") {
 			if (routedParams.has("mcastbridge")) {
@@ -122,6 +126,63 @@
 		].forEach(function (key) {
 			routedParams.delete(key);
 		});
+	}
+
+	function preserveGuestAutostartIntent(routedParams) {
+		if (
+			routedParams.has("autostart") ||
+			routedParams.has("autojoin") ||
+			routedParams.has("aj") ||
+			routedParams.has("as") ||
+			routedParams.has("mcastautojoin")
+		) {
+			routedParams.set("mcastrequestedautostart", "1");
+		}
+	}
+
+	function removeGuestAutostartParams(routedParams) {
+		[
+			"autostart",
+			"autojoin",
+			"aj",
+			"as"
+		].forEach(function (key) {
+			routedParams.delete(key);
+		});
+	}
+
+	function disableGuestAuxiliaryUiParams(routedParams) {
+		[
+			"chatbutton",
+			"chat",
+			"cb",
+			"chatlite",
+			"ssnlite",
+			"socialstreamlite",
+			"chatlitebutton",
+			"ssnchatbutton",
+			"chatliteconfig",
+			"chatlitesession",
+			"ssnsession",
+			"chatliteprofile",
+			"chatliteposition",
+			"chatlitemax",
+			"chatlitetransparent",
+			"chatlitenoavatar",
+			"chatlitehideavatar",
+			"chatlitetts",
+			"fileshare",
+			"fs",
+			"broadcasttransfer",
+			"bct",
+			"queuetransfer",
+			"qt"
+		].forEach(function (key) {
+			routedParams.delete(key);
+		});
+		routedParams.set("chatbutton", "off");
+		routedParams.set("nofileshare", "");
+		routedParams.set("mcastdisableauxui", "1");
 	}
 
 	function hasGuestRoomTarget(query) {
@@ -253,13 +314,13 @@
 			routing: routing,
 			guestName: guestName
 		};
-		if (currentRoute !== "guest") {
-			var root = document.documentElement;
-			root.classList.add("mcast-mode-" + mode);
-			root.classList.add("mcast-role-" + role);
-			root.classList.add("mcast-state-" + state);
-			root.classList.add("mcast-routing-" + routing);
-		}
+		var root = document.documentElement;
+		root.classList.add("mcast-route");
+		root.classList.add("mcast-route-" + currentRoute);
+		root.classList.add("mcast-mode-" + mode);
+		root.classList.add("mcast-role-" + role);
+		root.classList.add("mcast-state-" + state);
+		root.classList.add("mcast-routing-" + routing);
 		if (currentRoute !== "guest" && role === "participant") {
 			document.title = "MCast Studio " + toTitleCase(mode);
 		}

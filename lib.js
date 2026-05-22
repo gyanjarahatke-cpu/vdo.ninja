@@ -60,6 +60,47 @@ var PPTKeyPressed = false;
 
 var translation = false;
 
+function mcastGuestAuxiliaryUiDisabled() {
+	return !!(
+		(typeof session !== "undefined" && session && session.mcastDisableAuxiliaryUi) ||
+		(typeof urlParams !== "undefined" && urlParams && urlParams.has && urlParams.has("mcastdisableauxui")) ||
+		(window.MCastRoute && window.MCastRoute.route === "guest")
+	);
+}
+
+function enforceMcastGuestAuxiliaryUiDisabled() {
+	if (!mcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
+	if (typeof session !== "undefined" && session) {
+		session.mcastDisableAuxiliaryUi = true;
+		session.chat = false;
+		session.chatbutton = false;
+		session.chatLiteEnabled = false;
+		session.chatLiteButton = false;
+		session.broadcastTransfer = false;
+		session.queueTransfer = false;
+		session.hostedFiles = false;
+		session.nodownloads = true;
+	}
+	[
+		"chatbutton",
+		"chatlitebutton",
+		"sharefilebutton",
+		"mediafileshare",
+		"chatModule",
+		"activeShares"
+	].forEach(function (id) {
+		var element = document.getElementById(id);
+		if (element) {
+			element.classList.add("hidden");
+			element.setAttribute("aria-hidden", "true");
+			element.style.display = "none";
+		}
+	});
+	return true;
+}
+
 var miscTranslations = {
 	// i can replace this list from time to time from the generated one in blank.json using translate.js
 	start: "START",
@@ -18710,7 +18751,7 @@ function getPeerDisplayName(UUID, fallback = "Someone", preferLabel = true) {
 const fileTransfers = {};
 
 function toggleFileshare(UUID = false, event = null) {
-	if (session.cleanOputput) { return; }
+	if (enforceMcastGuestAuxiliaryUiDisabled() || session.cleanOputput) { return false; }
 
 	let string = '';
 	if (UUID === false) {
@@ -18784,7 +18825,7 @@ function toggleFileManagerSize() {
 	updateFileShare();
 }
 function updateFileShare() {
-	if (session.cleanOutput) return;
+	if (enforceMcastGuestAuxiliaryUiDisabled() || session.cleanOutput) return;
 
 	const activeSharesDiv = document.getElementById('activeShares');
 	activeSharesDiv.innerHTML = '';
@@ -19037,6 +19078,9 @@ session.sendFile = function (UUID, fileid) {
 };
 
 function toggleChat(event = null) {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const chatModule = document.getElementById('chatModule');
 
 	if (!chatModule.configured) {
@@ -19208,6 +19252,9 @@ function setChatLiteButtonState(active = false) {
 }
 
 function ensureChatLiteOverlayFrame() {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return null;
+	}
 	if (chatLiteOverlayFrame && document.body.contains(chatLiteOverlayFrame)) {
 		return chatLiteOverlayFrame;
 	}
@@ -19225,6 +19272,9 @@ function ensureChatLiteOverlayFrame() {
 }
 
 function openChatLiteSettings() {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const settingsUrl = new URL("./chat-lite/index.html", window.location.href);
 	settingsUrl.searchParams.set("session", getChatLiteSessionId());
 	settingsUrl.searchParams.set("syncscope", getChatLiteSyncScope());
@@ -19239,7 +19289,13 @@ function openChatLiteSettings() {
 }
 
 function showChatLiteOverlay() {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const frame = ensureChatLiteOverlayFrame();
+	if (!frame) {
+		return false;
+	}
 	const desiredSrc = getChatLiteOverlayUrl();
 	if (frame.src !== desiredSrc) {
 		frame.src = desiredSrc;
@@ -19251,7 +19307,13 @@ function showChatLiteOverlay() {
 }
 
 function hideChatLiteOverlay() {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const frame = ensureChatLiteOverlayFrame();
+	if (!frame) {
+		return false;
+	}
 	frame.style.display = "none";
 	session.chatLiteVisible = false;
 	setStorage("chatLiteVisible", false, 9999);
@@ -19259,6 +19321,9 @@ function hideChatLiteOverlay() {
 }
 
 function toggleChatLiteOverlay(event = null) {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	if (event && event.shiftKey) {
 		openChatLiteSettings();
 		return;
@@ -19278,6 +19343,9 @@ function toggleChatLiteOverlay(event = null) {
 }
 
 function toggleChatLiteTTS(forceValue = null) {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const key = "ssn-lite::activity.tts.enabled";
 	let current = false;
 	try {
@@ -19295,6 +19363,9 @@ function toggleChatLiteTTS(forceValue = null) {
 }
 
 function initChatLiteIntegration() {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	if (typeof session.chatLiteButton === "undefined") {
 		session.chatLiteButton = false;
 	}
@@ -19406,6 +19477,9 @@ function toggleDirectFeedback(event = null) {
 }
 
 function setupAdjustableChat() {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const chatModule = document.getElementById('chatModule');
 	chatModule.configured = true;
 
@@ -22994,6 +23068,9 @@ function loadDirectorSettings() {
 }
 
 function sendChat(chatmessage = "hi", UUID = false, overlay = false) {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	// A directing room only is controlled by the Director, with the exception of MUTE.
 	log("Chat message");
 	var msg = {};
@@ -23517,7 +23594,9 @@ function processTipMessage(tipData, UUID) {
 	// Chat notification (red dot) when chat is closed
 	if (session.chat == false) {
 		getById("chattoggle").className = "las la-comments toggleSize pulsate";
-		getById("chatbutton").className = "float";
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+		}
 
 		if (getById("chatNotification").value) {
 			getById("chatNotification").value = getById("chatNotification").value + 1;
@@ -24132,8 +24211,10 @@ async function publishScreen() {
 				getById("mutebutton").classList.remove("hidden");
 				getById("mutespeakerbutton").classList.remove("hidden");
 				//getById("mutespeakerbutton").className="float";
-				getById("chatbutton").className = "float";
-				getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+				if (!mcastGuestAuxiliaryUiDisabled()) {
+					getById("chatbutton").className = "float";
+					getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+				}
 				getById("mutevideobutton").className = "float";
 				getById("hangupbutton").className = "float";
 				if (session.showSettings) {
@@ -24180,7 +24261,7 @@ async function publishScreen() {
 				getById("controlButtons").classList.add("hidden");
 			}
 
-			if (session.chatbutton === true) {
+			if (session.chatbutton === true && !mcastGuestAuxiliaryUiDisabled()) {
 				getById("chatbutton").classList.remove("hidden");
 				getById("controlButtons").classList.remove("hidden");
 			} else if (session.chatbutton === false) {
@@ -24673,8 +24754,10 @@ function publishWebcam(btn = false, miconly = false) {
 		getById("mutebutton").classList.remove("hidden");
 		getById("mutespeakerbutton").classList.remove("hidden");
 		//getById("mutespeakerbutton").className="float";
-		getById("chatbutton").className = "float";
-		getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+			getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		}
 		getById("mutevideobutton").className = "float";
 		getById("hangupbutton").className = "float";
 		if (session.showSettings) {
@@ -24742,7 +24825,7 @@ function publishWebcam(btn = false, miconly = false) {
 		getById("controlButtons").classList.add("hidden");
 	}
 
-	if (session.chatbutton === true) {
+	if (session.chatbutton === true && !mcastGuestAuxiliaryUiDisabled()) {
 		getById("chatbutton").classList.remove("hidden");
 		getById("controlButtons").classList.remove("hidden");
 	} else if (session.chatbutton === false) {
@@ -25466,11 +25549,15 @@ session.publishIFrame = function (iframeURL) {
 	getById("head2").className = "hidden";
 
 	if (!session.cleanOutput) {
-		getById("chatbutton").className = "float";
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+		}
 		getById("hangupbutton").className = "float";
 		getById("controlButtons").classList.remove("hidden");
 		// getById("legal").classList.remove("hidden");
-		getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		}
 		//getById("helpbutton").style.display = "inherit";
 		//getById("reportbutton").style.display = "";
 	} else {
@@ -25579,10 +25666,14 @@ session.publishIFrame = function (iframeURL) {
 	getById("head2").className = 'hidden';
 
 	if (!(session.cleanOutput)){
-		getById("chatbutton").className="float";
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className="float";
+		}
 		getById("hangupbutton").className="float";
 		getById("controlButtons").classList.remove("hidden");
-		getById('sharefilebutton').classList.remove("hidden"); // we won't override "display:none", if set, though.
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById('sharefilebutton').classList.remove("hidden"); // we won't override "display:none", if set, though.
+		}
 		getById("helpbutton").style.display = "inherit";
 		getById("reportbutton").style.display = "";
 	} else {
@@ -28403,8 +28494,10 @@ async function createRoomCallback(passAdd, passAdd2) {
 		if (session.queue) {
 			getById("queuebutton").classList.remove("hidden");
 		}
-		getById("chatbutton").classList.remove("hidden");
-		getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").classList.remove("hidden");
+			getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		}
 		getById("controlButtons").classList.remove("hidden");
 		// getById("legal").classList.remove("hidden");
 		getById("mutespeakerbutton").classList.remove("hidden");
@@ -28449,7 +28542,7 @@ async function createRoomCallback(passAdd, passAdd2) {
 		// getById("legal").classList.add("hidden");
 	}
 
-	if (session.chatbutton === true) {
+	if (session.chatbutton === true && !mcastGuestAuxiliaryUiDisabled()) {
 		getById("chatbutton").classList.remove("hidden");
 		getById("controlButtons").classList.remove("hidden");
 	} else if (session.chatbutton === false) {
@@ -40762,7 +40855,7 @@ var msgTransferList = [];
 var drawingRequestList = [];
 
 function notifyChatActionAvailable() {
-	if (session.chatbutton === false) {
+	if (session.chatbutton === false || enforceMcastGuestAuxiliaryUiDisabled()) {
 		return;
 	}
 	updateMessages();
@@ -40771,7 +40864,9 @@ function notifyChatActionAvailable() {
 	}
 	if (session.chat == false) {
 		getById("chattoggle").className = "las la-comments toggleSize pulsate";
-		getById("chatbutton").className = "float";
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+		}
 		if (getById("chatNotification").value) {
 			getById("chatNotification").value = getById("chatNotification").value + 1;
 		} else {
@@ -40891,7 +40986,7 @@ function addDownloadLink(fileList, UUID, pc) {
 		transferList.push(fileList[i]);
 	}
 
-	if (session.chatbutton === false) {
+	if (session.chatbutton === false || enforceMcastGuestAuxiliaryUiDisabled()) {
 		return;
 	} // messages can still appear as overlays
 
@@ -40903,7 +40998,9 @@ function addDownloadLink(fileList, UUID, pc) {
 
 	if (session.chat == false) {
 		getById("chattoggle").className = "las la-comments toggleSize pulsate";
-		getById("chatbutton").className = "float";
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+		}
 
 		if (getById("chatNotification").value) {
 			getById("chatNotification").value = getById("chatNotification").value + 1;
@@ -41058,6 +41155,9 @@ function fileShareMessage(fileinfo, idx) {
 }
 
 session.shareFile = function (ele, UUID = false, event = false) {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	const file = ele.files[0];
 	if (!file) return;
 
@@ -41115,6 +41215,9 @@ function arrayBufferToString(buffer, encoding, callback) {
 	reader.readAsText(blob, encoding);
 }
 session.hostFile = function (ele, event = false) {
+	if (enforceMcastGuestAuxiliaryUiDisabled()) {
+		return false;
+	}
 	// webcam stream is used to generated an SDP
 	log("FILE TRANSFER SETUP");
 	session.hostedFiles = [];
@@ -41162,8 +41265,10 @@ session.hostFile = function (ele, event = false) {
 	getById("head2").className = "hidden";
 
 	if (!session.cleanOutput) {
-		getById("chatbutton").className = "float";
-		getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+			getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		}
 		// getById("mediafileshare").classList.remove("hidden");
 		getById("hangupbutton").className = "float";
 		getById("controlButtons").classList.remove("hidden");
@@ -41607,8 +41712,10 @@ session.publishFile = function (ele, event) {
 		getById("head2").className = "hidden";
 
 		if (!session.cleanOutput) {
-			getById("chatbutton").className = "float";
-			getById("mediafileshare").classList.remove("hidden");
+			if (!mcastGuestAuxiliaryUiDisabled()) {
+				getById("chatbutton").className = "float";
+				getById("mediafileshare").classList.remove("hidden");
+			}
 			getById("hangupbutton").className = "float";
 			getById("controlButtons").classList.remove("hidden");
 			// getById("legal").classList.remove("hidden");
@@ -41868,8 +41975,10 @@ session.publishFrameSource = function (ele, event) {
 	getById("head2").className = "hidden";
 
 	if (!session.cleanOutput) {
-		getById("chatbutton").className = "float";
-		getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+			getById("sharefilebutton").classList.remove("hidden"); // we won't override "display:none", if set, though.
+		}
 		getById("hangupbutton").className = "float";
 		getById("controlButtons").classList.remove("hidden");
 		// getById("legal").classList.remove("hidden");
@@ -51089,7 +51198,7 @@ function getChatMessage(msg, label = false, director = false, overlay = false, U
 
 	pokeAPI("chat", apiBlob);
 
-	if (session.chatbutton === false) {
+	if (session.chatbutton === false || enforceMcastGuestAuxiliaryUiDisabled()) {
 		return;
 	} // messages can still appear as overlays ^
 
@@ -51104,7 +51213,9 @@ function getChatMessage(msg, label = false, director = false, overlay = false, U
 
 	if (session.chat == false) {
 		getById("chattoggle").className = "las la-comments toggleSize pulsate";
-		getById("chatbutton").className = "float";
+		if (!mcastGuestAuxiliaryUiDisabled()) {
+			getById("chatbutton").className = "float";
+		}
 
 		if (getById("chatNotification").value) {
 			getById("chatNotification").value = getById("chatNotification").value + 1;
@@ -63716,17 +63827,26 @@ function setupCommands() {
 	};
 
 	commands.sendChat = function (value = null, value2 = null) {
+		if (enforceMcastGuestAuxiliaryUiDisabled()) {
+			return false;
+		}
 		sendChat(value);
 		// sendChatMessage // this would add it to the chat message
 		return true;
 	};
 
 	commands.sendChatMessage = function (value = null, value2 = null) {
+		if (enforceMcastGuestAuxiliaryUiDisabled()) {
+			return false;
+		}
 		sendChatMessage(value);
 		return true;
 	};
 
 	commands.showChatOverlay = function (value = null, value2 = null) {
+		if (enforceMcastGuestAuxiliaryUiDisabled()) {
+			return false;
+		}
 		getChatMessage(value, false, false, true);
 		return true;
 	};

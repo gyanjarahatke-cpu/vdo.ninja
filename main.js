@@ -49,6 +49,49 @@ async function main() {
 	session.whepShareStatusDismissed = false;
 	session.whepTestPreviewUUID = false;
 	session.whepTestPreviewUrl = false;
+	const mcastGuestAuxiliaryUiDisabled = isMcastGuestAuxiliaryUiDisabled();
+	applyMcastGuestAuxiliaryUiPolicy();
+
+	function isMcastGuestAuxiliaryUiDisabled() {
+		return !!(
+			urlParams.has("mcastdisableauxui") ||
+			(window.MCastRoute && window.MCastRoute.route === "guest")
+		);
+	}
+
+	function applyMcastGuestAuxiliaryUiPolicy() {
+		if (!mcastGuestAuxiliaryUiDisabled) {
+			return;
+		}
+		session.mcastDisableAuxiliaryUi = true;
+		session.chat = false;
+		session.chatbutton = false;
+		session.chatLiteEnabled = false;
+		session.chatLiteButton = false;
+		session.broadcastTransfer = false;
+		session.queueTransfer = false;
+		session.hostedFiles = false;
+		session.nodownloads = true;
+		if (typeof transferSettings !== "undefined" && transferSettings) {
+			transferSettings.broadcast = false;
+			transferSettings.queue = false;
+		}
+		[
+			"chatbutton",
+			"chatlitebutton",
+			"sharefilebutton",
+			"mediafileshare",
+			"chatModule",
+			"activeShares"
+		].forEach(function (id) {
+			var element = getById(id);
+			if (element) {
+				element.classList.add("hidden");
+				element.setAttribute("aria-hidden", "true");
+				element.style.display = "none";
+			}
+		});
+	}
 
 	function normalizeWhepShareUrl(rawUrl) {
 		if (!rawUrl || typeof rawUrl !== "string") {
@@ -1473,7 +1516,7 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("broadcasttransfer") || urlParams.has("bct")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("broadcasttransfer") || urlParams.has("bct"))) {
 		log("Broadcast transfer flag set");
 		session.broadcastTransfer = urlParams.get("broadcasttransfer") || urlParams.get("bct") || null;
 		if (session.broadcastTransfer === "false") {
@@ -1492,7 +1535,7 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("queuetransfer") || urlParams.has("qt")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("queuetransfer") || urlParams.has("qt"))) {
 		log("Broadcast transfer flag set");
 		session.queueTransfer = urlParams.get("queuetransfer") || urlParams.get("qt") || null;
 		if (session.queueTransfer === "false") {
@@ -2060,7 +2103,7 @@ async function main() {
 		if (urlParams.get("screenshare") || urlParams.get("ss")) {
 			session.screenshare = urlParams.get("screenshare") || urlParams.get("ss");
 		}
-	} else if (urlParams.has("fileshare") || urlParams.has("fs")) {
+	} else if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("fileshare") || urlParams.has("fs"))) {
 		getById("container-5").classList.remove("hidden");
 		getById("container-5").classList.add("skip-animation");
 		getById("container-5").classList.remove("pointer");
@@ -2378,7 +2421,7 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("chatbutton") || urlParams.has("chat") || urlParams.has("cb")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("chatbutton") || urlParams.has("chat") || urlParams.has("cb"))) {
 		session.chatbutton = urlParams.get("chatbutton") || urlParams.get("chat") || urlParams.get("cb") || null;
 		if (session.chatbutton === "false") {
 			session.chatbutton = false;
@@ -2394,7 +2437,7 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("chatlite") || urlParams.has("ssnlite") || urlParams.has("socialstreamlite")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("chatlite") || urlParams.has("ssnlite") || urlParams.has("socialstreamlite"))) {
 		session.chatLiteEnabled = urlParams.get("chatlite") || urlParams.get("ssnlite") || urlParams.get("socialstreamlite") || true;
 		const normalizedChatLiteEnabled = typeof session.chatLiteEnabled === "string" ? session.chatLiteEnabled.trim().toLowerCase() : session.chatLiteEnabled;
 		if (normalizedChatLiteEnabled === "false" || normalizedChatLiteEnabled === "0" || normalizedChatLiteEnabled === "no" || normalizedChatLiteEnabled === "off") {
@@ -2405,7 +2448,7 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("chatlitebutton") || urlParams.has("ssnchatbutton")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("chatlitebutton") || urlParams.has("ssnchatbutton"))) {
 		session.chatLiteButton = urlParams.get("chatlitebutton") || urlParams.get("ssnchatbutton") || true;
 		const normalizedChatLiteButton = typeof session.chatLiteButton === "string" ? session.chatLiteButton.trim().toLowerCase() : session.chatLiteButton;
 		if (normalizedChatLiteButton === "false" || normalizedChatLiteButton === "0" || normalizedChatLiteButton === "no" || normalizedChatLiteButton === "off") {
@@ -2415,7 +2458,7 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("chatlitesession") || urlParams.has("ssnsession")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("chatlitesession") || urlParams.has("ssnsession"))) {
 		session.chatLiteSession = urlParams.get("chatlitesession") || urlParams.get("ssnsession") || "";
 		if (session.chatLiteSession) {
 			try {
@@ -2424,19 +2467,19 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("chatliteprofile")) {
+	if (!mcastGuestAuxiliaryUiDisabled && urlParams.has("chatliteprofile")) {
 		session.chatLiteProfile = urlParams.get("chatliteprofile") || "";
 	}
 
-	if (urlParams.has("chatliteposition")) {
+	if (!mcastGuestAuxiliaryUiDisabled && urlParams.has("chatliteposition")) {
 		session.chatLitePosition = urlParams.get("chatliteposition") || "";
 	}
 
-	if (urlParams.has("chatlitemax")) {
+	if (!mcastGuestAuxiliaryUiDisabled && urlParams.has("chatlitemax")) {
 		session.chatLiteMax = parseInt(urlParams.get("chatlitemax")) || "";
 	}
 
-	if (urlParams.has("chatlitetransparent")) {
+	if (!mcastGuestAuxiliaryUiDisabled && urlParams.has("chatlitetransparent")) {
 		session.chatLiteTransparent = urlParams.get("chatlitetransparent") || true;
 		const normalizedChatLiteTransparent = typeof session.chatLiteTransparent === "string" ? session.chatLiteTransparent.trim().toLowerCase() : session.chatLiteTransparent;
 		if (normalizedChatLiteTransparent === "false" || normalizedChatLiteTransparent === "0" || normalizedChatLiteTransparent === "no" || normalizedChatLiteTransparent === "off") {
@@ -2446,20 +2489,20 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("chatlitenoavatar") || urlParams.has("chatlitehideavatar")) {
+	if (!mcastGuestAuxiliaryUiDisabled && (urlParams.has("chatlitenoavatar") || urlParams.has("chatlitehideavatar"))) {
 		session.chatLiteNoAvatar = true;
 	}
 
-	if (urlParams.has("chatliteconfig")) {
+	if (!mcastGuestAuxiliaryUiDisabled && urlParams.has("chatliteconfig")) {
 		session.chatLiteAutoConfig = true;
 		session.chatLiteButton = true;
 	}
 
-	if (urlParams.has("chatlitetts")) {
+	if (!mcastGuestAuxiliaryUiDisabled && urlParams.has("chatlitetts")) {
 		session.chatLiteTtsMode = (urlParams.get("chatlitetts") || "").toLowerCase().trim();
 	}
 
-	if (session.chatLiteButton) {
+	if (!mcastGuestAuxiliaryUiDisabled && session.chatLiteButton) {
 		const chatLiteButton = getById("chatlitebutton");
 		if (chatLiteButton) {
 			chatLiteButton.classList.remove("hidden");
@@ -8057,7 +8100,9 @@ async function main() {
 		}
 	}
 
-	if (urlParams.has("nofileshare") || urlParams.has("nodownloads") || urlParams.has("nofiles")) {
+	if (mcastGuestAuxiliaryUiDisabled) {
+		applyMcastGuestAuxiliaryUiPolicy();
+	} else if (urlParams.has("nofileshare") || urlParams.has("nodownloads") || urlParams.has("nofiles")) {
 		session.hostedFiles = false;
 		session.nodownloads = true;
 		getById("sharefilebutton").style.display = "none";
@@ -8480,7 +8525,9 @@ async function main() {
 		}
 
 		if ("sendChat" in e.data) {
-			sendChat(e.data.sendChat); // sends to all peers; more options down the road
+			if (!mcastGuestAuxiliaryUiDisabled) {
+				sendChat(e.data.sendChat); // sends to all peers; more options down the road
+			}
 			return;
 		}
 		// Chat out gets called via getChatMessage function
@@ -10182,7 +10229,7 @@ async function main() {
 
 			if (AltPressed) {
 				// CTRL + ALT
-				if (event.keyCode == 70) {
+				if (event.keyCode == 70 && !mcastGuestAuxiliaryUiDisabled) {
 					// F
 					toggleFileshare();
 					event.preventDefault();
