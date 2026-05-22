@@ -14,7 +14,9 @@
 		lastLocalStreamDebug: "",
 		roomLayoutMode: "",
 		roomLayoutModeManual: false,
-		orientationSwitching: false
+		viewportUpdateFrame: 0,
+		lastViewportOrientation: "",
+		lastStreamLog: ""
 	};
 
 	if (document.readyState === "loading") {
@@ -51,10 +53,10 @@
 		window.addEventListener("offline", function () {
 			setStatus("You appear to be offline. Check your connection, then rejoin.", "error");
 		});
-		window.addEventListener("resize", updateViewportOrientationState);
+		window.addEventListener("resize", scheduleViewportOrientationState);
 		window.addEventListener("orientationchange", function () {
-			updateViewportOrientationState();
-			applyFootageOrientationMode(state.roomLayoutMode, { recreate: false, silent: true });
+			scheduleViewportOrientationState();
+			retryLocalVideoPlayback("orientationchange");
 		});
 	}
 
@@ -126,17 +128,19 @@
 		if (cameraButton) {
 			cameraButton.addEventListener("click", function () {
 				setLoading("mcastCameraButton", true);
-				if (typeof window.toggleVideoMute === "function") {
-					window.toggleVideoMute();
-				} else {
-					setVideoTracksEnabled(isCameraOff());
+				var stream = getLocalStream(getLocalVideoElement());
+				var hasLiveVideo = !!(stream && stream.getVideoTracks && stream.getVideoTracks().some(isLiveTrack));
+				if (hasLiveVideo) {
+					var nextEnabled = isCameraOff();
+					setVideoTracksEnabled(nextEnabled);
 					if (window.session) {
-						window.session.videoMuted = !isCameraOff();
+						window.session.videoMuted = !nextEnabled;
 					}
+				} else if (typeof window.toggleVideoMute === "function") {
+					window.toggleVideoMute();
 				}
 				window.setTimeout(function () {
-					setVideoTracksEnabled(!isCameraOff());
-					bindLocalVideo("camera-toggle");
+					retryLocalVideoPlayback("camera-toggle");
 					updateControlStates();
 					logLocalStreamState("camera-toggle");
 					setLoading("mcastCameraButton", false);
@@ -181,8 +185,14 @@
 		preview.setAttribute("autoplay", "");
 		preview.muted = true;
 		previewSlot.appendChild(preview);
-		preview.addEventListener("loadedmetadata", markPreviewReady);
-		preview.addEventListener("playing", markPreviewReady);
+		preview.addEventListener("loadedmetadata", function () {
+			mcastLog("video loadedmetadata", getVideoSummary(preview));
+			markPreviewReady();
+		});
+		preview.addEventListener("playing", function () {
+			mcastLog("video playing", getVideoSummary(preview));
+			markPreviewReady();
+		});
 	}
 
 	function decorateButtons() {
@@ -211,7 +221,6 @@
 		setStatus("Requesting camera and microphone access...", "busy");
 		startSlowTimer("Still waiting for browser permission. Use the camera and microphone prompt in your browser to continue.");
 		try {
-			applyFootageOrientationMode(state.roomLayoutMode, { recreate: false, silent: true });
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
 			}
@@ -219,12 +228,14 @@
 			await waitForPreview(9000);
 			state.previewStarted = true;
 			bindLocalVideo("preview-ready");
+			mcastLog("stream acquired", getStreamSummary(getLocalStream(getLocalVideoElement())));
 			syncDevices();
 			await reportDeviceHealth();
 			if (!state.lastError) {
 				setStatus("Preview is ready. Check your camera and microphone, then join.", "ready");
 			}
 		} catch (error) {
+			mcastLog("getUserMedia error", { name: error && error.name, message: error && error.message });
 			showPermissionError(error);
 			throw error;
 		} finally {
@@ -248,7 +259,6 @@
 			if (!state.previewStarted) {
 				await startPreview();
 			}
-			applyFootageOrientationMode(state.roomLayoutMode, { recreate: false, silent: true });
 			applyGuestName();
 			await waitForReadyButton(9000);
 			var nativeButton = byId("gowebcam");
@@ -532,8 +542,10 @@
 		video.setAttribute("autoplay", "");
 		video.muted = true;
 		video.dataset.mcastLocal = "true";
+		installLocalVideoEventLogs(video);
 		if (stream && video.srcObject !== stream) {
 			video.srcObject = stream;
+			mcastLog("stream acquired", getStreamSummary(stream));
 		}
 		if (video.parentNode !== surface) {
 			surface.appendChild(video);
@@ -541,11 +553,80 @@
 		if (video.srcObject) {
 			root.classList.add("has-preview");
 			state.previewStarted = true;
-			video.play().catch(function () {});
+			if (video.paused || video.readyState < 2) {
+				video.play().catch(function () {
+					mcastLog("video play retry failed", { reason: reason || "local-bind" });
+				});
+			}
 		}
 		applyTileOrientation(byId("mcastLocalTile"), video, state.roomLayoutMode);
 		logLocalStreamState(reason || "local-bind");
 		return !!video.srcObject;
+	}
+
+	function installLocalVideoEventLogs(video) {
+		if (!video || video.dataset.mcastEventLogs === "true") {
+			return;
+		}
+		video.dataset.mcastEventLogs = "true";
+		video.addEventListener("loadedmetadata", function () {
+			mcastLog("video loadedmetadata", getVideoSummary(video));
+		});
+		video.addEventListener("playing", function () {
+			mcastLog("video playing", getVideoSummary(video));
+		});
+	}
+
+	function retryLocalVideoPlayback(reason) {
+		var video = getLocalVideoElement();
+		if (!video || !video.srcObject || typeof video.play !== "function") {
+			return false;
+		}
+		video.play().then(function () {
+			mcastLog("video playing", Object.assign({ reason: reason || "retry" }, getVideoSummary(video)));
+		}).catch(function (error) {
+			mcastLog("video play retry failed", { reason: reason || "retry", name: error && error.name, message: error && error.message });
+		});
+		return true;
+	}
+
+	function mcastLog(message, details) {
+		try {
+			var signature = message + ":" + JSON.stringify(details || {});
+			if (signature === state.lastStreamLog) {
+				return;
+			}
+			state.lastStreamLog = signature;
+			console.info("[MCast guest]", message, details || {});
+		} catch (error) {}
+	}
+
+	function getStreamSummary(stream) {
+		return {
+			hasStream: !!stream,
+			videoTracks: stream && stream.getVideoTracks ? stream.getVideoTracks().map(getTrackSummary) : [],
+			audioTracks: stream && stream.getAudioTracks ? stream.getAudioTracks().map(getTrackSummary) : []
+		};
+	}
+
+	function getTrackSummary(track) {
+		return {
+			kind: track.kind,
+			enabled: track.enabled,
+			readyState: track.readyState,
+			label: track.label || ""
+		};
+	}
+
+	function getVideoSummary(video) {
+		return {
+			id: video && video.id,
+			readyState: video && video.readyState,
+			paused: video && video.paused,
+			videoWidth: video && video.videoWidth,
+			videoHeight: video && video.videoHeight,
+			hasSrcObject: !!(video && video.srcObject)
+		};
 	}
 
 	function getLocalVideoElement() {
@@ -599,6 +680,7 @@
 		}
 		stream.getVideoTracks().forEach(function (track) {
 			track.enabled = !!enabled;
+			mcastLog("camera track enabled/disabled", { enabled: !!enabled, readyState: track.readyState, label: track.label || "" });
 		});
 	}
 
@@ -683,6 +765,10 @@
 			cameraButton.classList.toggle("is-off", videoOff);
 			cameraButton.setAttribute("aria-pressed", videoOff ? "true" : "false");
 			setButtonContent(cameraButton, videoOff ? "video" : "video-off", videoOff ? "Camera on" : "Camera off");
+			var localTile = byId("mcastLocalTile");
+			if (localTile) {
+				localTile.classList.toggle("is-camera-off", videoOff);
+			}
 		}
 		if (settingsButton) {
 			var panel = byId("mcastSettingsPanel");
@@ -705,7 +791,6 @@
 		} else {
 			setRoomLayoutMode(detectInitialRoomLayoutMode(), false);
 		}
-		applyFootageOrientationMode(state.roomLayoutMode, { recreate: false, silent: true });
 		updateViewportOrientationState();
 	}
 
@@ -735,7 +820,7 @@
 	function toggleRoomLayoutMode() {
 		var mode = state.roomLayoutMode === "landscape" ? "portrait" : "landscape";
 		setRoomLayoutMode(mode, true);
-		applyFootageOrientationMode(mode, { recreate: true, silent: false });
+		retryLocalVideoPlayback("orientation-toggle");
 	}
 
 	function setRoomLayoutMode(mode, persist) {
@@ -746,9 +831,13 @@
 		state.roomLayoutModeManual = state.roomLayoutModeManual || !!persist;
 		document.body.classList.toggle("mcast-room-layout-landscape", mode === "landscape");
 		document.body.classList.toggle("mcast-room-layout-portrait", mode === "portrait");
+		document.body.classList.toggle("mobile-landscape-mode", mode === "landscape");
+		document.body.classList.toggle("mobile-portrait-mode", mode === "portrait");
 		document.body.dataset.mcastRoomLayoutMode = mode;
 		if (root) {
 			root.dataset.roomLayoutMode = mode;
+			root.classList.toggle("mobile-landscape-mode", mode === "landscape");
+			root.classList.toggle("mobile-portrait-mode", mode === "portrait");
 		}
 		if (persist) {
 			try {
@@ -758,6 +847,7 @@
 		updateTileOrientations();
 		updateRoomLayoutButton();
 		updateViewportOrientationState();
+		mcastLog("orientation mode changed", { mode: mode });
 	}
 
 	function applyRoomLayoutMode() {
@@ -766,105 +856,6 @@
 			return;
 		}
 		setRoomLayoutMode(state.roomLayoutMode, false);
-	}
-
-	function applyFootageOrientationMode(mode, options) {
-		options = options || {};
-		if (!isValidRoomLayoutMode(mode) || !window.session) {
-			return Promise.resolve(false);
-		}
-		var aspect = getAspectForMode(mode);
-		window.session.orientation = mode;
-		window.session.forceAspectRatio = aspect;
-		if (mode === "landscape") {
-			window.session.aspectRatio = 0;
-		} else {
-			window.session.aspectRatio = 1;
-		}
-		updateInternalOrientationParams(mode);
-		if (typeof window.updateForceRotate === "function") {
-			try {
-				window.updateForceRotate();
-			} catch (error) {}
-		}
-		if (window.session && typeof window.session.setResolution === "function") {
-			try {
-				window.session.setResolution();
-			} catch (error) {}
-		}
-		if (!getLocalStream(getLocalVideoElement())) {
-			updateTileOrientations();
-			return Promise.resolve(true);
-		}
-		state.orientationSwitching = true;
-		setLoading("mcastOrientationButton", true);
-		if (!options.silent) {
-			setTemporaryStatus("Switching to " + mode + " camera mode...", "busy", 1600);
-		}
-		if (options.recreate && !options.silent) {
-			requestScreenOrientation(mode);
-		}
-		var applied = Promise.resolve(false);
-		if (typeof window.updateCameraConstraints === "function") {
-			applied = Promise.resolve(window.updateCameraConstraints("aspectRatio", aspect, false, false, false)).then(function () {
-				return true;
-			}).catch(function () {
-				return false;
-			});
-		}
-		return applied.then(function (ok) {
-			if (!ok && options.recreate) {
-				refreshVideoDeviceForOrientation();
-			}
-			window.setTimeout(function () {
-				if (typeof window.updateForceRotate === "function") {
-					try {
-						window.updateForceRotate();
-					} catch (error) {}
-				}
-				bindLocalVideo("orientation-" + mode);
-				updateTileOrientations();
-				state.orientationSwitching = false;
-				setLoading("mcastOrientationButton", false);
-				logLocalStreamState("orientation-" + mode);
-			}, options.recreate ? 900 : 120);
-			return ok;
-		});
-	}
-
-	function refreshVideoDeviceForOrientation() {
-		var stream = getLocalStream(getLocalVideoElement());
-		var track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
-		var settings = track && typeof track.getSettings === "function" ? track.getSettings() : {};
-		if (settings && settings.deviceId && typeof window.changeVideoDeviceById === "function") {
-			try {
-				window.changeVideoDeviceById(settings.deviceId);
-				return true;
-			} catch (error) {}
-		}
-		var nativeSelect = byId("videoSource3") || byId("videoSourceSelect");
-		if (nativeSelect && nativeSelect.value) {
-			dispatchNativeChange(nativeSelect);
-			return true;
-		}
-		return false;
-	}
-
-	function updateInternalOrientationParams(mode) {
-		if (!window.urlParams) {
-			return;
-		}
-		try {
-			["forcelandscape", "forcedlandscape", "fl", "forceportrait", "forcedportrait", "fp"].forEach(function (name) {
-				if (typeof window.urlParams.delete === "function") {
-					window.urlParams.delete(name);
-				}
-			});
-			if (typeof window.urlParams.set === "function") {
-				window.urlParams.set(mode === "landscape" ? "forcelandscape" : "forceportrait", "");
-				window.urlParams.set("aspectratio", mode === "landscape" ? "landscape" : "portrait");
-			}
-		} catch (error) {}
 	}
 
 	function getOrientationParamState() {
@@ -883,18 +874,6 @@
 		return mode === "portrait" ? 9 / 16 : 16 / 9;
 	}
 
-	function requestScreenOrientation(mode) {
-		if (!screen || !screen.orientation || typeof screen.orientation.lock !== "function" || !isMobileViewport()) {
-			return;
-		}
-		try {
-			var lock = screen.orientation.lock(mode === "landscape" ? "landscape" : "portrait");
-			if (lock && typeof lock.catch === "function") {
-				lock.catch(function () {});
-			}
-		} catch (error) {}
-	}
-
 	function updateRoomLayoutButton() {
 		var button = byId("mcastOrientationButton");
 		if (!button) {
@@ -907,8 +886,22 @@
 		setButtonContent(button, nextMode, label);
 	}
 
+	function scheduleViewportOrientationState() {
+		if (state.viewportUpdateFrame) {
+			return;
+		}
+		state.viewportUpdateFrame = window.requestAnimationFrame(function () {
+			state.viewportUpdateFrame = 0;
+			updateViewportOrientationState();
+		});
+	}
+
 	function updateViewportOrientationState() {
 		var isPortraitViewport = !!(window.matchMedia && window.matchMedia("(orientation: portrait)").matches);
+		var viewportMode = isPortraitViewport ? "portrait" : "landscape";
+		if (state.lastViewportOrientation !== viewportMode) {
+			state.lastViewportOrientation = viewportMode;
+		}
 		document.body.classList.toggle("mcast-viewport-portrait", isPortraitViewport);
 		document.body.classList.toggle("mcast-viewport-landscape", !isPortraitViewport);
 		var hint = byId("mcastOrientationHint");
