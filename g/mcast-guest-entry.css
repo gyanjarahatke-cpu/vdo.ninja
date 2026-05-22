@@ -388,6 +388,18 @@ body:not(.mcast-room-active) .mcast-entry__stage-foot {
 	display: none;
 }
 
+.mcast-entry__orientation-hint {
+	display: none;
+	padding: 9px 14px;
+	border-bottom: 1px solid rgba(125, 211, 252, .26);
+	background: rgba(47, 128, 237, .14);
+	color: #dbeafe;
+	font-size: 12px;
+	line-height: 1.35;
+	font-weight: 850;
+	text-align: center;
+}
+
 .mcast-entry__stage-title {
 	margin: 0;
 	color: var(--mcast-text);
@@ -479,6 +491,14 @@ body:not(.mcast-room-active) .mcast-entry__remote-tiles {
 	min-height: 0;
 }
 
+.mcast-entry__tile--landscape {
+	aspect-ratio: 16 / 9;
+}
+
+.mcast-entry__tile--portrait {
+	aspect-ratio: 9 / 16;
+}
+
 .mcast-entry__tile--local {
 	min-height: 330px;
 }
@@ -533,6 +553,16 @@ body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid {
 .mcast-entry__tile video {
 	width: 100%;
 	height: 100%;
+	object-fit: cover;
+}
+
+.mcast-entry__tile.is-orientation-mismatch video,
+body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__tile video {
+	object-fit: contain;
+}
+
+body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__tile--landscape:not(.is-orientation-mismatch) video,
+body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__tile--portrait:not(.is-orientation-mismatch) video {
 	object-fit: cover;
 }
 
@@ -724,6 +754,56 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 	body.mcast-room-active .mcast-entry__control--orientation {
 		display: inline-flex;
 	}
+
+	body.mcast-room-active.mcast-room-layout-landscape {
+		overflow: hidden;
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry {
+		grid-template-rows: 1fr;
+		gap: 8px;
+		padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__topbar {
+		display: none;
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__stage {
+		min-height: calc(100vh - 16px);
+		min-height: calc(100dvh - 16px);
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__stage-head,
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__stage-foot {
+		padding: 8px 10px;
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape .mcast-entry__room-grid {
+		min-height: 0;
+		align-content: center;
+	}
+
+	body.mcast-room-active.mcast-room-layout-landscape.mcast-viewport-portrait .mcast-entry__orientation-hint:not([hidden]) {
+		display: block;
+	}
+
+	body.mcast-room-active.mcast-room-layout-portrait {
+		overflow-y: auto;
+	}
+
+	body.mcast-room-active.mcast-room-layout-portrait .mcast-entry {
+		padding-bottom: calc(92px + env(safe-area-inset-bottom));
+	}
+
+	body.mcast-room-active.mcast-room-layout-portrait .mcast-entry__stage-foot {
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 10;
+		border-top-color: rgba(174, 190, 212, .42);
+	}
 }
 
 @media (max-width: 640px) {
@@ -842,7 +922,7 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 		width: 100%;
 	}
 
-	body.mcast-room-active .mcast-entry__stage-foot {
+	body.mcast-room-active:not(.mcast-room-layout-portrait) .mcast-entry__stage-foot {
 		position: sticky;
 		bottom: 0;
 	}
