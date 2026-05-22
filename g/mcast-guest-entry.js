@@ -14,6 +14,7 @@
 		lastLocalStreamDebug: "",
 		roomLayoutMode: "",
 		roomLayoutModeManual: false,
+		orientationUpdateTimer: 0,
 		lastStreamLog: ""
 	};
 
@@ -51,6 +52,8 @@
 		window.addEventListener("offline", function () {
 			setStatus("You appear to be offline. Check your connection, then rejoin.", "error");
 		});
+		window.addEventListener("resize", scheduleVideoOrientationCorrection);
+		window.addEventListener("orientationchange", scheduleVideoOrientationCorrection);
 	}
 
 	function wireUi() {
@@ -180,10 +183,12 @@
 		previewSlot.appendChild(preview);
 		preview.addEventListener("loadedmetadata", function () {
 			mcastLog("video loadedmetadata", getVideoSummary(preview));
+			applyLocalVideoOrientationCorrection(preview, "preview-loadedmetadata");
 			markPreviewReady();
 		});
 		preview.addEventListener("playing", function () {
 			mcastLog("video playing", getVideoSummary(preview));
+			applyLocalVideoOrientationCorrection(preview, "preview-playing");
 			markPreviewReady();
 		});
 	}
@@ -553,6 +558,7 @@
 			}
 		}
 		applyTileOrientation(byId("mcastLocalTile"), video, state.roomLayoutMode);
+		applyLocalVideoOrientationCorrection(video, reason || "local-bind");
 		logLocalStreamState(reason || "local-bind");
 		return !!video.srcObject;
 	}
@@ -564,9 +570,14 @@
 		video.dataset.mcastEventLogs = "true";
 		video.addEventListener("loadedmetadata", function () {
 			mcastLog("video loadedmetadata", getVideoSummary(video));
+			applyLocalVideoOrientationCorrection(video, "loadedmetadata");
 		});
 		video.addEventListener("playing", function () {
 			mcastLog("video playing", getVideoSummary(video));
+			applyLocalVideoOrientationCorrection(video, "playing");
+		});
+		video.addEventListener("resize", function () {
+			applyLocalVideoOrientationCorrection(video, "video-resize");
 		});
 	}
 
@@ -833,6 +844,7 @@
 		}
 		updateTileOrientations();
 		updateRoomLayoutButton();
+		applyLocalVideoOrientationCorrection(getLocalVideoElement(), "aspect-toggle");
 		mcastLog("aspect mode changed", { mode: mode });
 	}
 
@@ -930,6 +942,126 @@
 		tile.classList.toggle("mcast-entry__tile--landscape", mode === "landscape");
 		tile.dataset.videoOrientation = mode;
 		tile.dataset.videoAspect = aspect ? String(Math.round(aspect * 1000) / 1000) : "";
+	}
+
+	function scheduleVideoOrientationCorrection() {
+		if (state.orientationUpdateTimer) {
+			window.clearTimeout(state.orientationUpdateTimer);
+		}
+		state.orientationUpdateTimer = window.setTimeout(function () {
+			state.orientationUpdateTimer = 0;
+			applyLocalVideoOrientationCorrection(getLocalVideoElement(), "viewport-change");
+		}, 120);
+	}
+
+	function applyLocalVideoOrientationCorrection(video, reason) {
+		if (!video) {
+			return;
+		}
+		var tile = byId("mcastLocalTile");
+		var surface = byId("mcastPreviewSurface");
+		var box = tile || surface;
+		var viewport = getViewportOrientationState();
+		var streamOrientation = getActualStreamOrientation(video);
+		var preferredMode = state.roomLayoutMode || detectInitialRoomLayoutMode();
+		var shouldCorrect = !!(
+			isMobileViewport() &&
+			viewport.orientation === "portrait" &&
+			streamOrientation === "landscape" &&
+			video.videoWidth &&
+			video.videoHeight
+		);
+		var mirrored = isMirroredLocalVideo(video);
+
+		video.classList.toggle("mcast-video-rotation-corrected", shouldCorrect);
+		video.classList.toggle("mcast-video-mirrored", mirrored);
+		video.dataset.mcastStreamOrientation = streamOrientation || "";
+		video.dataset.mcastViewportOrientation = viewport.orientation;
+		video.dataset.mcastPreferredMode = preferredMode;
+		if (tile) {
+			tile.classList.toggle("has-video-rotation-correction", shouldCorrect);
+		}
+
+		if (shouldCorrect && box) {
+			var rect = box.getBoundingClientRect();
+			if (rect.width && rect.height) {
+				var correctedWidth = Math.round(rect.height) + "px";
+				var correctedHeight = Math.round(rect.width) + "px";
+				video.style.setProperty("--mcast-corrected-video-width", correctedWidth);
+				video.style.setProperty("--mcast-corrected-video-height", correctedHeight);
+				video.style.setProperty("position", "absolute", "important");
+				video.style.setProperty("top", "50%", "important");
+				video.style.setProperty("left", "50%", "important");
+				video.style.setProperty("width", correctedWidth, "important");
+				video.style.setProperty("height", correctedHeight, "important");
+				video.style.setProperty("max-width", "none", "important");
+				video.style.setProperty("max-height", "none", "important");
+				video.style.setProperty("object-fit", "cover", "important");
+				video.style.setProperty("transform-origin", "center center", "important");
+				video.style.setProperty("transform", mirrored ? "translate(-50%, -50%) rotate(90deg) scaleX(-1)" : "translate(-50%, -50%) rotate(90deg)", "important");
+			}
+		} else {
+			video.style.removeProperty("--mcast-corrected-video-width");
+			video.style.removeProperty("--mcast-corrected-video-height");
+			video.style.removeProperty("position");
+			video.style.removeProperty("top");
+			video.style.removeProperty("left");
+			video.style.removeProperty("width");
+			video.style.removeProperty("height");
+			video.style.removeProperty("max-width");
+			video.style.removeProperty("max-height");
+			video.style.removeProperty("object-fit");
+			video.style.removeProperty("transform-origin");
+			video.style.removeProperty("transform");
+		}
+
+		mcastLog("video orientation correction", {
+			reason: reason || "",
+			viewportWidth: viewport.width,
+			viewportHeight: viewport.height,
+			viewportOrientation: viewport.orientation,
+			mediaQueryPortrait: viewport.mediaQueryPortrait,
+			windowOrientation: viewport.windowOrientation,
+			screenOrientationType: viewport.screenOrientationType,
+			videoWidth: video.videoWidth || 0,
+			videoHeight: video.videoHeight || 0,
+			streamOrientation: streamOrientation || "",
+			preferredMode: preferredMode,
+			correctiveRotation: shouldCorrect,
+			mirrored: mirrored
+		});
+	}
+
+	function getViewportOrientationState() {
+		var width = window.innerWidth || document.documentElement.clientWidth || 0;
+		var height = window.innerHeight || document.documentElement.clientHeight || 0;
+		var mediaQueryPortrait = !!(window.matchMedia && window.matchMedia("(orientation: portrait)").matches);
+		var screenOrientation = window.screen && window.screen.orientation;
+		return {
+			width: width,
+			height: height,
+			orientation: width > height ? "landscape" : "portrait",
+			mediaQueryPortrait: mediaQueryPortrait,
+			windowOrientation: typeof window.orientation === "number" ? window.orientation : null,
+			screenOrientationType: screenOrientation && screenOrientation.type ? screenOrientation.type : ""
+		};
+	}
+
+	function getActualStreamOrientation(video) {
+		var width = video && video.videoWidth ? video.videoWidth : 0;
+		var height = video && video.videoHeight ? video.videoHeight : 0;
+		if (!width || !height) {
+			return "";
+		}
+		return width > height ? "landscape" : "portrait";
+	}
+
+	function isMirroredLocalVideo(video) {
+		if (!video) {
+			return false;
+		}
+		var inlineTransform = (video.style && video.style.transform) || "";
+		return video.classList.contains("mirrorControl") || inlineTransform.indexOf("scaleX(-1)") !== -1;
 	}
 
 	function getVideoDisplayAspect(video) {

@@ -438,6 +438,27 @@ body:not(.mcast-room-active) .mcast-entry__stage-foot {
 	background: #030712;
 }
 
+.mcast-entry__preview video.mcast-video-mirrored:not(.mcast-video-rotation-corrected) {
+	transform: scaleX(-1) !important;
+}
+
+.mcast-entry__preview video.mcast-video-rotation-corrected {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: var(--mcast-corrected-video-width, 100%) !important;
+	height: var(--mcast-corrected-video-height, 100%) !important;
+	max-width: none !important;
+	max-height: none !important;
+	object-fit: cover !important;
+	transform: translate(-50%, -50%) rotate(90deg) !important;
+	transform-origin: center center;
+}
+
+.mcast-entry__preview video.mcast-video-rotation-corrected.mcast-video-mirrored {
+	transform: translate(-50%, -50%) rotate(90deg) scaleX(-1) !important;
+}
+
 .mcast-entry__preview-empty {
 	position: absolute;
 	inset: 0;
@@ -858,6 +879,11 @@ body.mcast-room-active .mcast-entry__waiting.is-visible {
 		height: 100%;
 		max-width: 100%;
 		aspect-ratio: 16 / 9;
+	}
+
+	body.mcast-room-active .mcast-entry__tile--landscape.has-video-rotation-correction {
+		width: 100%;
+		height: auto;
 	}
 
 	body.mcast-room-active .mcast-entry__tile--portrait {
