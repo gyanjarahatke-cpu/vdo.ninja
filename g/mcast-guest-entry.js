@@ -14,8 +14,6 @@
 		lastLocalStreamDebug: "",
 		roomLayoutMode: "",
 		roomLayoutModeManual: false,
-		viewportUpdateFrame: 0,
-		lastViewportOrientation: "",
 		lastStreamLog: ""
 	};
 
@@ -52,11 +50,6 @@
 		});
 		window.addEventListener("offline", function () {
 			setStatus("You appear to be offline. Check your connection, then rejoin.", "error");
-		});
-		window.addEventListener("resize", scheduleViewportOrientationState);
-		window.addEventListener("orientationchange", function () {
-			scheduleViewportOrientationState();
-			retryLocalVideoPlayback("orientationchange");
 		});
 	}
 
@@ -791,7 +784,6 @@
 		} else {
 			setRoomLayoutMode(detectInitialRoomLayoutMode(), false);
 		}
-		updateViewportOrientationState();
 	}
 
 	function detectInitialRoomLayoutMode() {
@@ -820,7 +812,6 @@
 	function toggleRoomLayoutMode() {
 		var mode = state.roomLayoutMode === "landscape" ? "portrait" : "landscape";
 		setRoomLayoutMode(mode, true);
-		retryLocalVideoPlayback("orientation-toggle");
 	}
 
 	function setRoomLayoutMode(mode, persist) {
@@ -831,13 +822,9 @@
 		state.roomLayoutModeManual = state.roomLayoutModeManual || !!persist;
 		document.body.classList.toggle("mcast-room-layout-landscape", mode === "landscape");
 		document.body.classList.toggle("mcast-room-layout-portrait", mode === "portrait");
-		document.body.classList.toggle("mobile-landscape-mode", mode === "landscape");
-		document.body.classList.toggle("mobile-portrait-mode", mode === "portrait");
 		document.body.dataset.mcastRoomLayoutMode = mode;
 		if (root) {
 			root.dataset.roomLayoutMode = mode;
-			root.classList.toggle("mobile-landscape-mode", mode === "landscape");
-			root.classList.toggle("mobile-portrait-mode", mode === "portrait");
 		}
 		if (persist) {
 			try {
@@ -846,8 +833,7 @@
 		}
 		updateTileOrientations();
 		updateRoomLayoutButton();
-		updateViewportOrientationState();
-		mcastLog("orientation mode changed", { mode: mode });
+		mcastLog("aspect mode changed", { mode: mode });
 	}
 
 	function applyRoomLayoutMode() {
@@ -870,10 +856,6 @@
 		};
 	}
 
-	function getAspectForMode(mode) {
-		return mode === "portrait" ? 9 / 16 : 16 / 9;
-	}
-
 	function updateRoomLayoutButton() {
 		var button = byId("mcastOrientationButton");
 		if (!button) {
@@ -884,31 +866,6 @@
 		button.setAttribute("aria-pressed", state.roomLayoutMode === "landscape" ? "true" : "false");
 		button.title = "Switch to " + nextMode + " layout";
 		setButtonContent(button, nextMode, label);
-	}
-
-	function scheduleViewportOrientationState() {
-		if (state.viewportUpdateFrame) {
-			return;
-		}
-		state.viewportUpdateFrame = window.requestAnimationFrame(function () {
-			state.viewportUpdateFrame = 0;
-			updateViewportOrientationState();
-		});
-	}
-
-	function updateViewportOrientationState() {
-		var isPortraitViewport = !!(window.matchMedia && window.matchMedia("(orientation: portrait)").matches);
-		var viewportMode = isPortraitViewport ? "portrait" : "landscape";
-		if (state.lastViewportOrientation !== viewportMode) {
-			state.lastViewportOrientation = viewportMode;
-		}
-		document.body.classList.toggle("mcast-viewport-portrait", isPortraitViewport);
-		document.body.classList.toggle("mcast-viewport-landscape", !isPortraitViewport);
-		var hint = byId("mcastOrientationHint");
-		var showHint = state.joined && isMobileViewport() && state.roomLayoutMode === "landscape" && isPortraitViewport;
-		if (hint) {
-			hint.hidden = !showHint;
-		}
 	}
 
 	function updateRoomGridState(tileCount, remoteCount) {
@@ -969,11 +926,8 @@
 		if (!isValidRoomLayoutMode(mode)) {
 			mode = "landscape";
 		}
-		var tileAspect = getAspectForMode(mode);
-		var mismatch = !!(aspect && Math.abs(aspect - tileAspect) > 0.35);
 		tile.classList.toggle("mcast-entry__tile--portrait", mode === "portrait");
 		tile.classList.toggle("mcast-entry__tile--landscape", mode === "landscape");
-		tile.classList.toggle("is-orientation-mismatch", mismatch);
 		tile.dataset.videoOrientation = mode;
 		tile.dataset.videoAspect = aspect ? String(Math.round(aspect * 1000) / 1000) : "";
 	}
@@ -987,10 +941,6 @@
 		var height = video.videoHeight || 0;
 		if (!aspect && width && height) {
 			aspect = width / height;
-		}
-		var rotated = parseInt((video.dataset && video.dataset.rotated) || video.rotated || "0", 10) || 0;
-		if (aspect && (Math.abs(rotated) % 180 === 90)) {
-			aspect = 1 / aspect;
 		}
 		return aspect;
 	}
