@@ -20,7 +20,6 @@
 		camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10l5-3v10l-5-3v3H4V7h11v3Z"/></svg>',
 		settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.65V21a2.1 2.1 0 0 1-4.2 0v-.06A1.8 1.8 0 0 0 8.4 19.3a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 1 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.8 14.7 1.8 1.8 0 0 0 2.15 13H2a2.1 2.1 0 0 1 0-4.2h.15A1.8 1.8 0 0 0 3.8 7.7a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2.1 2.1 0 1 1 6.37 2.7l.04.04a1.8 1.8 0 0 0 1.98.36A1.8 1.8 0 0 0 9.5 1.45V1.4a2.1 2.1 0 0 1 4.2 0v.06a1.8 1.8 0 0 0 1.1 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.97 2.97l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.65 1.1H21a2.1 2.1 0 0 1 0 4.2h-.06A1.8 1.8 0 0 0 19.4 15Z"/></svg>',
 		preview: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>',
-		chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-6.2A8 8 0 1 1 21 12Z"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>',
 		leave: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg>'
 	};
 
@@ -97,9 +96,6 @@
 		on("mcastDesktopRoomCameraButton", "click", toggleCamera);
 		on("mcastDesktopSetupSettingsButton", "click", toggleSettings);
 		on("mcastDesktopSettingsButton", "click", toggleSettings);
-		on("mcastDesktopRoomChatButton", "click", function () {
-			setStatus("Chat is disabled for this guest room.");
-		});
 		on("mcastDesktopLeaveButton", "click", leaveRoom);
 	}
 
@@ -213,6 +209,7 @@
 		if (video.parentNode !== surface) {
 			surface.insertBefore(video, surface.firstChild);
 		}
+		updateLocalTileLabel();
 		if (video.srcObject) {
 			root.classList.add("has-preview");
 			state.previewStarted = true;
@@ -443,7 +440,7 @@
 				clone.play().catch(function () {});
 			}
 			var label = tile.querySelector(".mcast-desktop__tile-label");
-			label.textContent = source.getAttribute("data-label") || source.title || "Guest";
+			label.textContent = getRemoteLabel(source, index);
 			delete existing[id];
 		});
 		Object.keys(existing).forEach(function (id) {
@@ -468,11 +465,27 @@
 		video.dataset.mcastDesktopClone = "true";
 		var label = document.createElement("div");
 		label.className = "mcast-desktop__tile-label";
-		label.textContent = "Guest";
+		label.textContent = "Remote guest";
 		tile.appendChild(video);
 		tile.appendChild(label);
 		byId("mcastDesktopRemoteTiles").appendChild(tile);
 		return tile;
+	}
+
+	function getRemoteLabel(source, index) {
+		var candidates = [
+			source && source.getAttribute && source.getAttribute("data-label"),
+			source && source.dataset && source.dataset.label,
+			source && source.getAttribute && source.getAttribute("aria-label"),
+			source && source.title
+		];
+		for (var i = 0; i < candidates.length; i += 1) {
+			var value = String(candidates[i] || "").trim();
+			if (value && value.toLowerCase() !== "guest") {
+				return value.slice(0, 60);
+			}
+		}
+		return "Remote guest " + (index + 1);
 	}
 
 	function applyGuestName() {
@@ -494,7 +507,27 @@
 			window.sessionStorage.setItem("mcastGuestName", name);
 			document.title = name + " - MCast Studio";
 		} catch (error) {}
+		updateLocalTileLabel(name);
 		return name;
+	}
+
+	function updateLocalTileLabel(name) {
+		var label = byId("mcastDesktopLocalTile") && byId("mcastDesktopLocalTile").querySelector(".mcast-desktop__tile-label");
+		if (label) {
+			label.textContent = (name || getStoredGuestName() || "You").slice(0, 60);
+		}
+	}
+
+	function getStoredGuestName() {
+		var input = byId("mcastDesktopGuestName");
+		if (input && input.value.trim()) {
+			return input.value.trim();
+		}
+		try {
+			return window.sessionStorage.getItem("mcastGuestName") || "";
+		} catch (error) {
+			return "";
+		}
 	}
 
 	function restoreGuestName() {
@@ -785,8 +818,7 @@
 		setIconButton("mcastDesktopSetupSettingsButton", icons.settings, "Settings");
 		setIconButton("mcastDesktopRoomMicButton", icons.mic, "Mic");
 		setIconButton("mcastDesktopRoomCameraButton", icons.camera, "Camera");
-		setIconButton("mcastDesktopRoomChatButton", icons.chat, "Chat");
-		setIconButton("mcastDesktopSettingsButton", icons.settings, "More");
+		setIconButton("mcastDesktopSettingsButton", icons.settings, "Settings");
 		setIconButton("mcastDesktopLeaveButton", icons.leave, "Leave");
 	}
 

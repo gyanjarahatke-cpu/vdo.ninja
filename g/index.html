@@ -47,8 +47,8 @@
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4043" />
-		<link rel="stylesheet" href="./g/mcast-guest-desktop.css?v=4" />
-		<link rel="stylesheet" href="./g/mcast-guest-mobile.css?v=2" />
+		<link rel="stylesheet" href="./g/mcast-guest-desktop.css?v=5" />
+		<link rel="stylesheet" href="./g/mcast-guest-mobile.css?v=3" />
 		<link rel="stylesheet" href="./g/mcast-guest-entry.css?v=13" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
@@ -112,11 +112,12 @@
 			<section class="mcast-desktop__shell" data-desktop-step="studio">
 				<header class="mcast-desktop__topbar">
 					<div class="mcast-desktop__brand">
-						<div class="mcast-desktop__logo" aria-hidden="true"></div>
+						<img class="mcast-desktop__logo" src="./media/mcast-logo.png" alt="MCast Studio" />
 						<div>
 							<div class="mcast-desktop__brand-name">MCast Studio</div>
 							<div id="mcastDesktopInviteMeta" class="mcast-desktop__brand-meta">Guest invite</div>
 						</div>
+						<button id="mcastDesktopSettingsButton" type="button" class="mcast-desktop__top-settings" aria-label="Settings">Settings</button>
 					</div>
 					<div class="mcast-desktop__top-actions">
 						<span id="mcastDesktopQuality" class="mcast-desktop__quality">Secure link</span>
@@ -182,19 +183,9 @@
 						</div>
 					</div>
 
-					<aside class="mcast-desktop__side-panel">
-						<div class="mcast-desktop__side-card">
-							<span class="mcast-desktop__side-label">Status</span>
-							<strong id="mcastDesktopRoomState">Ready backstage</strong>
-							<p id="mcastDesktopRoomHint">Your camera and microphone are connected.</p>
-						</div>
-					</aside>
-
 					<div class="mcast-desktop__bottom-bar">
 						<button id="mcastDesktopRoomMicButton" type="button" class="mcast-desktop__round-control">Mute</button>
 						<button id="mcastDesktopRoomCameraButton" type="button" class="mcast-desktop__round-control">Camera</button>
-						<button id="mcastDesktopRoomChatButton" type="button" class="mcast-desktop__round-control">Chat</button>
-						<button id="mcastDesktopSettingsButton" type="button" class="mcast-desktop__round-control">Settings</button>
 						<button id="mcastDesktopLeaveButton" type="button" class="mcast-desktop__round-control mcast-desktop__round-control--danger">Leave</button>
 					</div>
 				</section>
@@ -348,7 +339,6 @@
 				<nav class="mcast-mobile__bottom-bar" aria-label="Mobile guest controls">
 					<button id="mcastMobileRoomMicButton" type="button" class="mcast-mobile__control">Mic</button>
 					<button id="mcastMobileRoomCameraButton" type="button" class="mcast-mobile__control">Camera</button>
-					<button id="mcastMobileChatButton" type="button" class="mcast-mobile__control">Chat</button>
 					<button id="mcastMobileMoreButton" type="button" class="mcast-mobile__control">More</button>
 					<button id="mcastMobileLeaveButton" type="button" class="mcast-mobile__control mcast-mobile__control--leave">Leave</button>
 				</nav>
@@ -3798,8 +3788,8 @@
 
 		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1415"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1064"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-desktop.js?v=4"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-mobile.js?v=3"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-desktop.js?v=5"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-mobile.js?v=4"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./g/mcast-guest-entry.js?v=13"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		

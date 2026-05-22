@@ -46,7 +46,15 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect(page.locator("#mcastDesktopLocalTile video")).toBeVisible();
 	await expect(page.locator("#mcastDesktopRoomMicButton svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopRoomCameraButton svg")).toBeVisible();
-	await expect(page.locator("#mcastDesktopRoomChatButton svg")).toBeVisible();
+	await expect(page.locator("#mcastDesktopRoomChatButton")).toHaveCount(0);
+	await expect(page.locator("#chatbutton")).toBeHidden();
+	await expect(page.locator("#chatModule")).toBeHidden();
+	await expect(page.locator(".mcast-desktop__side-panel")).toHaveCount(0);
+	await expect(page.locator("#mcastDesktopSettingsButton svg")).toBeVisible();
+	await expect(page.locator(".mcast-desktop__logo")).toBeVisible();
 	await expect(page.locator("#mcastDesktopLeaveButton svg")).toBeVisible();
+	await expect(page.locator("#mcastDesktopLocalTile .mcast-desktop__tile-label")).toHaveText("Desktop Guest");
 	await expect(page.locator("#mcastDesktopBackstageMessage")).toBeVisible();
+	const logoTransform = await page.locator(".mcast-desktop__logo").evaluate((element) => getComputedStyle(element).transform);
+	expect(logoTransform).toBe("none");
 });

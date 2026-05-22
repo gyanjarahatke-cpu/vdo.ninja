@@ -588,7 +588,7 @@
 	bottom: 0;
 	z-index: 20;
 	display: grid;
-	grid-template-columns: repeat(5, 1fr);
+	grid-template-columns: repeat(4, 1fr);
 	gap: 8px;
 	padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
 	background: #0b101a;
@@ -692,7 +692,7 @@
 	.mcast-mobile__bottom-bar {
 		left: 0;
 		right: 0;
-		grid-template-columns: repeat(5, minmax(72px, 104px));
+		grid-template-columns: repeat(4, minmax(72px, 104px));
 		justify-content: center;
 		padding-top: 8px;
 		padding-bottom: calc(8px + env(safe-area-inset-bottom));

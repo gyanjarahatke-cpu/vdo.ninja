@@ -37,6 +37,7 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 	}).toBe(true);
 	await expect(page.locator("#mcastMobileRoomMicButton svg")).toBeVisible();
 	await expect(page.locator("#mcastMobileRoomCameraButton svg")).toBeVisible();
+	await expect(page.locator("#mcastMobileChatButton")).toHaveCount(0);
 	await expect(page.locator("#mcastMobileLeaveButton svg")).toBeVisible();
 	await expect(page.locator("text=Waiting for the room")).toBeHidden();
 });
