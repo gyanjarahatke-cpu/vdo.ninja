@@ -377,7 +377,10 @@
 		} else if (typeof window.toggleVideoMute === "function") {
 			window.toggleVideoMute();
 		}
-		window.setTimeout(updateDesktopControls, 160);
+		window.setTimeout(function () {
+			bindLocalVideo("camera-toggle");
+			updateDesktopControls();
+		}, 160);
 	}
 
 	function updateDesktopControls() {
