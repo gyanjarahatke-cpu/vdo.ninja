@@ -1111,7 +1111,7 @@
 		var pill = byId("mcastConnectionPill");
 		var localLabel = byId("mcastLocalTileLabel");
 		if (title) {
-			title.textContent = isJoined ? "MCast room" : "Camera preview";
+			title.textContent = isJoined ? "MCast Studio" : "Camera preview";
 		}
 		if (pill) {
 			pill.textContent = isJoined ? "Live connection" : "Private until you join";
