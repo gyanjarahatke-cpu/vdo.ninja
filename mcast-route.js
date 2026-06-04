@@ -76,6 +76,11 @@
 		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
 		if (currentRoute === "guest") {
 			var mode = normalizeRouteToken(routedParams.get("mcastmode") || "", "");
+			var remoteSource = normalizeRouteToken(routedParams.get("mcastremote") || "", "");
+			if (remoteSource) {
+				applyRemoteSourceDefaults(routedParams, remoteSource);
+				return serializeParams(routedParams);
+			}
 			var shouldAutostart = routedParams.has("mcastautojoin");
 			setFlag(routedParams, "webcam");
 			preserveGuestAutostartIntent(routedParams);
@@ -113,6 +118,40 @@
 			}
 		}
 		return serializeParams(routedParams);
+	}
+
+	function applyRemoteSourceDefaults(routedParams, remoteSource) {
+		var shouldAutostart = routedParams.has("autostart") ||
+			routedParams.has("autojoin") ||
+			routedParams.has("aj") ||
+			routedParams.has("as") ||
+			routedParams.has("mcastautojoin");
+
+		preserveGuestAutostartIntent(routedParams);
+		disableGuestAuxiliaryUiParams(routedParams);
+		removeMcastGuestShellParams(routedParams);
+		cleanEmptyNativeDeviceParams(routedParams);
+		normalizeGuestNameParams(routedParams);
+
+		if (remoteSource === "remote_screen") {
+			routedParams.delete("webcam");
+			setFlag(routedParams, "screenshare");
+			if (!routedParams.has("screenshareid") && !routedParams.has("ssid") && routedParams.get("push")) {
+				routedParams.set("screenshareid", routedParams.get("push") + "_ss");
+			}
+		} else if (remoteSource === "remote_audio") {
+			setFlag(routedParams, "miconly");
+			setFlag(routedParams, "webcam");
+		} else {
+			setFlag(routedParams, "webcam");
+		}
+
+		if (shouldAutostart) {
+			setFlag(routedParams, "autostart");
+			routedParams.set("mcastrequestedautostart", "1");
+		}
+
+		disableGuestAuxiliaryUiParams(routedParams);
 	}
 
 	function removeMcastGuestShellParams(routedParams) {
@@ -332,7 +371,7 @@
 	}
 
 	function isGuestInvitePath(currentPath) {
-		return /^\/(?:g|m|c|s|w|p|i)(?:\/|$)/.test(currentPath || "");
+		return /^\/(?:g|m|c|s|w|p|i|rv|ra|rs)(?:\/|$)/.test(currentPath || "");
 	}
 
 	function isCallPath(currentPath) {
@@ -430,7 +469,7 @@
 	}
 
 	function readShortInviteCodeFromPath(currentPath) {
-		var match = (currentPath || "").match(/^\/(?:g|m|c|s|w|p|i)\/([A-Za-z0-9]{6,16})\/?$/i);
+		var match = (currentPath || "").match(/^\/(?:g|m|c|s|w|p|i|rv|ra|rs)\/([A-Za-z0-9]{6,16})\/?$/i);
 		return match ? match[1] : "";
 	}
 

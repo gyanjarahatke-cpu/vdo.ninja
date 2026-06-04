@@ -111,7 +111,7 @@
 				});
 
 				function readCodeFromPath(pathname) {
-					var match = pathname.match(/^\/(?:g|m|c|s|w|p|i)\/([A-Za-z0-9]{6,32})\/?$/i);
+					var match = pathname.match(/^\/(?:g|m|c|s|w|p|i|rv|ra|rs)\/([A-Za-z0-9]{6,32})\/?$/i);
 					return match ? match[1] : "";
 				}
 
