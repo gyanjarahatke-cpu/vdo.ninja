@@ -136,8 +136,10 @@
 		if (remoteSource === "remote_screen") {
 			routedParams.delete("webcam");
 			setFlag(routedParams, "screenshare");
-			if (!routedParams.has("screenshareid") && !routedParams.has("ssid") && routedParams.get("push")) {
-				routedParams.set("screenshareid", routedParams.get("push") + "_ss");
+			var screenShareId = routedParams.get("screenshareid") || routedParams.get("ssid") || routedParams.get("push") || "";
+			if (screenShareId) {
+				routedParams.set("push", screenShareId);
+				routedParams.set("screenshareid", screenShareId);
 			}
 		} else if (remoteSource === "remote_audio") {
 			setFlag(routedParams, "miconly");
