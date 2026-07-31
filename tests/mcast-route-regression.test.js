@@ -8,6 +8,9 @@ const vm = require("vm");
 
 const routeScript = fs.readFileSync(path.join(__dirname, "..", "mcast-route.js"), "utf8");
 const guestLoader = fs.readFileSync(path.join(__dirname, "..", "mcast-guest.html"), "utf8");
+const rootNotFoundLoader = fs.readFileSync(path.join(__dirname, "..", "404.html"), "utf8");
+const streamGuestIndexLoader = fs.readFileSync(path.join(__dirname, "..", "s", "index.html"), "utf8");
+const streamGuestNotFoundLoader = fs.readFileSync(path.join(__dirname, "..", "s", "404.html"), "utf8");
 
 function createStorage() {
 	const store = new Map();
@@ -189,5 +192,12 @@ const preparedWithBase = ensureRootBaseContext.ensureRootBase("<!doctype html><h
 assert.match(preparedWithBase, /<base href="\/">/, "short URL loader must replace an existing relative base with the root base");
 assert.strictEqual((preparedWithBase.match(/<base href="\/">/g) || []).length, 1, "short URL loader must keep exactly one root base");
 assert.ok(!/window\.location\.replace\(target\.href/.test(guestLoader), "short URL loader must not redirect away from branded URL");
+[
+	rootNotFoundLoader,
+	streamGuestIndexLoader,
+	streamGuestNotFoundLoader
+].forEach((loader) => {
+	assert.ok(loader.includes('fetch("/mcast-guest.html?v=3"'), "short URL entry loaders must fetch the cache-busted guest loader");
+});
 
 console.log("MCast route regression passed");
