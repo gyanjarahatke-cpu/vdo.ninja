@@ -175,6 +175,19 @@ assert.ok(result.storedRoute, "resolved route should be stored for refresh recov
 
 assert.ok(/fetch\("\/g\/index\.html"/.test(guestLoader), "short URL loader should fetch the guest engine document");
 assert.ok(/document\.write\(prepared\)/.test(guestLoader), "short URL loader should inject the guest engine document");
+const ensureRootBaseStart = guestLoader.indexOf("function ensureRootBase(html) {");
+const ensureRootBaseEnd = guestLoader.indexOf("\n\n\t\t\t\tfunction setMessage", ensureRootBaseStart);
+assert.notStrictEqual(ensureRootBaseStart, -1, "short URL loader should define root base preparation");
+assert.notStrictEqual(ensureRootBaseEnd, -1, "short URL loader root base preparation should be extractable");
+const ensureRootBaseContext = {};
+vm.createContext(ensureRootBaseContext);
+vm.runInContext(guestLoader.slice(ensureRootBaseStart, ensureRootBaseEnd), ensureRootBaseContext, { filename: "mcast-guest.ensureRootBase.js" });
+const preparedWithoutBase = ensureRootBaseContext.ensureRootBase("<!doctype html><html><head><title>Guest</title></head><body></body></html>");
+assert.match(preparedWithoutBase, /<head><base href="\/">/, "short URL loader must add a root base when the engine document has none");
+assert.strictEqual((preparedWithoutBase.match(/<base href="\/">/g) || []).length, 1, "short URL loader must add exactly one root base");
+const preparedWithBase = ensureRootBaseContext.ensureRootBase("<!doctype html><html><head><base href=\"./g/\"><title>Guest</title></head><body></body></html>");
+assert.match(preparedWithBase, /<base href="\/">/, "short URL loader must replace an existing relative base with the root base");
+assert.strictEqual((preparedWithBase.match(/<base href="\/">/g) || []).length, 1, "short URL loader must keep exactly one root base");
 assert.ok(!/window\.location\.replace\(target\.href/.test(guestLoader), "short URL loader must not redirect away from branded URL");
 
 console.log("MCast route regression passed");

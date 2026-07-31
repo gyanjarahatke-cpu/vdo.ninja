@@ -102,7 +102,7 @@
 					}
 					return response.text();
 				}).then(function (html) {
-					var prepared = html.replace(/<base\s+href=["'][^"']*["']\s*>/i, '<base href="/">');
+					var prepared = ensureRootBase(html);
 					document.open();
 					document.write(prepared);
 					document.close();
@@ -113,6 +113,16 @@
 				function readCodeFromPath(pathname) {
 					var match = pathname.match(/^\/(?:g|m|c|s|w|p|i|rv|ra|rs)\/([A-Za-z0-9]{6,32})\/?$/i);
 					return match ? match[1] : "";
+				}
+
+				function ensureRootBase(html) {
+					var base = '<base href="/">';
+					if (/<base\s+href=["'][^"']*["']\s*>/i.test(html)) {
+						return html.replace(/<base\s+href=["'][^"']*["']\s*>/i, base);
+					}
+					return html.replace(/<head(\s[^>]*)?>/i, function (match) {
+						return match + base;
+					});
 				}
 
 				function setMessage(value) {
