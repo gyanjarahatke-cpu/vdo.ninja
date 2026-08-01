@@ -220,7 +220,7 @@
 			};
 		}
 
-		["dataChannel", "channel", "dc", "mcastNativeDataChannel"].forEach(function (name) {
+		["sendChannel", "dataChannel", "channel", "dc", "mcastNativeDataChannel"].forEach(function (name) {
 			hookDataChannel(uuid, pc[name]);
 		});
 	}
