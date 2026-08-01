@@ -348,6 +348,32 @@
 		}, 150);
 	}
 
+	function retryRenegotiation(peer, reason, delay) {
+		if (!isNativeGuestMediaRoute() || !peer) {
+			return;
+		}
+		window.setTimeout(function () {
+			scheduleRenegotiation(peer, reason);
+		}, delay || 500);
+	}
+
+	function forceSenderTransceiverDirections(peer) {
+		try {
+			if (typeof peer.getTransceivers !== "function") {
+				return;
+			}
+			peer.getTransceivers().forEach(function (transceiver) {
+				if (!transceiver || !transceiver.sender || !transceiver.sender.track) {
+					return;
+				}
+				var current = String(transceiver.direction || "").toLowerCase();
+				if (current === "inactive" || current === "recvonly") {
+					transceiver.direction = "sendrecv";
+				}
+			});
+		} catch (error) {}
+	}
+
 	async function addOrReplaceTracks(peer, stream) {
 		var changed = false;
 		var senders = typeof peer.getSenders === "function" ? peer.getSenders() : [];
@@ -379,9 +405,10 @@
 	}
 
 	async function renegotiateNativeMedia(peer, reason) {
-		if (!isNativeGuestMediaRoute() || !findPublisherUuid(peer)) {
+		if (!isNativeGuestMediaRoute()) {
 			return;
 		}
+		var publisherUuid = findPublisherUuid(peer);
 		var channel = getOpenNativeChannel(peer);
 		if (!channel) {
 			return;
@@ -391,12 +418,13 @@
 			return;
 		}
 		if (peer.signalingState && peer.signalingState !== "stable") {
+			retryRenegotiation(peer, "waiting-for-stable");
 			return;
 		}
 
 		var stream = getLocalStream();
 		if (!stream) {
-			scheduleRenegotiation(peer, "waiting-for-local-stream");
+			retryRenegotiation(peer, "waiting-for-local-stream", 750);
 			return;
 		}
 
@@ -412,8 +440,10 @@
 				return;
 			}
 			if (peer.signalingState && peer.signalingState !== "stable") {
+				retryRenegotiation(peer, "waiting-for-stable-after-tracks");
 				return;
 			}
+			forceSenderTransceiverDirections(peer);
 			attachLocalCandidateRelay(peer, channel);
 			var offer = await peer.createOffer({
 				offerToReceiveAudio: false,
@@ -422,25 +452,30 @@
 			if (!offer || !hasMediaSections(offer.sdp)) {
 				state.mediaOfferSent = false;
 				state.lastOfferSignature = "";
-				scheduleRenegotiation(peer, "offer-without-media");
+				retryRenegotiation(peer, "offer-without-media", 750);
 				return;
 			}
 			await peer.setLocalDescription(offer);
 			var identity = getGuestIdentity();
-			sendJson(channel, {
+			if (!sendJson(channel, {
 				streamID: identity.streamId,
 				streamId: identity.streamId,
 				viewId: identity.streamId,
 				guestKey: identity.streamId,
 				mcastGuestKey: identity.guestKey,
-				UUID: findPublisherUuid(peer),
-				uuid: findPublisherUuid(peer),
+				UUID: publisherUuid,
+				uuid: publisherUuid,
 				label: identity.label,
 				description: {
 					type: peer.localDescription.type,
 					sdp: peer.localDescription.sdp
 				}
-			});
+			})) {
+				state.mediaOfferSent = false;
+				state.lastOfferSignature = "";
+				retryRenegotiation(peer, "media-offer-send-failed", 750);
+				return;
+			}
 			state.waitingForAnswer = true;
 			state.mediaOfferSent = true;
 			state.lastOfferSignature = signature;
