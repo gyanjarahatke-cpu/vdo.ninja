@@ -15,7 +15,8 @@
 		meterSource: null,
 		correctionTimer: 0,
 		lastCorrectionLog: "",
-		toastTimer: 0
+		toastTimer: 0,
+		cameraSelectionTouched: false
 	};
 
 	var icons = {
@@ -135,6 +136,7 @@
 		setButtonBusy("mcastMobileAllowButton", true, "Opening camera...");
 		setStatus("mcastMobilePermissionStatus", "Requesting camera and microphone access...");
 		try {
+			ensureCameraSelectionBeforeMedia();
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
 			}
@@ -151,6 +153,9 @@
 		} catch (error) {
 			setStatus("mcastMobilePermissionStatus", getPermissionMessage(error), true);
 			logMobile("getUserMedia error", { name: error && error.name, message: error && error.message });
+			if (isCameraSelectionRequiredError(error)) {
+				openSettings();
+			}
 			throw error;
 		} finally {
 			setButtonBusy("mcastMobileAllowButton", false, "Allow mic/cam access");
@@ -370,10 +375,15 @@
 		var options = Array.prototype.map.call(nativeSelect.options || [], function (option) {
 			return { value: option.value, text: option.textContent || option.label || "Camera" };
 		});
+		if (isExplicitCameraChoiceRequired()) {
+			options.unshift({ value: "", text: "Select a camera" });
+		}
 		var select = byId("mcastMobileCameraSelect");
 		replaceOptions(select, options, "Camera");
-		if (select && hasOption(select, nativeSelect.value || "")) {
+		if (select && (state.cameraSelectionTouched || hasExplicitUrlCameraSelection() || !isExplicitCameraChoiceRequired()) && hasOption(select, nativeSelect.value || "")) {
 			select.value = nativeSelect.value || "";
+		} else if (select && hasOption(select, "")) {
+			select.value = "";
 		}
 	}
 
@@ -432,9 +442,11 @@
 	function applyCameraSelection(value) {
 		var nativeSelect = byId("videoSourceSelect") || byId("videoSource3");
 		if (!nativeSelect || !value) {
-			showStatus("No camera is available to switch to.", true);
+			state.cameraSelectionTouched = false;
+			showStatus("Choose a camera before starting preview.", true);
 			return;
 		}
+		state.cameraSelectionTouched = true;
 		nativeSelect.value = value;
 		dispatchNativeChange(nativeSelect);
 		showStatus("Switching camera...");
@@ -442,6 +454,65 @@
 			bindLocalVideo("camera-change");
 			updateControls();
 		}, 900);
+	}
+
+	function ensureCameraSelectionBeforeMedia() {
+		if (!isExplicitCameraChoiceRequired() || hasExplicitCameraSelection()) {
+			return;
+		}
+
+		showStatus("Choose a camera before starting preview.", true);
+		openSettings();
+		throw createCameraSelectionRequiredError();
+	}
+
+	function hasExplicitCameraSelection() {
+		return state.cameraSelectionTouched || hasExplicitUrlCameraSelection();
+	}
+
+	function isExplicitCameraChoiceRequired() {
+		return hasRouteFlag("mcastrequiredevicechoice");
+	}
+
+	function hasExplicitUrlCameraSelection() {
+		return ["videodevice", "vdevice", "vd", "device"].some(function (name) {
+			return !!getRouteValue(name);
+		});
+	}
+
+	function hasRouteFlag(name) {
+		try {
+			if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has(name)) {
+				return true;
+			}
+			return new URLSearchParams(window.location.search || "").has(name);
+		} catch (error) {
+			return false;
+		}
+	}
+
+	function getRouteValue(name) {
+		try {
+			if (window.urlParams && typeof window.urlParams.get === "function") {
+				var routeValue = window.urlParams.get(name);
+				if (routeValue) {
+					return routeValue;
+				}
+			}
+			return new URLSearchParams(window.location.search || "").get(name) || "";
+		} catch (error) {
+			return "";
+		}
+	}
+
+	function createCameraSelectionRequiredError() {
+		var error = new Error("Choose a camera before starting preview.");
+		error.name = "MCastCameraSelectionRequired";
+		return error;
+	}
+
+	function isCameraSelectionRequiredError(error) {
+		return !!(error && error.name === "MCastCameraSelectionRequired");
 	}
 
 	function selectNativeMic(value) {
@@ -522,6 +593,20 @@
 		panel.hidden = !panel.hidden;
 		if (!panel.hidden) {
 			syncDevices();
+		}
+	}
+
+	function openSettings() {
+		var panel = byId("mcastMobileSettingsPanel");
+		if (!panel) {
+			showToast("Settings are available before entering the studio.");
+			return;
+		}
+		panel.hidden = false;
+		syncDevices();
+		var cameraSelect = byId("mcastMobileCameraSelect");
+		if (cameraSelect) {
+			cameraSelect.focus();
 		}
 	}
 
