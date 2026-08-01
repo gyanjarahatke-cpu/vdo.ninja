@@ -153,10 +153,14 @@ async function runBridge() {
 			},
 			session: {
 				streamID: "guest123",
+				sentMessages: [],
 				pcs: {
 					peerA: peer
 				},
-				rpcs: {}
+				rpcs: {},
+				sendMessage(payload, uuid) {
+					this.sentMessages.push({ payload, uuid });
+				}
 			},
 			MCastRoute: {
 				route: "guest",
@@ -188,15 +192,15 @@ async function runBridge() {
 	assert.strictEqual(started, true, "bridge should start for native guest route");
 
 	await flushPromises();
-	return { channel };
+	return { channel, session: context.window.session };
 }
 
 runBridge()
-	.then(({ channel }) => {
-		const offer = channel.sent.find((message) => message.description && message.description.type === "offer");
-		assert.ok(offer, "bridge should send a media SDP offer over VDO sendChannel");
+	.then(({ session }) => {
+		const sent = session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
+		assert.ok(sent, "bridge should send a media SDP offer through VDO signaling");
+		const offer = sent.payload;
 		assert.strictEqual(offer.streamID, "guest123", "offer should preserve stream id");
-		assert.strictEqual(offer.mcastGuestKey, "guest123", "offer should preserve MCast guest key");
 		assert.match(offer.description.sdp, /\r\nm=video\s/i, "offer should include video media section");
 		assert.match(offer.description.sdp, /\r\nm=audio\s/i, "offer should include audio media section");
 		console.log("MCast native WebRTC bridge regression passed");

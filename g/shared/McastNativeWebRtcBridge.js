@@ -260,23 +260,6 @@
 			return;
 		}
 
-		if (message.description && String(message.description.type || "").toLowerCase() === "answer") {
-			applyNativeAnswer(uuid, message.description);
-			return;
-		}
-
-		if (message.candidate) {
-			applyNativeCandidate(uuid, message.candidate);
-			return;
-		}
-
-		if (Array.isArray(message.candidates)) {
-			message.candidates.forEach(function (candidate) {
-				applyNativeCandidate(uuid, candidate);
-			});
-			return;
-		}
-
 		var command = String(message.command || message.Command || "").trim();
 		var payload = parsePayload(message.payloadJson || message.PayloadJson || message.payload || message.Payload);
 		if (!isControlMessage(message, command)) {
@@ -380,19 +363,6 @@
 		} catch (sendError) {}
 	}
 
-	function getMediaState(uuid) {
-		if (!state.media[uuid]) {
-			state.media[uuid] = {
-				iceCandidatesQueued: [],
-				localCandidateHandlerAttached: false,
-				mediaOfferInFlight: false,
-				mediaOfferSent: false,
-				lastOfferSignature: ""
-			};
-		}
-		return state.media[uuid];
-	}
-
 	function getOpenNativeChannel(uuid) {
 		var prefix = uuid + ":";
 		var keys = Object.keys(state.dataChannels);
@@ -479,20 +449,6 @@
 		};
 	}
 
-	function buildTrackSignature(stream) {
-		try {
-			return stream.getTracks().map(function (track) {
-				return track.kind + ":" + track.id + ":" + track.readyState + ":" + (track.enabled ? "1" : "0");
-			}).sort().join("|");
-		} catch (error) {
-			return "";
-		}
-	}
-
-	function hasMediaSections(sdp) {
-		return /(?:^|\r?\n)m=video\s/i.test(sdp || "") || /(?:^|\r?\n)m=audio\s/i.test(sdp || "");
-	}
-
 	function renegotiate(uuid, pc) {
 		mcastNativeRenegotiationAttempts += 1;
 		state.log("MCast native WebRTC media renegotiation start", {
@@ -501,12 +457,6 @@
 			signalingState: pc && pc.signalingState || "",
 			currentDescription: summarizeDescription(pc && pc.localDescription)
 		});
-
-		if (getOpenNativeChannel(uuid)) {
-			sendBridgeDebug(uuid, "renegotiate", "direct-channel");
-			createFallbackOfferWhenStable(uuid, pc, 0);
-			return;
-		}
 
 		try {
 			if (window.session && typeof window.session.createOffer === "function") {
@@ -549,10 +499,6 @@
 		});
 
 		if (description.audio || description.video) {
-			if (getOpenNativeChannel(uuid)) {
-				sendBridgeDebug(uuid, "verify", "media-local");
-				createFallbackOfferWhenStable(uuid, pc, 0);
-			}
 			return;
 		}
 
@@ -562,18 +508,6 @@
 	function createFallbackOfferWhenStable(uuid, pc, attempt) {
 		attempt = attempt || 0;
 		if (pc && pc.signalingState && pc.signalingState !== "stable") {
-			if (pc.signalingState === "have-local-offer" &&
-				pc.localDescription &&
-				hasMediaSections(pc.localDescription.sdp) &&
-				getOpenNativeChannel(uuid)) {
-				try {
-					sendNativeMediaOffer(uuid, pc, pc.localDescription, buildTrackSignature(state.getLocalStream ? state.getLocalStream() : null));
-				} catch (error) {
-					state.log("MCast native WebRTC existing offer send failed", { uuid: safeId(uuid), name: error && error.name });
-				}
-				return;
-			}
-
 			if (attempt >= 12) {
 				state.log("MCast native WebRTC fallback offer abandoned", {
 					uuid: safeId(uuid),
@@ -602,188 +536,40 @@
 			return;
 		}
 
-		var mediaState = getMediaState(uuid);
-		if (mediaState.mediaOfferInFlight) {
-			return;
-		}
-
-		var channel = getOpenNativeChannel(uuid);
-		if (!channel) {
-			sendBridgeDebug(uuid, "blocked", "no-channel", stream);
-			state.log("MCast native WebRTC direct offer deferred: channel unavailable", { uuid: safeId(uuid) });
-			return;
-		}
-
-		var stream = state.getLocalStream ? state.getLocalStream() : null;
-		if (!isUsableStream(stream)) {
-			sendBridgeDebug(uuid, "blocked", "no-stream", stream);
-			state.log("MCast native WebRTC direct offer deferred: stream unavailable", { uuid: safeId(uuid) });
-			return;
-		}
-
-		var signature = buildTrackSignature(stream);
-		if (mediaState.mediaOfferSent && mediaState.lastOfferSignature === signature) {
-			sendBridgeDebug(uuid, "blocked", "same-tracks", stream);
-			return;
-		}
-
-		mediaState.mediaOfferInFlight = true;
-		attachLocalCandidateRelay(uuid, pc);
-		pc.createOffer({
-				offerToReceiveAudio: false,
-				offerToReceiveVideo: false
-			})
+		pc.createOffer()
 			.then(function (offer) {
-				if (!offer || !hasMediaSections(offer.sdp)) {
-					throw { name: "offer-without-media" };
-				}
 				return pc.setLocalDescription(offer).then(function () {
-				return pc.localDescription || offer;
-			});
-		})
-		.then(function (description) {
-			sendNativeMediaOffer(uuid, pc, description, signature);
-		})
-			.catch(function (error) {
-				mediaState.mediaOfferSent = false;
-				mediaState.lastOfferSignature = "";
-				state.log("MCast native WebRTC direct offer failed", { name: error && error.name });
-			})
-			.then(function () {
-				mediaState.mediaOfferInFlight = false;
-			});
-	}
-
-	function sendNativeMediaOffer(uuid, pc, description, signature) {
-		var channel = getOpenNativeChannel(uuid);
-		if (!channel || !description || !description.sdp || !hasMediaSections(description.sdp)) {
-			throw { name: "native-offer-unavailable" };
-		}
-
-		var identity = getGuestIdentity();
-		var payload = {
-			UUID: uuid,
-			uuid: uuid,
-			streamID: identity.streamId,
-			streamId: identity.streamId,
-			viewId: identity.streamId,
-			guestKey: identity.streamId,
-			mcastGuestKey: identity.guestKey,
-			label: identity.label,
-			session: pc && (pc.session || pc.mcastSession) || "",
-			description: {
-				type: description.type,
-				sdp: description.sdp
-			}
-		};
-
-		if (!sendJson(channel, payload)) {
-			throw { name: "native-channel-send-failed" };
-		}
-
-		var mediaState = getMediaState(uuid);
-		mediaState.mediaOfferSent = true;
-		mediaState.lastOfferSignature = signature || mediaState.lastOfferSignature || "";
-		sendBridgeDebug(uuid, "offer-sent", "direct", state.getLocalStream ? state.getLocalStream() : null);
-		state.log("MCast native WebRTC direct media offer sent", {
-			uuid: safeId(uuid),
-			description: summarizeDescription(description)
-		});
-	}
-
-	function attachLocalCandidateRelay(uuid, pc) {
-		var mediaState = getMediaState(uuid);
-		if (!pc || mediaState.localCandidateHandlerAttached) {
-			return;
-		}
-
-		mediaState.localCandidateHandlerAttached = true;
-		if (typeof pc.addEventListener !== "function") {
-			return;
-		}
-
-		pc.addEventListener("icecandidate", function (event) {
-			if (!event || !event.candidate) {
-				return;
-			}
-
-			var channel = getOpenNativeChannel(uuid);
-			if (!channel) {
-				return;
-			}
-
-			var identity = getGuestIdentity();
-			sendJson(channel, {
-				type: "candidate",
-				streamID: identity.streamId,
-				streamId: identity.streamId,
-				viewId: identity.streamId,
-				guestKey: identity.streamId,
-				mcastGuestKey: identity.guestKey,
-				UUID: uuid,
-				uuid: uuid,
-				candidate: {
-					candidate: event.candidate.candidate,
-					sdpMid: event.candidate.sdpMid,
-					sdpMLineIndex: event.candidate.sdpMLineIndex,
-					usernameFragment: event.candidate.usernameFragment
-				}
-			});
-		});
-	}
-
-	function applyNativeAnswer(uuid, description) {
-		var pc = state.peers[uuid];
-		if (!pc || !description || !description.sdp || String(description.type || "").toLowerCase() !== "answer") {
-			return;
-		}
-
-		try {
-			if (pc.signalingState && pc.signalingState !== "have-local-offer") {
-				return;
-			}
-
-			Promise.resolve(pc.setRemoteDescription(description))
-				.then(function () {
-					var mediaState = getMediaState(uuid);
-					while (mediaState.iceCandidatesQueued.length) {
-						applyNativeCandidate(uuid, mediaState.iceCandidatesQueued.shift());
-					}
-					sendBridgeDebug(uuid, "answer-applied", "direct");
-					state.log("MCast native WebRTC answer applied", { uuid: safeId(uuid) });
-				})
-				.catch(function (error) {
-					state.log("MCast native WebRTC answer failed", { uuid: safeId(uuid), name: error && error.name });
+					return pc.localDescription || offer;
 				});
-		} catch (error) {
-			state.log("MCast native WebRTC answer failed", { uuid: safeId(uuid), name: error && error.name });
-		}
-	}
+			})
+			.then(function (description) {
+				if (!window.session) {
+					return;
+				}
 
-	function applyNativeCandidate(uuid, candidate) {
-		var pc = state.peers[uuid];
-		if (!pc || !candidate) {
-			return;
-		}
+				var payload = {
+					UUID: uuid,
+					streamID: window.session.streamID || "",
+					session: pc.session || pc.mcastSession || "",
+					description: {
+						type: description.type,
+						sdp: description.sdp
+					}
+				};
 
-		try {
-			if (typeof candidate === "string") {
-				candidate = { candidate: candidate };
-			}
-			if (candidate.candidate && /^a=candidate:/i.test(candidate.candidate)) {
-				candidate = Object.assign({}, candidate, { candidate: candidate.candidate.substring(2) });
-			}
-			var ice = new RTCIceCandidate(candidate);
-			if (!pc.remoteDescription) {
-				getMediaState(uuid).iceCandidatesQueued.push(ice);
-				return;
-			}
-			Promise.resolve(pc.addIceCandidate(ice)).catch(function (error) {
-				state.log("MCast native WebRTC candidate failed", { uuid: safeId(uuid), name: error && error.name });
+				if (typeof window.session.sendMessage === "function") {
+					window.session.sendMessage(payload, uuid);
+				} else if (typeof window.session.sendRequest === "function") {
+					window.session.sendRequest(payload, uuid);
+				}
+				state.log("MCast native WebRTC fallback offer sent", {
+					uuid: safeId(uuid),
+					description: summarizeDescription(description)
+				});
+			})
+			.catch(function (error) {
+				state.log("MCast native WebRTC fallback offer failed", { name: error && error.name });
 			});
-		} catch (error) {
-			state.log("MCast native WebRTC candidate failed", { uuid: safeId(uuid), name: error && error.name });
-		}
 	}
 
 	function hasSenderForKind(senders, kind) {
