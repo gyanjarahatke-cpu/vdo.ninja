@@ -14,7 +14,7 @@
 		meterAnalyser: null,
 		lastStatus: "",
 		joinWithoutCamera: false,
-		cameraSelectionTouched: false
+		autoJoinStarted: false
 	};
 
 	var icons = {
@@ -41,6 +41,7 @@
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
 		wireDesktopUi();
+		installNativeGuestControls();
 		decorateDesktopButtons();
 		guardDesktopLogo();
 		fillDesktopRouteDetails();
@@ -53,11 +54,13 @@
 				setStatus("Check your camera and microphone before joining.");
 			}
 		}, 850);
+		scheduleAutoJoin();
 		state.devicePoll = window.setInterval(syncDevices, 900);
 		state.tilePoll = window.setInterval(function () {
 			bindLocalVideo("poll");
 			syncRoomTiles();
 			updateDesktopControls();
+			startNativeWebRtcBridge();
 		}, 900);
 		window.addEventListener("online", function () {
 			setStatus(state.joined ? "Connection restored." : "Connection restored. You can join now.");
@@ -110,11 +113,59 @@
 		on("mcastDesktopJoinNoCameraButton", "click", joinWithoutCamera);
 	}
 
+	function scheduleAutoJoin() {
+		if (!shouldAutoJoin()) {
+			return;
+		}
+		window.setTimeout(function () {
+			if (state.autoJoinStarted || state.joined) {
+				return;
+			}
+			state.autoJoinStarted = true;
+			logDesktop("MCast requested automatic guest entry", {});
+			joinRoom();
+		}, 1000);
+	}
+
+	function shouldAutoJoin() {
+		if (window.MCastRoute && window.MCastRoute.autoStartRequested === true) {
+			return true;
+		}
+		if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has("mcastrequestedautostart")) {
+			return true;
+		}
+		try {
+			return new URLSearchParams(window.location.search).has("mcastrequestedautostart");
+		} catch (error) {
+			return false;
+		}
+	}
+
 	function on(id, type, handler) {
 		var element = byId(id);
 		if (element) {
 			element.addEventListener(type, handler);
 		}
+	}
+
+	function startNativeWebRtcBridge() {
+		if (!window.MCastNativeWebRtcBridge ||
+			typeof window.MCastNativeWebRtcBridge.start !== "function" ||
+			!window.MCastNativeWebRtcBridge.isRequested()) {
+			return;
+		}
+
+		window.MCastNativeWebRtcBridge.start({
+			getLocalStream: function () {
+				return getLocalStream(getLocalVideoElement());
+			},
+			log: logDesktop,
+			onState: function (stage) {
+				if (stage === "media-attached") {
+					setStatus("Native studio connection is starting...");
+				}
+			}
+		});
 	}
 
 	function setStep(step) {
@@ -138,7 +189,6 @@
 		setButtonBusy("mcastDesktopPreviewButton", true, "Starting...");
 		setStatus(state.joinWithoutCamera ? "Requesting microphone access..." : "Requesting camera and microphone access...");
 		try {
-			ensureCameraSelectionBeforeMedia();
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
 			}
@@ -155,11 +205,7 @@
 		} catch (error) {
 			logDesktop("camera preview error", summarizeError(error));
 			setStatus(getPermissionMessage(error), true);
-			if (isCameraSelectionRequiredError(error)) {
-				openSettings();
-			} else {
-				showCameraErrorModal();
-			}
+			showCameraErrorModal();
 			throw error;
 		} finally {
 			setButtonBusy("mcastDesktopPreviewButton", false, "Preview");
@@ -197,14 +243,11 @@
 			setRoomState("Ready backstage", "Your camera and microphone are connected.");
 			syncRoomTiles();
 			updateDesktopControls();
+			startNativeWebRtcBridge();
 		} catch (error) {
 			logDesktop("join error", summarizeError(error));
 			setStatus(getPermissionMessage(error), true);
-			if (isCameraSelectionRequiredError(error)) {
-				openSettings();
-			} else {
-				showCameraErrorModal();
-			}
+			showCameraErrorModal();
 		} finally {
 			state.joining = false;
 			setButtonBusy("mcastDesktopJoinButton", false, "Enter studio");
@@ -309,18 +352,10 @@
 		var options = Array.prototype.map.call(nativeSelect.options || [], function (option) {
 			return { value: option.value, text: option.textContent || option.label || "Camera" };
 		});
-		if (isExplicitCameraChoiceRequired()) {
-			options.unshift({ value: "", text: "Select a camera" });
-		}
 		replaceOptions(byId("mcastDesktopCameraSelect"), options, "Camera");
 		replaceOptions(byId("mcastDesktopRoomCameraSelect"), options, "Camera");
-		if (state.cameraSelectionTouched || hasExplicitUrlCameraSelection() || !isExplicitCameraChoiceRequired()) {
-			setSelectValue("mcastDesktopCameraSelect", nativeSelect.value || "");
-			setSelectValue("mcastDesktopRoomCameraSelect", nativeSelect.value || "");
-		} else {
-			setSelectValue("mcastDesktopCameraSelect", "");
-			setSelectValue("mcastDesktopRoomCameraSelect", "");
-		}
+		setSelectValue("mcastDesktopCameraSelect", nativeSelect.value || "");
+		setSelectValue("mcastDesktopRoomCameraSelect", nativeSelect.value || "");
 	}
 
 	function syncMicDevices() {
@@ -378,94 +413,15 @@
 	function applyCameraSelection(value) {
 		var nativeSelect = byId("videoSourceSelect") || byId("videoSource3");
 		if (!nativeSelect || !value) {
-			state.cameraSelectionTouched = false;
-			setStatus("Choose a camera before starting preview, or join without camera.", true);
+			setStatus("No camera is available to switch to.", true);
 			return;
 		}
-		state.cameraSelectionTouched = true;
 		nativeSelect.value = value;
 		dispatchNativeChange(nativeSelect);
 		setStatus("Switching camera...");
 		window.setTimeout(function () {
 			bindLocalVideo("camera-change");
 		}, 900);
-	}
-
-	function ensureCameraSelectionBeforeMedia() {
-		if (state.joinWithoutCamera || !isExplicitCameraChoiceRequired() || hasExplicitCameraSelection()) {
-			return;
-		}
-
-		setStatus("Choose a camera before starting preview, or join without camera.", true);
-		openSettings();
-		throw createCameraSelectionRequiredError();
-	}
-
-	function hasExplicitCameraSelection() {
-		return state.cameraSelectionTouched || hasExplicitUrlCameraSelection();
-	}
-
-	function isExplicitCameraChoiceRequired() {
-		return hasRouteFlag("mcastrequiredevicechoice");
-	}
-
-	function hasExplicitUrlCameraSelection() {
-		return ["videodevice", "vdevice", "vd", "device"].some(function (name) {
-			return !!getRouteValue(name);
-		});
-	}
-
-	function hasRouteFlag(name) {
-		try {
-			var sources = getRouteParamSources();
-			for (var index = 0; index < sources.length; index++) {
-				if (sources[index].has(name)) {
-					return true;
-				}
-			}
-			return false;
-		} catch (error) {
-			return false;
-		}
-	}
-
-	function getRouteValue(name) {
-		try {
-			var sources = getRouteParamSources();
-			for (var index = 0; index < sources.length; index++) {
-				if (sources[index].has(name)) {
-					return sources[index].get(name) || "";
-				}
-			}
-			return "";
-		} catch (error) {
-			return "";
-		}
-	}
-
-	function getRouteParamSources() {
-		var sources = [];
-		if (window.urlParams && typeof window.urlParams.has === "function") {
-			sources.push(window.urlParams);
-		}
-		if (window.MCastRoute && window.MCastRoute.query) {
-			sources.push(new URLSearchParams(window.MCastRoute.query));
-		}
-		if (window.session && window.session.decrypted) {
-			sources.push(new URLSearchParams(String(window.session.decrypted).replace(/^\?/, "")));
-		}
-		sources.push(new URLSearchParams(window.location.search || ""));
-		return sources;
-	}
-
-	function createCameraSelectionRequiredError() {
-		var error = new Error("Choose a camera before starting preview.");
-		error.name = "MCastCameraSelectionRequired";
-		return error;
-	}
-
-	function isCameraSelectionRequiredError(error) {
-		return !!(error && error.name === "MCastCameraSelectionRequired");
 	}
 
 	function selectNativeMic(value) {
@@ -766,6 +722,60 @@
 		if (typeof window.hangup === "function") {
 			window.hangup();
 		}
+	}
+
+	function installNativeGuestControls() {
+		window.MCastNativeGuestControls = {
+			setAudioEnabled: function (enabled) {
+				enabled = !!enabled;
+				setAudioTracksEnabled(enabled);
+				if (window.session) {
+					window.session.muted = !enabled;
+				}
+				syncNativeMuteStateInBackground(!enabled);
+				updateDesktopControls();
+				setStatus(enabled ? "Host enabled your microphone." : "Host muted your microphone.");
+				return true;
+			},
+			setVideoEnabled: function (enabled) {
+				enabled = !!enabled;
+				setVideoTracksEnabled(enabled);
+				if (window.session) {
+					window.session.videoMuted = !enabled;
+				}
+				bindLocalVideo("native-camera-command");
+				updateDesktopControls();
+				setStatus(enabled ? "Host enabled your camera." : "Host disabled your camera.");
+				return true;
+			},
+			setPresence: function (payload) {
+				var presence = String(payload && (payload.presenceState || payload.participantState) || "").toLowerCase();
+				if (presence === "onscreen") {
+					setStep("live");
+					setRoomState("Live room", "You are on screen.");
+					setStatus("The host moved you on screen.");
+				} else if (presence === "removed") {
+					leaveRoom();
+				} else {
+					setStep("backstage");
+					setRoomState("Ready backstage", "Your camera and microphone are connected.");
+					setStatus("You are backstage.");
+				}
+				return true;
+			},
+			startMedia: function () {
+				if (!state.joined) {
+					joinRoom();
+				} else {
+					startNativeWebRtcBridge();
+				}
+				return true;
+			},
+			disconnect: function () {
+				leaveRoom();
+				return true;
+			}
+		};
 	}
 
 	function setStatus(message, isError) {

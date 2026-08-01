@@ -347,6 +347,9 @@
 		var state = normalizeRouteToken(routedParams.get("mcaststate") || "backstage", "backstage");
 		var routing = normalizeRouteToken(routedParams.get("mcastrouting") || "low_bitrate", "low_bitrate");
 		var guestName = normalizeGuestDisplayName(routedParams.get("label") || routedParams.get("l") || "");
+		var autoStartRequested = currentRoute === "guest" && routedParams.has("mcastrequestedautostart");
+		var nativeWebRtcRequested = currentRoute === "guest" &&
+			(routedParams.has("mcastnativewebrtc") || routedParams.has("mcastnative"));
 		window.MCastRoute = {
 			route: currentRoute,
 			mode: mode,
@@ -354,7 +357,8 @@
 			state: state,
 			routing: routing,
 			guestName: guestName,
-			query: serializeParams(routedParams)
+			autoStartRequested: autoStartRequested,
+			nativeWebRtcRequested: nativeWebRtcRequested
 		};
 		var root = document.documentElement;
 		root.classList.add("mcast-route");

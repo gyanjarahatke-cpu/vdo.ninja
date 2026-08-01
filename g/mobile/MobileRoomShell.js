@@ -16,7 +16,7 @@
 		correctionTimer: 0,
 		lastCorrectionLog: "",
 		toastTimer: 0,
-		cameraSelectionTouched: false
+		autoJoinStarted: false
 	};
 
 	var icons = {
@@ -44,6 +44,7 @@
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
 		decorateButtons();
+		installNativeGuestControls();
 		wireUi();
 		restoreGuestName();
 		fillRoomName();
@@ -53,6 +54,7 @@
 				setStep("permission");
 			}
 		}, 850);
+		scheduleAutoJoin();
 		state.devicePoll = window.setInterval(function () {
 			disableLegacyAuxiliaryModules();
 			removeLegacyBranding();
@@ -114,11 +116,59 @@
 		});
 	}
 
+	function scheduleAutoJoin() {
+		if (!shouldAutoJoin()) {
+			return;
+		}
+		window.setTimeout(function () {
+			if (state.autoJoinStarted || state.joined) {
+				return;
+			}
+			state.autoJoinStarted = true;
+			logMobile("MCast requested automatic guest entry", {});
+			joinRoom();
+		}, 1000);
+	}
+
+	function shouldAutoJoin() {
+		if (window.MCastRoute && window.MCastRoute.autoStartRequested === true) {
+			return true;
+		}
+		if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has("mcastrequestedautostart")) {
+			return true;
+		}
+		try {
+			return new URLSearchParams(window.location.search).has("mcastrequestedautostart");
+		} catch (error) {
+			return false;
+		}
+	}
+
 	function on(id, type, handler) {
 		var element = byId(id);
 		if (element) {
 			element.addEventListener(type, handler);
 		}
+	}
+
+	function startNativeWebRtcBridge() {
+		if (!window.MCastNativeWebRtcBridge ||
+			typeof window.MCastNativeWebRtcBridge.start !== "function" ||
+			!window.MCastNativeWebRtcBridge.isRequested()) {
+			return;
+		}
+
+		window.MCastNativeWebRtcBridge.start({
+			getLocalStream: function () {
+				return getLocalStream(getLocalVideoElement());
+			},
+			log: logMobile,
+			onState: function (stage) {
+				if (stage === "media-attached") {
+					showStatus("Native studio connection is starting.");
+				}
+			}
+		});
 	}
 
 	function setStep(step) {
@@ -136,7 +186,6 @@
 		setButtonBusy("mcastMobileAllowButton", true, "Opening camera...");
 		setStatus("mcastMobilePermissionStatus", "Requesting camera and microphone access...");
 		try {
-			ensureCameraSelectionBeforeMedia();
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
 			}
@@ -153,9 +202,6 @@
 		} catch (error) {
 			setStatus("mcastMobilePermissionStatus", getPermissionMessage(error), true);
 			logMobile("getUserMedia error", { name: error && error.name, message: error && error.message });
-			if (isCameraSelectionRequiredError(error)) {
-				openSettings();
-			}
 			throw error;
 		} finally {
 			setButtonBusy("mcastMobileAllowButton", false, "Allow mic/cam access");
@@ -185,6 +231,7 @@
 			setStep("backstage");
 			bindLocalVideo("joined");
 			updateControls();
+			startNativeWebRtcBridge();
 			showToast("You are backstage. The host can add you to the stream.");
 			logMobile("joined backstage", summarizeStream(getLocalStream(getLocalVideoElement())));
 		} catch (error) {
@@ -375,15 +422,10 @@
 		var options = Array.prototype.map.call(nativeSelect.options || [], function (option) {
 			return { value: option.value, text: option.textContent || option.label || "Camera" };
 		});
-		if (isExplicitCameraChoiceRequired()) {
-			options.unshift({ value: "", text: "Select a camera" });
-		}
 		var select = byId("mcastMobileCameraSelect");
 		replaceOptions(select, options, "Camera");
-		if (select && (state.cameraSelectionTouched || hasExplicitUrlCameraSelection() || !isExplicitCameraChoiceRequired()) && hasOption(select, nativeSelect.value || "")) {
+		if (select && hasOption(select, nativeSelect.value || "")) {
 			select.value = nativeSelect.value || "";
-		} else if (select && hasOption(select, "")) {
-			select.value = "";
 		}
 	}
 
@@ -442,11 +484,9 @@
 	function applyCameraSelection(value) {
 		var nativeSelect = byId("videoSourceSelect") || byId("videoSource3");
 		if (!nativeSelect || !value) {
-			state.cameraSelectionTouched = false;
-			showStatus("Choose a camera before starting preview.", true);
+			showStatus("No camera is available to switch to.", true);
 			return;
 		}
-		state.cameraSelectionTouched = true;
 		nativeSelect.value = value;
 		dispatchNativeChange(nativeSelect);
 		showStatus("Switching camera...");
@@ -454,83 +494,6 @@
 			bindLocalVideo("camera-change");
 			updateControls();
 		}, 900);
-	}
-
-	function ensureCameraSelectionBeforeMedia() {
-		if (!isExplicitCameraChoiceRequired() || hasExplicitCameraSelection()) {
-			return;
-		}
-
-		showStatus("Choose a camera before starting preview.", true);
-		openSettings();
-		throw createCameraSelectionRequiredError();
-	}
-
-	function hasExplicitCameraSelection() {
-		return state.cameraSelectionTouched || hasExplicitUrlCameraSelection();
-	}
-
-	function isExplicitCameraChoiceRequired() {
-		return hasRouteFlag("mcastrequiredevicechoice");
-	}
-
-	function hasExplicitUrlCameraSelection() {
-		return ["videodevice", "vdevice", "vd", "device"].some(function (name) {
-			return !!getRouteValue(name);
-		});
-	}
-
-	function hasRouteFlag(name) {
-		try {
-			var sources = getRouteParamSources();
-			for (var index = 0; index < sources.length; index++) {
-				if (sources[index].has(name)) {
-					return true;
-				}
-			}
-			return false;
-		} catch (error) {
-			return false;
-		}
-	}
-
-	function getRouteValue(name) {
-		try {
-			var sources = getRouteParamSources();
-			for (var index = 0; index < sources.length; index++) {
-				if (sources[index].has(name)) {
-					return sources[index].get(name) || "";
-				}
-			}
-			return "";
-		} catch (error) {
-			return "";
-		}
-	}
-
-	function getRouteParamSources() {
-		var sources = [];
-		if (window.urlParams && typeof window.urlParams.has === "function") {
-			sources.push(window.urlParams);
-		}
-		if (window.MCastRoute && window.MCastRoute.query) {
-			sources.push(new URLSearchParams(window.MCastRoute.query));
-		}
-		if (window.session && window.session.decrypted) {
-			sources.push(new URLSearchParams(String(window.session.decrypted).replace(/^\?/, "")));
-		}
-		sources.push(new URLSearchParams(window.location.search || ""));
-		return sources;
-	}
-
-	function createCameraSelectionRequiredError() {
-		var error = new Error("Choose a camera before starting preview.");
-		error.name = "MCastCameraSelectionRequired";
-		return error;
-	}
-
-	function isCameraSelectionRequiredError(error) {
-		return !!(error && error.name === "MCastCameraSelectionRequired");
 	}
 
 	function selectNativeMic(value) {
@@ -614,20 +577,6 @@
 		}
 	}
 
-	function openSettings() {
-		var panel = byId("mcastMobileSettingsPanel");
-		if (!panel) {
-			showToast("Settings are available before entering the studio.");
-			return;
-		}
-		panel.hidden = false;
-		syncDevices();
-		var cameraSelect = byId("mcastMobileCameraSelect");
-		if (cameraSelect) {
-			cameraSelect.focus();
-		}
-	}
-
 	function leaveRoom() {
 		showToast("You left the backstage room.");
 		state.joined = false;
@@ -636,6 +585,58 @@
 			window.hangup();
 		}
 		updateControls();
+	}
+
+	function installNativeGuestControls() {
+		window.MCastNativeGuestControls = {
+			setAudioEnabled: function (enabled) {
+				enabled = !!enabled;
+				setAudioTracksEnabled(enabled);
+				if (window.session) {
+					window.session.muted = !enabled;
+				}
+				syncNativeMuteStateInBackground(!enabled);
+				updateControls();
+				showToast(enabled ? "Host enabled your microphone." : "Host muted your microphone.");
+				return true;
+			},
+			setVideoEnabled: function (enabled) {
+				enabled = !!enabled;
+				setVideoTracksEnabled(enabled);
+				if (window.session) {
+					window.session.videoMuted = !enabled;
+				}
+				bindLocalVideo("native-camera-command");
+				updateControls();
+				showToast(enabled ? "Host enabled your camera." : "Host disabled your camera.");
+				return true;
+			},
+			setPresence: function (payload) {
+				var presence = String(payload && (payload.presenceState || payload.participantState) || "").toLowerCase();
+				if (presence === "onscreen") {
+					setStep("backstage");
+					showToast("The host moved you on screen.");
+				} else if (presence === "removed") {
+					leaveRoom();
+				} else {
+					setStep("backstage");
+					showToast("You are backstage.");
+				}
+				return true;
+			},
+			startMedia: function () {
+				if (!state.joined) {
+					joinRoom();
+				} else {
+					startNativeWebRtcBridge();
+				}
+				return true;
+			},
+			disconnect: function () {
+				leaveRoom();
+				return true;
+			}
+		};
 	}
 
 	function applyGuestName() {
