@@ -368,7 +368,7 @@
 		root.classList.add("mcast-state-" + state);
 		root.classList.add("mcast-routing-" + routing);
 		if (currentRoute !== "guest" && role === "participant") {
-			document.title = "MCast Studio " + toTitleCase(mode);
+			document.title = "MCast Studio v6 " + toTitleCase(mode);
 		}
 	}
 
