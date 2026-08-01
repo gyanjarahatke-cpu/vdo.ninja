@@ -656,7 +656,7 @@
 				window.session.label = name;
 			}
 			window.sessionStorage.setItem("mcastGuestName", name);
-			document.title = name + " - MCast Studio v8";
+			document.title = name + " - MCast Studio v9";
 		} catch (error) {}
 		setSelfName();
 		return name;

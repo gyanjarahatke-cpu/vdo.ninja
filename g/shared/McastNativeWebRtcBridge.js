@@ -6,9 +6,7 @@
 		timer: 0,
 		attempts: 0,
 		attached: {},
-		dataChannels: {},
-		peers: {},
-		media: {}
+		dataChannels: {}
 	};
 
 	var mcastNativeRenegotiationAttempts = 0;
@@ -104,7 +102,6 @@
 				return;
 			}
 
-			state.peers[uuid] = pc;
 			peers.push({ uuid: uuid, pc: pc, collection: name });
 		});
 	}
@@ -220,7 +217,7 @@
 			};
 		}
 
-		["sendChannel", "dataChannel", "channel", "dc", "mcastNativeDataChannel"].forEach(function (name) {
+		["dataChannel", "channel", "dc", "mcastNativeDataChannel"].forEach(function (name) {
 			hookDataChannel(uuid, pc[name]);
 		});
 	}
@@ -237,20 +234,10 @@
 		});
 		channel.addEventListener("open", function () {
 			state.log("MCast native WebRTC command channel open", { uuid: safeId(uuid), label: channel.label });
-			var pc = state.peers[uuid];
-			if (pc && state.attached[uuid]) {
-				createFallbackOfferWhenStable(uuid, pc, 0);
-			}
 		});
 		channel.addEventListener("close", function () {
 			delete state.dataChannels[uuid + ":" + channel.label];
 		});
-		if (channel.readyState === "open") {
-			var pc = state.peers[uuid];
-			if (pc && state.attached[uuid]) {
-				createFallbackOfferWhenStable(uuid, pc, 0);
-			}
-		}
 	}
 
 	function handleDataChannelMessage(uuid, channel, raw) {
@@ -361,92 +348,6 @@
 				error: ok ? "" : (error || "failed")
 			}));
 		} catch (sendError) {}
-	}
-
-	function getOpenNativeChannel(uuid) {
-		var prefix = uuid + ":";
-		var keys = Object.keys(state.dataChannels);
-		for (var index = 0; index < keys.length; index += 1) {
-			var key = keys[index];
-			var channel = state.dataChannels[key];
-			if (key.indexOf(prefix) === 0 && channel && channel.readyState === "open" && typeof channel.send === "function") {
-				return channel;
-			}
-		}
-		return null;
-	}
-
-	function sendJson(channel, payload) {
-		if (!channel || channel.readyState !== "open" || typeof channel.send !== "function") {
-			return false;
-		}
-		try {
-			channel.send(JSON.stringify(payload));
-			return true;
-		} catch (error) {
-			return false;
-		}
-	}
-
-	function sendBridgeDebug(uuid, stage, reason, stream) {
-		var channel = getOpenNativeChannel(uuid);
-		if (!channel) {
-			return;
-		}
-		var summary = summarizeStream(stream || (state.getLocalStream ? state.getLocalStream() : null));
-		sendJson(channel, {
-			type: "mcastBridgeDebug",
-			mcastBridgeDebug: "1",
-			stage: stage || "",
-			reason: reason || "",
-			tracks: "V" + summary.videoLive + "A" + summary.audioLive,
-			channel: channel.readyState || "",
-			signaling: state.peers[uuid] && state.peers[uuid].signalingState || "",
-			uuid: uuid || ""
-		});
-	}
-
-	function getRouteParams() {
-		try {
-			if (window.urlParams && typeof window.urlParams.get === "function") {
-				return window.urlParams;
-			}
-		} catch (error) {}
-		try {
-			if (window.session && window.session.decrypted) {
-				return new URLSearchParams(String(window.session.decrypted || "").replace(/^\?/, ""));
-			}
-		} catch (error) {}
-		try {
-			return new URLSearchParams(window.location.search || "");
-		} catch (error) {
-			return new URLSearchParams("");
-		}
-	}
-
-	function readParam(params, name) {
-		try {
-			var value = params.get(name);
-			return value === null ? "" : String(value || "").trim();
-		} catch (error) {
-			return "";
-		}
-	}
-
-	function getGuestIdentity() {
-		var params = getRouteParams();
-		var streamId = readParam(params, "mcaststreamid") ||
-			readParam(params, "mcastguestkey") ||
-			readParam(params, "push") ||
-			(window.session && window.session.streamID) ||
-			"";
-		var guestKey = readParam(params, "mcastguestkey") || streamId;
-		return {
-			streamId: streamId,
-			guestKey: guestKey,
-			label: readParam(params, "l") || readParam(params, "label") || "",
-			sessionId: ""
-		};
 	}
 
 	function renegotiate(uuid, pc) {
