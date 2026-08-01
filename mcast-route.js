@@ -353,7 +353,8 @@
 			role: role,
 			state: state,
 			routing: routing,
-			guestName: guestName
+			guestName: guestName,
+			query: serializeParams(routedParams)
 		};
 		var root = document.documentElement;
 		root.classList.add("mcast-route");

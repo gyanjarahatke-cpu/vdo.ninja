@@ -482,10 +482,13 @@
 
 	function hasRouteFlag(name) {
 		try {
-			if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has(name)) {
-				return true;
+			var sources = getRouteParamSources();
+			for (var index = 0; index < sources.length; index++) {
+				if (sources[index].has(name)) {
+					return true;
+				}
 			}
-			return new URLSearchParams(window.location.search || "").has(name);
+			return false;
 		} catch (error) {
 			return false;
 		}
@@ -493,16 +496,31 @@
 
 	function getRouteValue(name) {
 		try {
-			if (window.urlParams && typeof window.urlParams.get === "function") {
-				var routeValue = window.urlParams.get(name);
-				if (routeValue) {
-					return routeValue;
+			var sources = getRouteParamSources();
+			for (var index = 0; index < sources.length; index++) {
+				if (sources[index].has(name)) {
+					return sources[index].get(name) || "";
 				}
 			}
-			return new URLSearchParams(window.location.search || "").get(name) || "";
+			return "";
 		} catch (error) {
 			return "";
 		}
+	}
+
+	function getRouteParamSources() {
+		var sources = [];
+		if (window.urlParams && typeof window.urlParams.has === "function") {
+			sources.push(window.urlParams);
+		}
+		if (window.MCastRoute && window.MCastRoute.query) {
+			sources.push(new URLSearchParams(window.MCastRoute.query));
+		}
+		if (window.session && window.session.decrypted) {
+			sources.push(new URLSearchParams(String(window.session.decrypted).replace(/^\?/, "")));
+		}
+		sources.push(new URLSearchParams(window.location.search || ""));
+		return sources;
 	}
 
 	function createCameraSelectionRequiredError() {
