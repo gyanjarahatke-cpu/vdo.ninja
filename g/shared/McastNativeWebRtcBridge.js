@@ -15,6 +15,8 @@
 	};
 
 	var mcastNativeRenegotiationAttempts = 0;
+	var nativeCreateOffer = null;
+	var createOfferHookInstalled = false;
 
 	function isRequested() {
 		try {
@@ -45,6 +47,7 @@
 		state.onRemoteStream = typeof options.onRemoteStream === "function" ? options.onRemoteStream : null;
 		state.maxAttempts = Math.max(10, parseInt(options.maxAttempts, 10) || 80);
 		state.intervalMs = Math.max(250, parseInt(options.intervalMs, 10) || 500);
+		installCreateOfferHook();
 		state.log("MCast native WebRTC media bridge armed", {});
 		state.timer = window.setInterval(tick, state.intervalMs);
 		tick();
@@ -133,6 +136,57 @@
 		}
 	}
 
+	function installCreateOfferHook() {
+		if (createOfferHookInstalled || !window.RTCPeerConnection || !window.RTCPeerConnection.prototype) {
+			return;
+		}
+
+		nativeCreateOffer = window.RTCPeerConnection.prototype.createOffer;
+		if (typeof nativeCreateOffer !== "function") {
+			return;
+		}
+
+		createOfferHookInstalled = true;
+		window.RTCPeerConnection.prototype.createOffer = function mcastNativeCreateOffer(options) {
+			var pc = this;
+			var uuid = findUuidForPeer(pc);
+			if (!uuid || !state.getLocalStream || state.attached[uuid] || state.attaching[uuid] || pc.mcastNativeMediaAttached) {
+				return nativeCreateOffer.apply(pc, arguments);
+			}
+
+			var stream = state.getLocalStream();
+			if (!isUsableStream(stream) || (pc.signalingState && pc.signalingState !== "stable")) {
+				return nativeCreateOffer.apply(pc, arguments);
+			}
+
+			return attachPeerTracks(uuid, pc, stream, "pre-offer")
+				.then(function () {
+					pc.mcastNativeMediaOfferCovered = true;
+					hookPeerDataChannels(uuid, pc);
+					hookPeerReturnTracks(uuid, pc);
+					stop();
+					return nativeCreateOffer.call(pc, options);
+				})
+				.catch(function (error) {
+					state.log("MCast native WebRTC pre-offer attach failed", {
+						uuid: safeId(uuid),
+						name: error && error.name
+					});
+					return nativeCreateOffer.call(pc, options);
+				});
+		};
+	}
+
+	function findUuidForPeer(pc) {
+		var peers = collectPeerConnections();
+		for (var index = 0; index < peers.length; index += 1) {
+			if (peers[index].pc === pc) {
+				return peers[index].uuid;
+			}
+		}
+		return "";
+	}
+
 	function attachPeerIfReady(uuid, pc, stream) {
 		if (!uuid || !pc || state.attached[uuid] || state.attaching[uuid] || pc.mcastNativeMediaAttached) {
 			return;
@@ -149,6 +203,33 @@
 		var tracks = stream.getTracks().filter(isLiveTrack);
 		if (!tracks.length) {
 			return;
+		}
+
+		attachPeerTracks(uuid, pc, stream, "timer")
+			.then(function (attached) {
+				if (!attached) {
+					return;
+				}
+				if (pc.mcastNativeMediaOfferCovered) {
+					stop();
+					return;
+				}
+				renegotiate(uuid, pc);
+				stop();
+			})
+			.catch(function (error) {
+				delete state.attaching[uuid];
+				state.log("MCast native WebRTC track attach failed", {
+					uuid: safeId(uuid),
+					name: error && error.name
+				});
+			});
+	}
+
+	function attachPeerTracks(uuid, pc, stream, reason) {
+		var tracks = stream.getTracks().filter(isLiveTrack);
+		if (!tracks.length) {
+			return Promise.resolve(false);
 		}
 
 		var existingSenders = pc.getSenders();
@@ -179,17 +260,18 @@
 		});
 
 		if (!boundKinds.length) {
-			return;
+			return Promise.resolve(false);
 		}
 
 		state.attaching[uuid] = true;
-		Promise.all(pending)
+		return Promise.all(pending)
 			.then(function () {
 				state.attached[uuid] = true;
 				pc.mcastNativeMediaAttached = true;
 				delete state.attaching[uuid];
 				state.log("MCast native WebRTC media tracks attached", {
 					uuid: safeId(uuid),
+					reason: reason || "",
 					kinds: boundKinds.join(","),
 					tracks: summarizeStream(stream),
 					sendersBefore: beforeSenders,
@@ -200,15 +282,11 @@
 					state.onState("media-attached", uuid, boundKinds);
 				}
 
-				renegotiate(uuid, pc);
-				stop();
+				return true;
 			})
 			.catch(function (error) {
 				delete state.attaching[uuid];
-				state.log("MCast native WebRTC track attach failed", {
-					uuid: safeId(uuid),
-					name: error && error.name
-				});
+				throw error;
 			});
 	}
 
