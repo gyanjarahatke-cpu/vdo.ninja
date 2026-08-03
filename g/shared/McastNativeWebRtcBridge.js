@@ -6,6 +6,7 @@
 		timer: 0,
 		attempts: 0,
 		attached: {},
+		attaching: {},
 		dataChannels: {},
 		returnStreams: {},
 		returnElements: {}
@@ -130,7 +131,7 @@
 	}
 
 	function attachPeerIfReady(uuid, pc, stream) {
-		if (!uuid || !pc || state.attached[uuid] || pc.mcastNativeMediaAttached) {
+		if (!uuid || !pc || state.attached[uuid] || state.attaching[uuid] || pc.mcastNativeMediaAttached) {
 			return;
 		}
 
@@ -148,57 +149,64 @@
 		}
 
 		var existingSenders = pc.getSenders();
-		var addedKinds = [];
+		var boundKinds = [];
+		var pending = [];
 		var beforeSenders = summarizeSenders(existingSenders);
 		tracks.forEach(function (track) {
-			if (!track || !track.kind || hasSenderForKind(existingSenders, track.kind)) {
+			var binding;
+			if (!track || !track.kind) {
 				return;
 			}
 
 			try {
-				if (typeof pc.addTransceiver === "function") {
-					pc.addTransceiver(track, { direction: "sendrecv", streams: [stream] });
-				} else if (typeof pc.addTrack === "function") {
-					pc.addTrack(track, stream);
-				} else {
+				binding = bindLocalTrackToPeer(pc, existingSenders, track, stream);
+				if (!binding || !binding.kind) {
 					return;
 				}
-				addedKinds.push(track.kind);
-			} catch (error) {
-				try {
-					if (typeof pc.addTrack === "function") {
-						pc.addTrack(track, stream);
-						addedKinds.push(track.kind);
-					}
-				} catch (fallbackError) {
-					state.log("MCast native WebRTC track attach failed", {
-						kind: track.kind,
-						name: fallbackError && fallbackError.name
-					});
+				boundKinds.push(binding.kind + ":" + binding.action);
+				if (binding.promise && typeof binding.promise.then === "function") {
+					pending.push(binding.promise);
 				}
+			} catch (error) {
+				state.log("MCast native WebRTC track attach failed", {
+					kind: track.kind,
+					name: error && error.name
+				});
 			}
 		});
 
-		if (!addedKinds.length) {
+		if (!boundKinds.length) {
 			return;
 		}
 
-		state.attached[uuid] = true;
-		pc.mcastNativeMediaAttached = true;
-		state.log("MCast native WebRTC media tracks attached", {
-			uuid: safeId(uuid),
-			kinds: addedKinds.join(","),
-			tracks: summarizeStream(stream),
-			sendersBefore: beforeSenders,
-			sendersAfter: summarizeSenders(pc.getSenders ? pc.getSenders() : [])
-		});
+		state.attaching[uuid] = true;
+		Promise.all(pending)
+			.then(function () {
+				state.attached[uuid] = true;
+				pc.mcastNativeMediaAttached = true;
+				delete state.attaching[uuid];
+				state.log("MCast native WebRTC media tracks attached", {
+					uuid: safeId(uuid),
+					kinds: boundKinds.join(","),
+					tracks: summarizeStream(stream),
+					sendersBefore: beforeSenders,
+					sendersAfter: summarizeSenders(pc.getSenders ? pc.getSenders() : [])
+				});
 
-		if (state.onState) {
-			state.onState("media-attached", uuid, addedKinds);
-		}
+				if (state.onState) {
+					state.onState("media-attached", uuid, boundKinds);
+				}
 
-		renegotiate(uuid, pc);
-		stop();
+				renegotiate(uuid, pc);
+				stop();
+			})
+			.catch(function (error) {
+				delete state.attaching[uuid];
+				state.log("MCast native WebRTC track attach failed", {
+					uuid: safeId(uuid),
+					name: error && error.name
+				});
+			});
 	}
 
 	function hookPeerReturnTracks(uuid, pc) {
@@ -595,14 +603,125 @@
 			});
 	}
 
-	function hasSenderForKind(senders, kind) {
-		for (var index = 0; index < senders.length; index += 1) {
-			var sender = senders[index];
-			if (sender && sender.track && sender.track.kind === kind && sender.track.readyState !== "ended") {
-				return true;
+	function bindLocalTrackToPeer(pc, existingSenders, track, stream) {
+		var sender = findReusableSenderForKind(pc, existingSenders, track.kind);
+		var transceiver = sender ? findTransceiverForSender(pc, sender, track.kind) : null;
+		if (transceiver) {
+			forceTransceiverSendrecv(transceiver);
+		}
+
+		if (sender && isLiveTrack(sender.track)) {
+			setSenderStreams(sender, stream);
+			if (sender.track === track) {
+				return { kind: track.kind, action: "existing" };
+			}
+			if (typeof sender.replaceTrack === "function") {
+				return {
+					kind: track.kind,
+					action: "replace",
+					promise: normalizePromise(sender.replaceTrack(track))
+				};
 			}
 		}
-		return false;
+
+		if (sender && typeof sender.replaceTrack === "function") {
+			setSenderStreams(sender, stream);
+			return {
+				kind: track.kind,
+				action: "replace",
+				promise: normalizePromise(sender.replaceTrack(track))
+			};
+		}
+
+		if (typeof pc.addTransceiver === "function") {
+			var addedTransceiver = pc.addTransceiver(track, { direction: "sendrecv", streams: [stream] });
+			forceTransceiverSendrecv(addedTransceiver);
+			if (addedTransceiver && addedTransceiver.sender) {
+				existingSenders.push(addedTransceiver.sender);
+			}
+			return { kind: track.kind, action: "add-transceiver" };
+		}
+
+		if (typeof pc.addTrack === "function") {
+			var addedSender = pc.addTrack(track, stream);
+			if (addedSender) {
+				existingSenders.push(addedSender);
+			}
+			return { kind: track.kind, action: "add-track" };
+		}
+
+		return null;
+	}
+
+	function findReusableSenderForKind(pc, senders, kind) {
+		var transceivers = getTransceivers(pc);
+		var index;
+		for (index = 0; index < senders.length; index += 1) {
+			if (senderMatchesKind(senders[index], kind)) {
+				return senders[index];
+			}
+		}
+		for (index = 0; index < transceivers.length; index += 1) {
+			if (transceiverMatchesKind(transceivers[index], kind)) {
+				return transceivers[index].sender || null;
+			}
+		}
+		return null;
+	}
+
+	function getTransceivers(pc) {
+		try {
+			return pc && typeof pc.getTransceivers === "function" ? pc.getTransceivers() : [];
+		} catch (error) {
+			return [];
+		}
+	}
+
+	function senderMatchesKind(sender, kind) {
+		return !!(sender && sender.track && sender.track.kind === kind && sender.track.readyState !== "ended");
+	}
+
+	function transceiverMatchesKind(transceiver, kind) {
+		var senderTrack = transceiver && transceiver.sender && transceiver.sender.track;
+		var receiverTrack = transceiver && transceiver.receiver && transceiver.receiver.track;
+		return !!((senderTrack && senderTrack.kind === kind) || (receiverTrack && receiverTrack.kind === kind));
+	}
+
+	function findTransceiverForSender(pc, sender, kind) {
+		var transceivers = getTransceivers(pc);
+		for (var index = 0; index < transceivers.length; index += 1) {
+			var transceiver = transceivers[index];
+			if (transceiver && transceiver.sender === sender) {
+				return transceiver;
+			}
+			if (transceiver && transceiver.sender && transceiver.sender.track === sender.track && transceiverMatchesKind(transceiver, kind)) {
+				return transceiver;
+			}
+		}
+		return null;
+	}
+
+	function forceTransceiverSendrecv(transceiver) {
+		if (!transceiver || transceiver.stopped === true) {
+			return;
+		}
+		try {
+			if (transceiver.direction !== "sendrecv") {
+				transceiver.direction = "sendrecv";
+			}
+		} catch (error) {}
+	}
+
+	function setSenderStreams(sender, stream) {
+		try {
+			if (sender && typeof sender.setStreams === "function") {
+				sender.setStreams(stream);
+			}
+		} catch (error) {}
+	}
+
+	function normalizePromise(value) {
+		return value && typeof value.then === "function" ? value : Promise.resolve(value);
 	}
 
 	function isUsableStream(stream) {

@@ -57,13 +57,50 @@ function createChannel() {
 	};
 }
 
-function createPeer(channel) {
+function createSender(track, replacements, transceiver) {
+	const sender = {
+		track,
+		streams: [],
+		replaceTrack(nextTrack) {
+			replacements.push({ from: this.track && this.track.id, to: nextTrack && nextTrack.id });
+			this.track = nextTrack;
+			if (transceiver) {
+				transceiver.track = nextTrack;
+			}
+			return Promise.resolve();
+		},
+		setStreams(...streams) {
+			this.streams = streams;
+		}
+	};
+	return sender;
+}
+
+function createPeer(channel, options) {
+	options = options || {};
 	const listeners = {};
 	const senders = [];
 	const transceivers = [];
+	const replacements = [];
 	function directionFor(kind) {
 		const transceiver = transceivers.find((candidate) => candidate.track && candidate.track.kind === kind);
 		return transceiver ? transceiver.direction : "sendonly";
+	}
+	function pushTransceiver(track, direction) {
+		const transceiver = {
+			sender: null,
+			receiver: { track },
+			track,
+			direction: direction || "sendrecv"
+		};
+		transceiver.sender = createSender(track, replacements, transceiver);
+		senders.push(transceiver.sender);
+		transceivers.push(transceiver);
+		return transceiver;
+	}
+	if (options.existingMediaSenders) {
+		pushTransceiver(createTrack("video", "placeholder-video"), "sendonly");
+		pushTransceiver(createTrack("audio", "placeholder-audio"), "sendonly");
 	}
 	return {
 		signalingState: "stable",
@@ -71,6 +108,7 @@ function createPeer(channel) {
 		remoteDescription: null,
 		sendChannel: channel,
 		transceivers,
+		replacements,
 		addEventListener(type, handler) {
 			listeners[type] = listeners[type] || [];
 			listeners[type].push(handler);
@@ -78,19 +116,16 @@ function createPeer(channel) {
 		getSenders() {
 			return senders.slice();
 		},
+		getTransceivers() {
+			return transceivers.slice();
+		},
 		addTransceiver(track, options) {
-			const transceiver = {
-				sender: { track },
-				track,
-				direction: options && options.direction || "sendrecv"
-			};
-			senders.push({ track });
-			transceivers.push(transceiver);
-			return transceiver;
+			return pushTransceiver(track, options && options.direction || "sendrecv");
 		},
 		addTrack(track) {
-			senders.push({ track });
-			return { track };
+			const sender = createSender(track, replacements, null);
+			senders.push(sender);
+			return sender;
 		},
 		createOffer() {
 			return Promise.resolve({
@@ -128,14 +163,14 @@ function createPeer(channel) {
 }
 
 async function flushPromises() {
-	await Promise.resolve();
-	await Promise.resolve();
-	await Promise.resolve();
+	for (let index = 0; index < 10; index += 1) {
+		await Promise.resolve();
+	}
 }
 
-async function runBridge() {
+async function runBridge(peerOptions) {
 	const channel = createChannel();
-	const peer = createPeer(channel);
+	const peer = createPeer(channel, peerOptions);
 	const stream = createStream();
 	const remoteStreams = [];
 	const context = {
@@ -226,7 +261,7 @@ async function runBridge() {
 }
 
 runBridge()
-	.then(({ peer, remoteStreams, session }) => {
+	.then(async ({ peer, remoteStreams, session }) => {
 		const sent = session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
 		assert.ok(sent, "bridge should send a media SDP offer through VDO signaling");
 		const offer = sent.payload;
@@ -239,6 +274,17 @@ runBridge()
 		assert.strictEqual(remoteStreams.length, 1, "bridge should surface native return streams");
 		assert.strictEqual(remoteStreams[0].uuid, "peerA", "return stream should preserve peer uuid");
 		assert.strictEqual(remoteStreams[0].kind, "video", "return stream should report track kind");
+
+		const replaced = await runBridge({ existingMediaSenders: true });
+		const replacedOffer = replaced.session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
+		assert.ok(replacedOffer, "bridge should renegotiate when VDO already created media senders");
+		assert.strictEqual(replaced.peer.transceivers.length, 2, "bridge should reuse existing media transceivers");
+		assert.deepStrictEqual(
+			replaced.peer.replacements.map((replacement) => replacement.to).sort(),
+			["audio-track", "video-track"],
+			"bridge should replace existing VDO sender tracks with local camera and microphone tracks"
+		);
+		assert.ok(replaced.peer.transceivers.every((transceiver) => transceiver.direction === "sendrecv"), "reused VDO transceivers should request bidirectional media");
 		console.log("MCast native WebRTC bridge regression passed");
 	})
 	.catch((error) => {
