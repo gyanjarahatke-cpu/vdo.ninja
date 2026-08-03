@@ -445,19 +445,23 @@
 		channel.addEventListener("open", function () {
 			state.log("MCast native WebRTC command channel open", { uuid: safeId(uuid), label: channel.label });
 			var pc = state.peers[uuid];
-			if (pc && state.attached[uuid]) {
-				createFallbackOfferWhenStable(uuid, pc, 0);
-			}
+			createPostConnectOfferIfNeeded(uuid, pc);
 		});
 		channel.addEventListener("close", function () {
 			delete state.dataChannels[uuid + ":" + channel.label];
 		});
 		if (channel.readyState === "open") {
 			var pc = state.peers[uuid];
-			if (pc && state.attached[uuid]) {
-				createFallbackOfferWhenStable(uuid, pc, 0);
-			}
+			createPostConnectOfferIfNeeded(uuid, pc);
 		}
+	}
+
+	function createPostConnectOfferIfNeeded(uuid, pc) {
+		if (!shouldCreateFallbackOffer(uuid, pc)) {
+			return;
+		}
+
+		createFallbackOfferWhenStable(uuid, pc, 0);
 	}
 
 	function handleDataChannelMessage(uuid, channel, raw) {
@@ -708,8 +712,14 @@
 
 	function createFallbackOfferWhenStable(uuid, pc, attempt) {
 		attempt = attempt || 0;
+		if (!shouldCreateFallbackOffer(uuid, pc, attempt > 0)) {
+			return;
+		}
+
+		pc.mcastNativeFallbackOfferPending = true;
 		if (pc && pc.signalingState && pc.signalingState !== "stable") {
 			if (attempt >= 12) {
+				pc.mcastNativeFallbackOfferPending = false;
 				state.log("MCast native WebRTC fallback offer abandoned", {
 					uuid: safeId(uuid),
 					signalingState: pc.signalingState
@@ -732,6 +742,12 @@
 	}
 
 	function createFallbackOffer(uuid, pc) {
+		if (!shouldCreateFallbackOffer(uuid, pc, true)) {
+			return;
+		}
+
+		pc.mcastNativeFallbackOfferPending = false;
+		pc.mcastNativeFallbackOfferSent = true;
 		if (!pc || typeof pc.createOffer !== "function" || typeof pc.setLocalDescription !== "function") {
 			state.log("MCast native WebRTC fallback offer unavailable", { uuid: safeId(uuid) });
 			return;
@@ -770,8 +786,25 @@
 				});
 			})
 			.catch(function (error) {
+				pc.mcastNativeFallbackOfferSent = false;
 				state.log("MCast native WebRTC fallback offer failed", { name: error && error.name });
 			});
+	}
+
+	function shouldCreateFallbackOffer(uuid, pc, allowPending) {
+		if (!uuid || !pc || !state.attached[uuid]) {
+			return false;
+		}
+
+		if (pc.mcastNativeMediaOfferCovered) {
+			return false;
+		}
+
+		if (pc.mcastNativeFallbackOfferSent || (!allowPending && pc.mcastNativeFallbackOfferPending)) {
+			return false;
+		}
+
+		return true;
 	}
 
 	function bindLocalTrackToPeer(pc, existingSenders, track, stream) {
