@@ -82,6 +82,7 @@ function createPeer(channel, options) {
 	const senders = [];
 	const transceivers = [];
 	const replacements = [];
+	const iceCandidates = [];
 	function directionFor(kind) {
 		const transceiver = transceivers.find((candidate) => candidate.track && candidate.track.kind === kind);
 		return transceiver ? transceiver.direction : "sendonly";
@@ -109,6 +110,7 @@ function createPeer(channel, options) {
 		sendChannel: channel,
 		transceivers,
 		replacements,
+		iceCandidates,
 		addEventListener(type, handler) {
 			listeners[type] = listeners[type] || [];
 			listeners[type].push(handler);
@@ -153,7 +155,8 @@ function createPeer(channel, options) {
 			this.signalingState = "stable";
 			return Promise.resolve();
 		},
-		addIceCandidate() {
+		addIceCandidate(candidate) {
+			iceCandidates.push(candidate);
 			return Promise.resolve();
 		},
 		emit(type, data) {
@@ -261,7 +264,7 @@ async function runBridge(peerOptions) {
 }
 
 runBridge()
-	.then(async ({ peer, remoteStreams, session }) => {
+	.then(async ({ channel, peer, remoteStreams, session }) => {
 		const sent = session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
 		assert.ok(sent, "bridge should send a media SDP offer through VDO signaling");
 		const offer = sent.payload;
@@ -274,6 +277,27 @@ runBridge()
 		assert.strictEqual(remoteStreams.length, 1, "bridge should surface native return streams");
 		assert.strictEqual(remoteStreams[0].uuid, "peerA", "return stream should preserve peer uuid");
 		assert.strictEqual(remoteStreams[0].kind, "video", "return stream should report track kind");
+		channel.emit("message", {
+			data: JSON.stringify({
+				candidate: {
+					candidate: "a=candidate:1 1 udp 1 127.0.0.1 9 typ host",
+					sdpMid: "0",
+					sdpMLineIndex: 0
+				}
+			})
+		});
+		channel.emit("message", {
+			data: JSON.stringify({
+				description: {
+					type: "answer",
+					sdp: "v=0\r\ns=-\r\n"
+				}
+			})
+		});
+		await flushPromises();
+		assert.strictEqual(peer.remoteDescription.type, "answer", "bridge should apply native media answers received on the data channel");
+		assert.strictEqual(peer.iceCandidates.length, 1, "bridge should apply queued native ICE candidates after the answer");
+		assert.strictEqual(peer.iceCandidates[0].candidate, "candidate:1 1 udp 1 127.0.0.1 9 typ host", "bridge should normalize native ICE candidates");
 
 		const replaced = await runBridge({ existingMediaSenders: true });
 		const replacedOffer = replaced.session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");

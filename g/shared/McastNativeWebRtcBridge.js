@@ -8,6 +8,8 @@
 		attached: {},
 		attaching: {},
 		dataChannels: {},
+		peers: {},
+		media: {},
 		returnStreams: {},
 		returnElements: {}
 	};
@@ -107,6 +109,7 @@
 				return;
 			}
 
+			state.peers[uuid] = pc;
 			peers.push({ uuid: uuid, pc: pc, collection: name });
 		});
 	}
@@ -346,7 +349,7 @@
 			};
 		}
 
-		["dataChannel", "channel", "dc", "mcastNativeDataChannel"].forEach(function (name) {
+		["sendChannel", "dataChannel", "channel", "dc", "mcastNativeDataChannel"].forEach(function (name) {
 			hookDataChannel(uuid, pc[name]);
 		});
 	}
@@ -363,16 +366,43 @@
 		});
 		channel.addEventListener("open", function () {
 			state.log("MCast native WebRTC command channel open", { uuid: safeId(uuid), label: channel.label });
+			var pc = state.peers[uuid];
+			if (pc && state.attached[uuid]) {
+				createFallbackOfferWhenStable(uuid, pc, 0);
+			}
 		});
 		channel.addEventListener("close", function () {
 			delete state.dataChannels[uuid + ":" + channel.label];
 		});
+		if (channel.readyState === "open") {
+			var pc = state.peers[uuid];
+			if (pc && state.attached[uuid]) {
+				createFallbackOfferWhenStable(uuid, pc, 0);
+			}
+		}
 	}
 
 	function handleDataChannelMessage(uuid, channel, raw) {
 		var message = parseJson(raw);
 		if (!message) {
 			sendCommandAck(channel, "", "", false, "invalid-json");
+			return;
+		}
+
+		if (message.description && String(message.description.type || "").toLowerCase() === "answer") {
+			applyNativeAnswer(uuid, message.description);
+			return;
+		}
+
+		if (message.candidate) {
+			applyNativeCandidate(uuid, message.candidate);
+			return;
+		}
+
+		if (Array.isArray(message.candidates)) {
+			message.candidates.forEach(function (candidate) {
+				applyNativeCandidate(uuid, candidate);
+			});
 			return;
 		}
 
@@ -477,6 +507,69 @@
 				error: ok ? "" : (error || "failed")
 			}));
 		} catch (sendError) {}
+	}
+
+	function getMediaState(uuid) {
+		if (!state.media[uuid]) {
+			state.media[uuid] = {
+				iceCandidatesQueued: []
+			};
+		}
+		return state.media[uuid];
+	}
+
+	function applyNativeAnswer(uuid, description) {
+		var pc = state.peers[uuid];
+		if (!pc || !description || !description.sdp || String(description.type || "").toLowerCase() !== "answer") {
+			return;
+		}
+
+		try {
+			if (pc.signalingState && pc.signalingState !== "have-local-offer") {
+				return;
+			}
+
+			Promise.resolve(pc.setRemoteDescription(description))
+				.then(function () {
+					var mediaState = getMediaState(uuid);
+					while (mediaState.iceCandidatesQueued.length) {
+						applyNativeCandidate(uuid, mediaState.iceCandidatesQueued.shift());
+					}
+					state.log("MCast native WebRTC answer applied", { uuid: safeId(uuid) });
+				})
+				.catch(function (error) {
+					state.log("MCast native WebRTC answer failed", { uuid: safeId(uuid), name: error && error.name });
+				});
+		} catch (error) {
+			state.log("MCast native WebRTC answer failed", { uuid: safeId(uuid), name: error && error.name });
+		}
+	}
+
+	function applyNativeCandidate(uuid, candidate) {
+		var pc = state.peers[uuid];
+		if (!pc || !candidate) {
+			return;
+		}
+
+		try {
+			if (typeof candidate === "string") {
+				candidate = { candidate: candidate };
+			}
+			if (candidate.candidate && /^a=candidate:/i.test(candidate.candidate)) {
+				candidate = Object.assign({}, candidate, { candidate: candidate.candidate.substring(2) });
+			}
+			var IceCandidateCtor = window.RTCIceCandidate || (typeof RTCIceCandidate === "function" ? RTCIceCandidate : null);
+			var ice = IceCandidateCtor ? new IceCandidateCtor(candidate) : candidate;
+			if (!pc.remoteDescription) {
+				getMediaState(uuid).iceCandidatesQueued.push(ice);
+				return;
+			}
+			Promise.resolve(pc.addIceCandidate(ice)).catch(function (error) {
+				state.log("MCast native WebRTC candidate failed", { uuid: safeId(uuid), name: error && error.name });
+			});
+		} catch (error) {
+			state.log("MCast native WebRTC candidate failed", { uuid: safeId(uuid), name: error && error.name });
+		}
 	}
 
 	function renegotiate(uuid, pc) {
