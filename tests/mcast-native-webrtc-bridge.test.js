@@ -60,11 +60,17 @@ function createChannel() {
 function createPeer(channel) {
 	const listeners = {};
 	const senders = [];
+	const transceivers = [];
+	function directionFor(kind) {
+		const transceiver = transceivers.find((candidate) => candidate.track && candidate.track.kind === kind);
+		return transceiver ? transceiver.direction : "sendonly";
+	}
 	return {
 		signalingState: "stable",
 		localDescription: null,
 		remoteDescription: null,
 		sendChannel: channel,
+		transceivers,
 		addEventListener(type, handler) {
 			listeners[type] = listeners[type] || [];
 			listeners[type].push(handler);
@@ -72,9 +78,15 @@ function createPeer(channel) {
 		getSenders() {
 			return senders.slice();
 		},
-		addTransceiver(track) {
+		addTransceiver(track, options) {
+			const transceiver = {
+				sender: { track },
+				track,
+				direction: options && options.direction || "sendrecv"
+			};
 			senders.push({ track });
-			return { sender: { track }, direction: "sendonly" };
+			transceivers.push(transceiver);
+			return transceiver;
 		},
 		addTrack(track) {
 			senders.push({ track });
@@ -89,9 +101,9 @@ function createPeer(channel) {
 					"s=-",
 					"t=0 0",
 					"m=video 9 UDP/TLS/RTP/SAVPF 96",
-					"a=sendonly",
+					`a=${directionFor("video")}`,
 					"m=audio 9 UDP/TLS/RTP/SAVPF 111",
-					"a=sendonly",
+					`a=${directionFor("audio")}`,
 					""
 				].join("\r\n")
 			});
@@ -125,6 +137,7 @@ async function runBridge() {
 	const channel = createChannel();
 	const peer = createPeer(channel);
 	const stream = createStream();
+	const remoteStreams = [];
 	const context = {
 		URLSearchParams,
 		JSON,
@@ -187,22 +200,45 @@ async function runBridge() {
 		getLocalStream() {
 			return stream;
 		},
-		log() {}
+		log() {},
+		onRemoteStream(uuid, remoteStream, kind) {
+			remoteStreams.push({ uuid, remoteStream, kind });
+		}
 	});
 	assert.strictEqual(started, true, "bridge should start for native guest route");
 
 	await flushPromises();
-	return { channel, session: context.window.session };
+	const returnTrack = createTrack("video", "return-video-track");
+	const returnStream = {
+		id: "native-return-stream",
+		getTracks() {
+			return [returnTrack];
+		},
+		getVideoTracks() {
+			return [returnTrack];
+		},
+		getAudioTracks() {
+			return [];
+		}
+	};
+	peer.emit("track", { track: returnTrack, streams: [returnStream] });
+	return { channel, peer, remoteStreams, session: context.window.session };
 }
 
 runBridge()
-	.then(({ session }) => {
+	.then(({ peer, remoteStreams, session }) => {
 		const sent = session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
 		assert.ok(sent, "bridge should send a media SDP offer through VDO signaling");
 		const offer = sent.payload;
 		assert.strictEqual(offer.streamID, "guest123", "offer should preserve stream id");
+		assert.strictEqual(offer.mcastGuestKey, "guest123", "fallback offer should preserve guest key");
+		assert.ok(peer.transceivers.every((transceiver) => transceiver.direction === "sendrecv"), "bridge should request bidirectional media transceivers");
 		assert.match(offer.description.sdp, /\r\nm=video\s/i, "offer should include video media section");
 		assert.match(offer.description.sdp, /\r\nm=audio\s/i, "offer should include audio media section");
+		assert.match(offer.description.sdp, /\r\na=sendrecv\r\n/i, "offer should allow native return media");
+		assert.strictEqual(remoteStreams.length, 1, "bridge should surface native return streams");
+		assert.strictEqual(remoteStreams[0].uuid, "peerA", "return stream should preserve peer uuid");
+		assert.strictEqual(remoteStreams[0].kind, "video", "return stream should report track kind");
 		console.log("MCast native WebRTC bridge regression passed");
 	})
 	.catch((error) => {

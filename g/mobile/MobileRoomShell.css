@@ -501,6 +501,19 @@
 	letter-spacing: .08em;
 }
 
+.mcast-mobile.has-native-return .mcast-mobile__stage-mark {
+	display: none;
+}
+
+.mcast-mobile__stage-card video[data-mcast-native-return="true"] {
+	width: 100% !important;
+	height: 100% !important;
+	max-width: none !important;
+	max-height: none !important;
+	object-fit: contain !important;
+	background: #050914;
+}
+
 .mcast-mobile__side {
 	min-height: 0;
 	display: grid;

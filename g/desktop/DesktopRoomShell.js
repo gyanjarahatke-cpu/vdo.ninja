@@ -160,6 +160,7 @@
 				return getLocalStream(getLocalVideoElement());
 			},
 			log: logDesktop,
+			onRemoteStream: bindNativeReturnStream,
 			onState: function (stage) {
 				if (stage === "media-attached") {
 					setStatus("Native studio connection is starting...");
@@ -510,6 +511,9 @@
 		});
 		var existing = {};
 		Array.prototype.forEach.call(room.querySelectorAll("[data-source-id]"), function (tile) {
+			if (tile.dataset.mcastNativeReturn === "true") {
+				return;
+			}
 			existing[tile.dataset.sourceId] = tile;
 		});
 		sources.forEach(function (source, index) {
@@ -527,7 +531,8 @@
 		Object.keys(existing).forEach(function (id) {
 			existing[id].remove();
 		});
-		var tileCount = Math.max(1, sources.length + 1);
+		var nativeReturnTileCount = room.querySelectorAll("[data-mcast-native-return='true']").length;
+		var tileCount = Math.max(1, sources.length + nativeReturnTileCount + 1);
 		grid.dataset.tileCount = String(tileCount);
 		setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
 		if (state.joined && sources.length > 0 && state.step !== "live") {
@@ -551,6 +556,47 @@
 		tile.appendChild(label);
 		byId("mcastDesktopRemoteTiles").appendChild(tile);
 		return tile;
+	}
+
+	function bindNativeReturnStream(uuid, stream) {
+		var room = byId("mcastDesktopRemoteTiles");
+		var grid = byId("mcastDesktopRoomGrid");
+		if (!room || !grid || !stream) {
+			return false;
+		}
+
+		var id = "mcast-native-return-" + String(uuid || "peer").replace(/[^a-z0-9_-]+/gi, "-");
+		var tile = room.querySelector("[data-source-id='" + cssEscape(id) + "']") || createRemoteTile(id);
+		tile.classList.add("mcast-desktop__tile--host-return");
+		tile.dataset.mcastNativeReturn = "true";
+		var video = tile.querySelector("video");
+		if (!video) {
+			video = document.createElement("video");
+			tile.insertBefore(video, tile.firstChild);
+		}
+		video.autoplay = true;
+		video.playsInline = true;
+		video.muted = false;
+		video.controls = false;
+		video.dataset.mcastDesktopClone = "true";
+		video.dataset.mcastNativeReturn = "true";
+		video.dataset.label = "Host feed";
+		if (video.srcObject !== stream) {
+			video.srcObject = stream;
+		}
+		video.play().catch(function () {});
+		var label = tile.querySelector(".mcast-desktop__tile-label");
+		if (label) {
+			label.textContent = "Host feed";
+		}
+		var tileCount = Math.max(1, room.querySelectorAll("[data-source-id]").length + 1);
+		grid.dataset.tileCount = String(tileCount);
+		setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
+		if (state.joined && state.step !== "live") {
+			setStep("live");
+			setRoomState("Live room", "Host feed is connected.");
+		}
+		return true;
 	}
 
 	function getRemoteLabel(source) {

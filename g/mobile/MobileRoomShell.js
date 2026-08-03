@@ -16,7 +16,8 @@
 		correctionTimer: 0,
 		lastCorrectionLog: "",
 		toastTimer: 0,
-		autoJoinStarted: false
+		autoJoinStarted: false,
+		nativeReturnConnected: false
 	};
 
 	var icons = {
@@ -163,6 +164,7 @@
 				return getLocalStream(getLocalVideoElement());
 			},
 			log: logMobile,
+			onRemoteStream: bindNativeReturnStream,
 			onState: function (stage) {
 				if (stage === "media-attached") {
 					showStatus("Native studio connection is starting.");
@@ -299,6 +301,44 @@
 			audioTracks: stream && stream.getAudioTracks ? stream.getAudioTracks().length : 0
 		});
 		return !!video.srcObject;
+	}
+
+	function bindNativeReturnStream(uuid, stream) {
+		var stage = root && root.querySelector(".mcast-mobile__stage-card");
+		if (!stage || !stream) {
+			return false;
+		}
+
+		var video = byId("mcastMobileNativeReturnVideo");
+		if (!video) {
+			video = document.createElement("video");
+			video.id = "mcastMobileNativeReturnVideo";
+			video.autoplay = true;
+			video.playsInline = true;
+			video.controls = false;
+			video.dataset.mcastNativeReturn = "true";
+			video.dataset.label = "Host feed";
+		}
+		video.setAttribute("playsinline", "");
+		video.setAttribute("autoplay", "");
+		video.muted = false;
+		if (video.srcObject !== stream) {
+			video.srcObject = stream;
+		}
+		if (video.parentNode !== stage) {
+			stage.insertBefore(video, stage.firstChild);
+		}
+		root.classList.add("has-native-return");
+		video.play().catch(function () {});
+		if (!state.nativeReturnConnected) {
+			state.nativeReturnConnected = true;
+			showToast("Host feed connected.");
+		}
+		logMobile("native return stream bound", {
+			uuid: String(uuid || ""),
+			tracks: summarizeStream(stream)
+		});
+		return true;
 	}
 
 	function ensureNameLabelOnTop(surface) {

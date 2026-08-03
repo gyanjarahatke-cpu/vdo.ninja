@@ -6,7 +6,9 @@
 		timer: 0,
 		attempts: 0,
 		attached: {},
-		dataChannels: {}
+		dataChannels: {},
+		returnStreams: {},
+		returnElements: {}
 	};
 
 	var mcastNativeRenegotiationAttempts = 0;
@@ -37,6 +39,7 @@
 		state.getLocalStream = typeof options.getLocalStream === "function" ? options.getLocalStream : null;
 		state.log = typeof options.log === "function" ? options.log : log;
 		state.onState = typeof options.onState === "function" ? options.onState : null;
+		state.onRemoteStream = typeof options.onRemoteStream === "function" ? options.onRemoteStream : null;
 		state.maxAttempts = Math.max(10, parseInt(options.maxAttempts, 10) || 80);
 		state.intervalMs = Math.max(250, parseInt(options.intervalMs, 10) || 500);
 		state.log("MCast native WebRTC media bridge armed", {});
@@ -80,6 +83,7 @@
 
 		for (var index = 0; index < peers.length; index += 1) {
 			hookPeerDataChannels(peers[index].uuid, peers[index].pc);
+			hookPeerReturnTracks(peers[index].uuid, peers[index].pc);
 			attachPeerIfReady(peers[index].uuid, peers[index].pc, stream);
 		}
 	}
@@ -153,7 +157,7 @@
 
 			try {
 				if (typeof pc.addTransceiver === "function") {
-					pc.addTransceiver(track, { direction: "sendonly", streams: [stream] });
+					pc.addTransceiver(track, { direction: "sendrecv", streams: [stream] });
 				} else if (typeof pc.addTrack === "function") {
 					pc.addTrack(track, stream);
 				} else {
@@ -195,6 +199,123 @@
 
 		renegotiate(uuid, pc);
 		stop();
+	}
+
+	function hookPeerReturnTracks(uuid, pc) {
+		if (!uuid || !pc || pc.mcastNativeReturnHooked) {
+			return;
+		}
+
+		pc.mcastNativeReturnHooked = true;
+		var handler = function (event) {
+			handleReturnTrack(uuid, event);
+		};
+		if (typeof pc.addEventListener === "function") {
+			pc.addEventListener("track", handler);
+			return;
+		}
+
+		var previous = pc.ontrack;
+		pc.ontrack = function (event) {
+			if (typeof previous === "function") {
+				previous.call(pc, event);
+			}
+			handler(event);
+		};
+	}
+
+	function handleReturnTrack(uuid, event) {
+		var track = event && event.track;
+		if (!isLiveTrack(track)) {
+			return;
+		}
+
+		var stream = resolveReturnStream(uuid, event, track);
+		if (!stream) {
+			return;
+		}
+
+		state.returnStreams[uuid] = stream;
+		state.log("MCast native WebRTC return stream received", {
+			uuid: safeId(uuid),
+			kind: track.kind || "",
+			tracks: summarizeStream(stream)
+		});
+		if (state.onRemoteStream) {
+			state.onRemoteStream(uuid, stream, track.kind || "");
+		} else {
+			ensureDefaultReturnPlayback(uuid, stream);
+		}
+		if (state.onState) {
+			state.onState("return-stream", uuid, [track.kind || "media"]);
+		}
+	}
+
+	function resolveReturnStream(uuid, event, track) {
+		var streams = event && event.streams;
+		if (streams && streams.length && streams[0]) {
+			return streams[0];
+		}
+
+		var stream = state.returnStreams[uuid];
+		var MediaStreamCtor = window.MediaStream || (typeof MediaStream === "function" ? MediaStream : null);
+		if (!stream && MediaStreamCtor) {
+			stream = new MediaStreamCtor();
+			state.returnStreams[uuid] = stream;
+		}
+		if (!stream || typeof stream.addTrack !== "function") {
+			return null;
+		}
+
+		var exists = false;
+		var tracks = typeof stream.getTracks === "function" ? stream.getTracks() : [];
+		for (var index = 0; index < tracks.length; index += 1) {
+			if (tracks[index] === track || (tracks[index] && track && tracks[index].id === track.id)) {
+				exists = true;
+				break;
+			}
+		}
+		if (!exists) {
+			stream.addTrack(track);
+		}
+		return stream;
+	}
+
+	function ensureDefaultReturnPlayback(uuid, stream) {
+		if (!stream || typeof document === "undefined" || !document.body) {
+			return;
+		}
+
+		var videoTracks = stream.getVideoTracks ? stream.getVideoTracks().filter(isLiveTrack) : [];
+		var tagName = videoTracks.length ? "video" : "audio";
+		var element = state.returnElements[uuid];
+		if (!element || element.localName !== tagName) {
+			if (element && element.parentNode) {
+				element.parentNode.removeChild(element);
+			}
+			element = document.createElement(tagName);
+			element.autoplay = true;
+			element.playsInline = true;
+			element.controls = false;
+			element.dataset.mcastNativeReturn = "true";
+			element.dataset.label = "Host feed";
+			element.style.position = "fixed";
+			element.style.left = "-10000px";
+			element.style.top = "0";
+			element.style.width = "1px";
+			element.style.height = "1px";
+			element.style.opacity = "0";
+			document.body.appendChild(element);
+			state.returnElements[uuid] = element;
+		}
+
+		element.muted = false;
+		if (element.srcObject !== stream) {
+			element.srcObject = stream;
+		}
+		if (typeof element.play === "function") {
+			element.play().catch(function () {});
+		}
 	}
 
 	function hookPeerDataChannels(uuid, pc) {
@@ -399,7 +520,7 @@
 			description: description
 		});
 
-		if (description.audio || description.video) {
+		if ((description.audio || description.video) && description.returnMedia) {
 			return;
 		}
 
@@ -451,6 +572,7 @@
 				var payload = {
 					UUID: uuid,
 					streamID: window.session.streamID || "",
+					mcastGuestKey: readRouteParameter("mcastguestkey") || window.session.streamID || "",
 					session: pc.session || pc.mcastSession || "",
 					description: {
 						type: description.type,
@@ -485,6 +607,15 @@
 
 	function isUsableStream(stream) {
 		return !!(stream && typeof stream.getTracks === "function" && stream.getTracks().some(isLiveTrack));
+	}
+
+	function readRouteParameter(name) {
+		try {
+			var params = new URLSearchParams(window.location.search || "");
+			return params.get(name) || "";
+		} catch (error) {
+			return "";
+		}
 	}
 
 	function summarizeStream(stream) {
@@ -529,7 +660,8 @@
 			mediaSections: sdp ? Math.max(0, sdp.split(/\r?\nm=/).length - 1) : 0,
 			audio: /\r?\nm=audio\s/i.test(sdp),
 			video: /\r?\nm=video\s/i.test(sdp),
-			application: /\r?\nm=application\s/i.test(sdp)
+			application: /\r?\nm=application\s/i.test(sdp),
+			returnMedia: /\r?\na=(sendrecv|recvonly)\r?\n/i.test(sdp)
 		};
 	}
 
