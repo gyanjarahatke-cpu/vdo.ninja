@@ -337,8 +337,8 @@ const routeIndex = guestEngine.indexOf("./mcast-route.js");
 const engineSessionIndex = guestEngine.indexOf("./lib.js");
 const engineStartupIndex = guestEngine.indexOf("./main.js");
 assert.ok(
-	sharedUiIndex >= 0 && adapterIndex > sharedUiIndex && engineSessionIndex > sharedUiIndex && routeIndex > engineSessionIndex && engineStartupIndex > routeIndex,
-	"startup order must be branded UI, engine session, validated route, then engine startup"
+	sharedUiIndex >= 0 && adapterIndex > sharedUiIndex && routeIndex > adapterIndex && engineSessionIndex > routeIndex && engineStartupIndex > engineSessionIndex,
+	"startup order must validate the resolved route before the engine parses its query"
 );
 assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || []).length, 1);
 assert.ok(guestEngine.includes('./main.js?ver=1066'), "the private engine must request the current managed runtime revision");
