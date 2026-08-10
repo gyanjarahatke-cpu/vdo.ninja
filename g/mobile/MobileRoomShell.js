@@ -17,7 +17,6 @@
 		meterSource: null,
 		correctionTimer: 0,
 		lastCorrectionLog: "",
-		toastTimer: 0,
 		screenTrack: null,
 		nativeReturnConnected: false,
 		boundLocalVideo: null,
@@ -116,7 +115,6 @@
 		setText("mcastMobileSetupTitle", state.experience.setupTitle);
 		setText("mcastMobileSetupMessage", state.experience.setupMessage);
 		setText("mcastMobilePreviewLabel", state.experience.previewLabel);
-		setText("mcastMobileConnectedTitle", state.experience.connectedTitle);
 		setText("mcastMobileInfo", state.experience.kind === "guest"
 			? "You will enter as a guest. The host can bring you on screen at any time."
 			: state.experience.connectedMessage);
@@ -234,7 +232,7 @@
 			return;
 		}
 		setButtonBusy("mcastMobileAllowButton", true, state.capabilities.camera ? "Opening devices..." : "Opening microphone...");
-		setStatus("mcastMobilePermissionStatus", state.capabilities.camera
+		setStatus(state.capabilities.camera
 			? "Requesting camera and microphone access..."
 			: "Requesting microphone access...");
 		try {
@@ -246,13 +244,13 @@
 			state.previewStarted = true;
 			root.classList.add("has-preview");
 			setStep("setup");
-			setStatus("mcastMobilePermissionStatus", "");
+			setStatus("");
 			bindLocalVideo("permission-granted");
 			syncDevices();
 			startAudioMeter();
 			showStatus(state.experience.kind === "remote_audio" ? "Microphone is ready." : "Camera and microphone are ready.");
 		} catch (error) {
-			setStatus("mcastMobilePermissionStatus", getPermissionMessage(error), true);
+			setStatus(getPermissionMessage(error), true);
 			logMobile("getUserMedia error", { name: error && error.name });
 			showMediaRecovery(error, startPreview);
 			throw error;
@@ -270,7 +268,7 @@
 		}
 		state.joining = true;
 		setButtonBusy("mcastMobileEnterButton", true, "Connecting...");
-		setStatus("mcastMobileSetupStatus", "Preparing the secure connection...");
+		setStatus("Preparing the secure connection...");
 		try {
 			if (!state.previewStarted) {
 				await startPreview();
@@ -288,10 +286,10 @@
 			bindLocalVideo("joined");
 			updateControls();
 			startNativeWebRtcBridge();
-			showToast(state.experience.connectedMessage);
+			showToast(connectedNotice());
 			logMobile("joined backstage", summarizeStream(getLocalStream(getLocalVideoElement())));
 		} catch (error) {
-			setStatus("mcastMobileSetupStatus", getPermissionMessage(error), true);
+			setStatus(getPermissionMessage(error), true);
 			logMobile("join error", { name: error && error.name });
 			showMediaRecovery(error, joinRoom);
 		} finally {
@@ -307,7 +305,7 @@
 		state.joining = true;
 		setButtonBusy("mcastMobileAllowButton", true, "Choose a screen...");
 		setButtonBusy("mcastMobileEnterButton", true, "Choose a screen...");
-		setStatus("mcastMobilePermissionStatus", "Choose a screen, window, or browser tab in the system prompt.");
+		setStatus("Choose a screen, window, or browser tab in the system prompt.");
 		applyScreenAudioPreference();
 		try {
 			if (typeof window.publishScreen !== "function") {
@@ -326,9 +324,9 @@
 			bindLocalVideo("screen-connected");
 			watchScreenShareEnded();
 			setStep("backstage");
-			showToast(state.experience.connectedMessage);
+			showToast(connectedNotice());
 		} catch (error) {
-			setStatus("mcastMobilePermissionStatus", getPermissionMessage(error), true);
+			setStatus(getPermissionMessage(error), true);
 			showMediaRecovery(error, joinScreenShare);
 		} finally {
 			state.joining = false;
@@ -876,7 +874,7 @@
 			state.screenTrack = null;
 			root.classList.remove("has-preview", "is-joined");
 			setStep("permission");
-			setStatus("mcastMobilePermissionStatus", "Screen sharing stopped. Choose what to share to reconnect.");
+			setStatus("Screen sharing stopped. Choose what to share to reconnect.");
 			showToast("Screen sharing stopped.");
 		});
 	}
@@ -979,7 +977,7 @@
 		if (applyGuestName()) {
 			return true;
 		}
-		setStatus("mcastMobileSetupStatus", "Enter your display name before entering the studio.", true);
+		setStatus("Enter your display name before entering the studio.", true);
 		var input = byId("mcastMobileGuestName");
 		if (input) {
 			input.focus();
@@ -1051,33 +1049,28 @@
 	}
 
 	function showStatus(message, isError) {
-		if (state.step === "setup") {
-			setStatus("mcastMobileSetupStatus", message || "", isError);
-			return;
-		}
-		showToast(message || "");
+		showToast(message || "", isError);
 	}
 
-	function setStatus(id, message, isError) {
-		var status = byId(id);
-		if (!status) {
-			return;
-		}
-		status.textContent = message || "";
-		status.classList.toggle("is-error", !!isError);
+	function setStatus(message, isError) {
+		showToast(message || "", isError);
 	}
 
-	function showToast(message) {
-		var toast = byId("mcastMobileBackstageStatus");
-		if (!toast || !message) {
+	function showToast(message, isError) {
+		if (!window.MCastGuestUi) {
 			return;
 		}
-		toast.textContent = message;
-		toast.classList.add("is-visible");
-		window.clearTimeout(state.toastTimer);
-		state.toastTimer = window.setTimeout(function () {
-			toast.classList.remove("is-visible");
-		}, 3200);
+		if (!message && typeof window.MCastGuestUi.clearNotices === "function") {
+			window.MCastGuestUi.clearNotices();
+			return;
+		}
+		if (typeof window.MCastGuestUi.showToast === "function") {
+			window.MCastGuestUi.showToast(message, { kind: isError ? "error" : "info", duration: 10000 });
+		}
+	}
+
+	function connectedNotice() {
+		return state.experience.connectedTitle + ". " + state.experience.connectedMessage;
 	}
 
 	function disableLegacyAuxiliaryModules() {

@@ -6,12 +6,15 @@
 		root: null,
 		toastStack: null,
 		dialog: null,
+		dialogHost: null,
 		dialogResolve: null,
 		dialogFocus: null,
 		configuredRoute: null,
 		observer: null,
 		routeTitleObserver: null,
 		toastSequence: 0,
+		activeToast: null,
+		toastTimer: 0,
 		engineMessageSignatures: Object.create(null),
 		legacyBrowserDialogsInstalled: false
 	};
@@ -31,7 +34,7 @@
 			previewHint: "Start preview or enter the studio to allow camera and microphone access.",
 			primaryAction: "Enter studio",
 			connectedTitle: "You’re backstage",
-			connectedMessage: "Your camera and microphone are connected. The host can bring you on screen when ready.",
+			connectedMessage: "The host can bring you on screen when ready.",
 			badge: "Backstage"
 		},
 		remote_camera: {
@@ -92,6 +95,7 @@
 		configureRoute: configureRoute,
 		getExperience: getExperience,
 		showToast: showToast,
+		clearNotices: clearNotices,
 		showInfo: showInfo,
 		showMediaError: showMediaError,
 		showConnectionError: showConnectionError,
@@ -175,7 +179,7 @@
 			root.innerHTML = [
 				'<div class="mcast-guest-ui__toasts" data-mcast-toasts role="status" aria-live="polite" aria-atomic="false"></div>',
 				'<div class="mcast-guest-ui__backdrop" data-mcast-dialog-backdrop hidden>',
-					'<section class="mcast-guest-ui__dialog" data-mcast-dialog role="dialog" aria-modal="true" aria-labelledby="mcastGuestDialogTitle" aria-describedby="mcastGuestDialogMessage">',
+					'<section class="mcast-guest-ui__dialog" data-mcast-dialog role="dialog" aria-modal="false" aria-labelledby="mcastGuestDialogTitle" aria-describedby="mcastGuestDialogMessage">',
 						'<button class="mcast-guest-ui__close" data-mcast-dialog-close type="button" aria-label="Close">×</button>',
 						'<div class="mcast-guest-ui__brand"><span class="mcast-guest-ui__brand-mark" aria-hidden="true"></span><span>MCast Studio</span></div>',
 						'<div class="mcast-guest-ui__signal" data-mcast-dialog-signal aria-hidden="true">!</div>',
@@ -213,7 +217,18 @@
 	function showToast(message, options) {
 		options = options || {};
 		var root = ensureRoot();
-		if (!root || !state.toastStack) {
+		if (!root) {
+			return 0;
+		}
+		var plainMessage = safePlainText(message, "");
+		if (!plainMessage) {
+			clearNotices();
+			return 0;
+		}
+		clearNotices();
+		var noticeRail = resolveNoticeRail();
+		var host = noticeRail || state.toastStack;
+		if (!host) {
 			return 0;
 		}
 		var toast = document.createElement("div");
@@ -221,15 +236,100 @@
 		toast.className = "mcast-guest-ui__toast mcast-guest-ui__toast--" + normalizeKind(options.kind || "info");
 		toast.dataset.toastId = String(id);
 		toast.innerHTML = '<span class="mcast-guest-ui__toast-dot" aria-hidden="true"></span><span></span>';
-		toast.lastElementChild.textContent = safePlainText(message, "MCast Studio is ready.");
-		state.toastStack.appendChild(toast);
-		window.requestAnimationFrame(function () { toast.classList.add("is-visible"); });
-		var duration = clampNumber(options.duration, 1800, 12000, options.kind === "error" ? 7000 : 4200);
-		window.setTimeout(function () {
-			toast.classList.remove("is-visible");
-			window.setTimeout(function () { if (toast.parentNode) { toast.remove(); } }, 220);
+		toast.lastElementChild.textContent = plainMessage;
+		toast.lastElementChild.title = plainMessage;
+		host.appendChild(toast);
+		host.classList.add("has-notice");
+		state.activeToast = toast;
+		window.requestAnimationFrame(function () {
+			if (toast.isConnected) { toast.classList.add("is-visible"); }
+		});
+		var duration = clampNumber(options.duration, 1800, 30000, 10000);
+		state.toastTimer = window.setTimeout(function () {
+			dismissNotice(toast, host);
 		}, duration);
 		return id;
+	}
+
+	function clearNotices() {
+		window.clearTimeout(state.toastTimer);
+		state.toastTimer = 0;
+		if (state.activeToast) {
+			var host = state.activeToast.parentNode;
+			state.activeToast.remove();
+			if (host) { host.classList.remove("has-notice"); }
+		}
+		state.activeToast = null;
+	}
+
+	function dismissNotice(toast, host) {
+		if (!toast) {
+			return;
+		}
+		toast.classList.remove("is-visible");
+		window.setTimeout(function () {
+			if (toast.parentNode) { toast.remove(); }
+			if (host && !host.querySelector(".mcast-guest-ui__toast")) { host.classList.remove("has-notice"); }
+			if (state.activeToast === toast) {
+				state.activeToast = null;
+				state.toastTimer = 0;
+			}
+		}, 220);
+	}
+
+	function resolveNoticeRail() {
+		var desktop = document.getElementById("mcastDesktopGuest");
+		if (isRenderedShell(desktop) && desktop.dataset.step !== "loading") {
+			return desktop.querySelector("[data-mcast-notice-rail]");
+		}
+		var mobile = document.getElementById("mcastMobileGuest");
+		if (isRenderedShell(mobile)) {
+			var step = String(mobile.dataset.step || "").replace(/[^a-z-]/g, "");
+			var activePanel = step ? mobile.querySelector('[data-mobile-step="' + step + '"]') : null;
+			return activePanel && activePanel.querySelector("[data-mcast-notice-rail]");
+		}
+		return null;
+	}
+
+	function resolveFooterRail() {
+		var desktop = document.getElementById("mcastDesktopGuest");
+		if (isRenderedShell(desktop)) {
+			return desktop.querySelector("[data-mcast-footer-rail]");
+		}
+		var mobile = document.getElementById("mcastMobileGuest");
+		if (isRenderedShell(mobile)) {
+			var step = String(mobile.dataset.step || "").replace(/[^a-z-]/g, "");
+			var activePanel = step ? mobile.querySelector('[data-mobile-step="' + step + '"]') : null;
+			return activePanel && activePanel.querySelector("[data-mcast-footer-rail]");
+		}
+		return null;
+	}
+
+	function mountDialogHost(root) {
+		var routeError = document.documentElement.classList.contains("mcast-route-error");
+		var host = routeError ? root : resolveFooterRail();
+		if (!host) {
+			host = root;
+		}
+		if (state.dialogHost && state.dialogHost !== host && state.dialogHost.hasAttribute("data-mcast-footer-rail")) {
+			state.dialogHost.hidden = true;
+		}
+		if (state.dialog.parentNode !== host) {
+			host.appendChild(state.dialog);
+		}
+		if (host.hasAttribute("data-mcast-footer-rail")) {
+			host.hidden = false;
+		}
+		state.dialogHost = host;
+		return routeError;
+	}
+
+	function isRenderedShell(shell) {
+		if (!shell || typeof window.getComputedStyle !== "function") {
+			return false;
+		}
+		var style = window.getComputedStyle(shell);
+		return style.display !== "none" && style.visibility !== "hidden";
 	}
 
 	function showInfo(title, message, options) {
@@ -328,10 +428,12 @@
 			state.dialogResolve(false);
 			state.dialogResolve = null;
 		}
+		var routeError = mountDialogHost(root);
 
 		var panel = state.dialog.querySelector("[data-mcast-dialog]");
 		var kind = normalizeKind(options.kind || "info");
 		panel.dataset.kind = kind;
+		panel.setAttribute("aria-modal", routeError ? "true" : "false");
 		setText(panel, "[data-mcast-dialog-eyebrow]", options.eyebrow || "MCast Studio");
 		setText(panel, "[data-mcast-dialog-title]", options.title || "MCast Studio");
 		setText(panel, "[data-mcast-dialog-message]", options.message || "Please check your setup and try again.");
@@ -396,6 +498,9 @@
 			return;
 		}
 		state.dialog.hidden = true;
+		if (state.dialogHost && state.dialogHost.hasAttribute("data-mcast-footer-rail")) {
+			state.dialogHost.hidden = true;
+		}
 		document.documentElement.classList.remove("mcast-guest-dialog-open");
 		var resolve = state.dialogResolve;
 		state.dialogResolve = null;
@@ -423,7 +528,7 @@
 		state.engineMessageSignatures[signature] = now;
 
 		if (/waiting|not yet activated|backstage|host.*add/.test(normalized)) {
-			showToast("You’re backstage. The host will bring you on screen when ready.", { kind: "info", duration: options.timeout || 5200 });
+			showToast("You’re backstage. The host will bring you on screen when ready.", { kind: "info", duration: options.timeout || 10000 });
 			return true;
 		}
 		if (/permission|notallowed|denied|camera|microphone|device|timed out|not found|notreadable|trackstart/.test(normalized)) {

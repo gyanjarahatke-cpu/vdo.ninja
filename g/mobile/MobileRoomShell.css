@@ -62,6 +62,7 @@
 .mcast-mobile__light-top,
 .mcast-mobile__dark-top {
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
@@ -74,6 +75,7 @@
 	align-items: center;
 	gap: 10px;
 	min-width: 0;
+	flex: 0 1 auto;
 	color: var(--mobile-ink);
 	font-size: 16px;
 	font-weight: 850;
@@ -96,6 +98,52 @@
 	height: 42px;
 	border-radius: 12px;
 	background: center / contain no-repeat url("../../media/mcast-apple-touch-icon.png"), linear-gradient(135deg, #ff3d6e, #ffb000);
+}
+
+.mcast-mobile__notice-rail {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.mcast-mobile__notice-rail:empty {
+	display: none;
+}
+
+.mcast-mobile__notice-rail.has-notice {
+	order: 2;
+	width: 100%;
+	flex: 1 0 100%;
+	justify-content: stretch;
+}
+
+.mcast-mobile__notice-rail .mcast-guest-ui__toast {
+	max-width: 100%;
+	padding: 9px 11px;
+	font-size: 12px;
+}
+
+.mcast-mobile__notice-rail .mcast-guest-ui__toast > span:last-child {
+	display: -webkit-box;
+	overflow: hidden;
+	white-space: normal;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.mcast-mobile__footer-rail {
+	width: 100%;
+	max-height: 62dvh;
+	flex: 0 0 auto;
+	background: #fff;
+	overflow: auto;
+	z-index: 18;
+}
+
+.mcast-mobile__footer-rail--backstage {
+	background: var(--mobile-dark);
 }
 
 .mcast-mobile__ghost-button {
@@ -201,14 +249,6 @@
 
 .mcast-mobile__primary:disabled {
 	opacity: .68;
-}
-
-.mcast-mobile__status {
-	min-height: 22px;
-	color: #b91c1c;
-	font-size: 13px;
-	line-height: 1.35;
-	font-weight: 750;
 }
 
 .mcast-mobile__setup {
@@ -566,8 +606,7 @@
 	flex: 1;
 	min-height: 0;
 	display: grid;
-	grid-template-rows: minmax(220px, .88fr) minmax(260px, 1fr);
-	padding-bottom: calc(92px + env(safe-area-inset-bottom));
+	grid-template-rows: minmax(220px, 1fr) auto;
 }
 
 .mcast-mobile__stage-area {
@@ -612,9 +651,9 @@
 
 .mcast-mobile__side {
 	min-height: 0;
-	display: grid;
-	align-content: start;
-	gap: 14px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
 	padding: 14px;
 }
 
@@ -641,58 +680,14 @@
 	white-space: nowrap;
 }
 
-.mcast-mobile__backstage-card {
-	display: grid;
-	grid-template-columns: 82px 1fr;
-	max-width: 100%;
-	border-radius: 6px;
-	overflow: hidden;
-	background: #131a28;
-	box-shadow: 0 14px 34px rgba(0, 0, 0, .18);
-}
-
-.mcast-mobile__door-icon {
-	display: grid;
-	place-items: center;
-	background: rgba(255, 255, 255, .18);
-}
-
-.mcast-mobile__door-icon::before {
-	content: "";
-	width: 28px;
-	height: 34px;
-	border: 4px solid #fff;
-	border-right-width: 8px;
-	border-radius: 3px;
-	opacity: .95;
-}
-
-.mcast-mobile__backstage-card > div:last-child {
-	padding: 17px 15px;
-}
-
-.mcast-mobile__backstage-card strong {
-	display: block;
-	font-size: 18px;
-	line-height: 1.15;
-}
-
-.mcast-mobile__backstage-card p {
-	margin: 7px 0 0;
-	color: rgba(255, 255, 255, .88);
-	font-size: 16px;
-	line-height: 1.42;
-}
-
 .mcast-mobile__bottom-bar {
-	position: fixed;
-	left: 0;
-	right: 0;
-	bottom: 0;
+	position: relative;
 	z-index: 20;
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
 	gap: 8px;
+	width: 100%;
+	flex: 0 0 auto;
 	padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
 	background: #0b101a;
 	border-top: 1px solid rgba(255, 255, 255, .08);
@@ -734,31 +729,9 @@
 	color: #fff;
 }
 
-.mcast-mobile__toast {
-	position: fixed;
-	left: 14px;
-	right: 14px;
-	bottom: calc(90px + env(safe-area-inset-bottom));
-	z-index: 21;
-	display: none;
-	padding: 10px 12px;
-	border-radius: 12px;
-	background: rgba(15, 23, 42, .90);
-	color: #fff;
-	text-align: center;
-	font-size: 13px;
-	font-weight: 750;
-}
-
-.mcast-mobile__toast.is-visible {
-	display: block;
-}
-
 @media (orientation: landscape) and (max-width: 920px), (orientation: landscape) and (hover: none) {
 	.mcast-mobile__dark-top {
-		position: fixed;
-		left: 0;
-		top: 0;
+		position: relative;
 		z-index: 14;
 		width: 100%;
 		min-height: calc(48px + env(safe-area-inset-top));
@@ -771,8 +744,6 @@
 		grid-template-columns: minmax(0, 1fr) minmax(210px, 280px);
 		grid-template-rows: 1fr;
 		gap: 0;
-		padding-top: calc(48px + env(safe-area-inset-top));
-		padding-bottom: calc(76px + env(safe-area-inset-bottom));
 	}
 
 	.mcast-mobile__stage-area {
@@ -789,20 +760,10 @@
 	.mcast-mobile__self-preview {
 		width: 100%;
 		max-width: 180px;
-		justify-self: center;
-	}
-
-	.mcast-mobile__backstage-card {
-		grid-template-columns: 1fr;
-	}
-
-	.mcast-mobile__door-icon {
-		display: none;
+		margin: 0 auto;
 	}
 
 	.mcast-mobile__bottom-bar {
-		left: 0;
-		right: 0;
 		grid-template-columns: repeat(4, minmax(72px, 104px));
 		justify-content: center;
 		padding-top: 8px;

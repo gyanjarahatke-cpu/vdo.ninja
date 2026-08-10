@@ -138,7 +138,7 @@
 	position: absolute;
 	inset: 0;
 	display: grid;
-	grid-template-rows: 72px 1fr;
+	grid-template-rows: 72px minmax(0, 1fr) auto;
 	min-height: 0;
 	opacity: 0;
 	visibility: hidden;
@@ -177,6 +177,7 @@
 	align-items: center;
 	gap: 12px;
 	min-width: 0;
+	flex: 0 0 auto;
 }
 
 .mcast-desktop__logo {
@@ -232,7 +233,35 @@
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	margin-left: auto;
+	flex: 0 0 auto;
+}
+
+.mcast-desktop__notice-rail {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+	max-width: 720px;
+	margin: 0 auto;
+	flex: 1 1 auto;
+}
+
+.mcast-desktop__notice-rail:empty {
+	display: none;
+}
+
+.mcast-desktop__footer-rail {
+	grid-row: 3;
+	min-width: 0;
+	max-height: 54dvh;
+	background: #f6f8fb;
+	overflow: auto;
+	z-index: 9;
+}
+
+.mcast-desktop[data-step="backstage"] .mcast-desktop__footer-rail,
+.mcast-desktop[data-step="live"] .mcast-desktop__footer-rail {
+	background: var(--desktop-stage);
 }
 
 .mcast-desktop__top-settings {
@@ -627,19 +656,6 @@
 	accent-color: var(--desktop-accent);
 }
 
-.mcast-desktop__status {
-	min-height: 24px;
-	color: var(--desktop-muted);
-	font-size: 13px;
-	line-height: 1.35;
-	font-weight: 750;
-	text-align: center;
-}
-
-.mcast-desktop__status.is-error {
-	color: var(--desktop-danger);
-}
-
 .mcast-desktop__room {
 	display: none;
 	grid-template-columns: minmax(0, 1fr);
@@ -703,41 +719,6 @@
 
 .mcast-desktop__remote-tiles {
 	display: contents;
-}
-
-.mcast-desktop__backstage-card {
-	position: absolute;
-	left: 24px;
-	top: 24px;
-	display: inline-flex;
-	align-items: center;
-	gap: 10px;
-	max-width: 260px;
-	padding: 10px 12px;
-	border: 1px solid rgba(147, 197, 253, .20);
-	border-radius: 999px;
-	background: rgba(15, 23, 42, .72);
-	box-shadow: 0 14px 34px rgba(0, 0, 0, .20);
-	backdrop-filter: blur(16px);
-}
-
-.mcast-desktop[data-step="live"] .mcast-desktop__backstage-card {
-	display: none;
-}
-
-.mcast-desktop__backstage-card strong,
-.mcast-desktop__backstage-card span {
-	display: block;
-}
-
-.mcast-desktop__backstage-card strong {
-	font-size: 13px;
-}
-
-.mcast-desktop__backstage-card span {
-	color: rgba(255, 255, 255, .66);
-	font-size: 12px;
-	font-weight: 750;
 }
 
 .mcast-desktop__bottom-bar {
@@ -889,7 +870,7 @@
 
 @media (max-height: 820px) and (min-width: 921px) {
 	.mcast-desktop__shell {
-		grid-template-rows: 64px 1fr;
+		grid-template-rows: 64px minmax(0, 1fr) auto;
 	}
 
 	.mcast-desktop__topbar {
@@ -974,10 +955,6 @@
 	.mcast-desktop__select,
 	.mcast-desktop__button {
 		min-height: 42px;
-	}
-
-	.mcast-desktop__status {
-		min-height: 18px;
 	}
 
 	.mcast-desktop__settings-popover,

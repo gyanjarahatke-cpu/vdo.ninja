@@ -1,7 +1,7 @@
 <html lang='en' class="mcast-native-guest mcast-owned-guest-ui">
 	<head>
 		<base href="../">
-		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastGuestUi.js?v=6"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastGuestUi.js?v=9"></script>
 		<style>
 			html {
 				background-color: #0000;
@@ -28,9 +28,9 @@
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4044" />
-		<link rel="stylesheet" href="./g/shared/McastGuestUi.css?v=1" />
-		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=12" />
-		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=8" />
+		<link rel="stylesheet" href="./g/shared/McastGuestUi.css?v=3" />
+		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=14" />
+		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=12" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
@@ -100,6 +100,7 @@
 							<div id="mcastDesktopInviteMeta" class="mcast-desktop__brand-meta">Guest invite</div>
 						</div>
 					</div>
+					<div id="mcastDesktopNoticeRail" class="mcast-desktop__notice-rail" data-mcast-notice-rail role="status" aria-live="polite" aria-atomic="true"></div>
 					<div class="mcast-desktop__top-actions">
 						<button id="mcastDesktopSettingsButton" type="button" class="mcast-desktop__top-settings" aria-label="Settings">Settings</button>
 						<span id="mcastDesktopQuality" class="mcast-desktop__quality">Secure link</span>
@@ -145,8 +146,6 @@
 							</label>
 							<button id="mcastDesktopJoinButton" type="button" class="mcast-desktop__button mcast-desktop__button--primary">Enter studio</button>
 						</div>
-
-						<div id="mcastDesktopStatus" class="mcast-desktop__status" role="status" aria-live="polite">Loading your secure invite...</div>
 					</div>
 				</section>
 
@@ -157,10 +156,6 @@
 								<div class="mcast-desktop__tile-label">You</div>
 							</article>
 							<div id="mcastDesktopRemoteTiles" class="mcast-desktop__remote-tiles" aria-live="polite"></div>
-						</div>
-						<div id="mcastDesktopBackstageMessage" class="mcast-desktop__backstage-card">
-							<strong id="mcastDesktopRoomState">Backstage</strong>
-							<span id="mcastDesktopRoomHint">Ready for host</span>
 						</div>
 					</div>
 
@@ -203,6 +198,7 @@
 						<label><input id="mcastDesktopScreenAudio" type="checkbox" checked /> Share system audio when available</label>
 					</div>
 				</div>
+				<footer id="mcastDesktopFooterRail" class="mcast-desktop__footer-rail" data-mcast-footer-rail hidden></footer>
 			</section>
 		</main>
 		<main id="mcastMobileGuest" class="mcast-mobile" aria-label="MCast mobile guest studio">
@@ -212,6 +208,7 @@
 						<div class="mcast-mobile__logo" aria-hidden="true"></div>
 						<span>MCast Studio v9</span>
 					</div>
+					<div class="mcast-mobile__notice-rail" data-mcast-notice-rail role="status" aria-live="polite" aria-atomic="true"></div>
 				</header>
 				<div class="mcast-mobile__center">
 					<div class="mcast-mobile__enter-illustration" aria-hidden="true">
@@ -221,6 +218,7 @@
 					<h1 id="mcastMobileEnteringTitle">Preparing your guest studio</h1>
 					<p id="mcastMobileEnteringStatus">Connecting camera and microphone...</p>
 				</div>
+				<footer class="mcast-mobile__footer-rail" data-mcast-footer-rail hidden></footer>
 			</section>
 
 			<section class="mcast-mobile__light-screen" data-mobile-step="permission">
@@ -229,14 +227,15 @@
 						<div class="mcast-mobile__logo" aria-hidden="true"></div>
 						<span>MCast Studio v9</span>
 					</div>
+					<div class="mcast-mobile__notice-rail" data-mcast-notice-rail role="status" aria-live="polite" aria-atomic="true"></div>
 				</header>
 				<div class="mcast-mobile__permission-center">
 					<h1 id="mcastMobilePermissionTitle">Set up your camera and microphone</h1>
 					<p id="mcastMobilePermissionMessage">You’ll be able to check your video and audio in the next step.</p>
 					<span id="mcastMobilePermissionLead">To enter the studio</span>
 					<button id="mcastMobileAllowButton" type="button" class="mcast-mobile__primary">Allow mic/cam access</button>
-					<div id="mcastMobilePermissionStatus" class="mcast-mobile__status" role="status" aria-live="polite"></div>
 				</div>
+				<footer class="mcast-mobile__footer-rail" data-mcast-footer-rail hidden></footer>
 			</section>
 
 			<section class="mcast-mobile__setup" data-mobile-step="setup">
@@ -245,6 +244,7 @@
 						<div class="mcast-mobile__logo" aria-hidden="true"></div>
 						<span>MCast Studio v9</span>
 					</div>
+					<div class="mcast-mobile__notice-rail" data-mcast-notice-rail role="status" aria-live="polite" aria-atomic="true"></div>
 				</header>
 				<div class="mcast-mobile__setup-scroll">
 					<div class="mcast-mobile__setup-copy">
@@ -292,8 +292,8 @@
 					</label>
 					<button id="mcastMobileEnterButton" type="button" class="mcast-mobile__primary">Enter studio</button>
 					<p id="mcastMobileTerms" class="mcast-mobile__terms">By continuing, you agree to MCast Studio’s Terms and Privacy Policy.</p>
-					<div id="mcastMobileSetupStatus" class="mcast-mobile__status" role="status" aria-live="polite"></div>
 				</div>
+				<footer class="mcast-mobile__footer-rail" data-mcast-footer-rail hidden></footer>
 			</section>
 
 			<section class="MobileRoomShell MobileBackstage mcast-mobile__backstage" data-mobile-step="backstage">
@@ -305,6 +305,7 @@
 							<small id="mcastMobileRoomName">Guest room</small>
 						</div>
 					</div>
+					<div class="mcast-mobile__notice-rail" data-mcast-notice-rail role="status" aria-live="polite" aria-atomic="true"></div>
 				</header>
 				<div class="MobileStageLayout mcast-mobile__backstage-layout">
 					<div class="mcast-mobile__stage-area">
@@ -316,22 +317,15 @@
 						<div id="mcastMobileSelfPreview" class="mcast-mobile__self-preview">
 							<span id="mcastMobileSelfName">You</span>
 						</div>
-						<div class="mcast-mobile__backstage-card">
-							<div class="mcast-mobile__door-icon" aria-hidden="true"></div>
-							<div>
-								<strong id="mcastMobileConnectedTitle">You’re backstage</strong>
-								<p>Only the host can see you. The host may add you to the stage at any time. Be ready!</p>
-							</div>
-						</div>
 					</aside>
 				</div>
+				<footer class="mcast-mobile__footer-rail mcast-mobile__footer-rail--backstage" data-mcast-footer-rail hidden></footer>
 				<nav class="MobileBottomControls mcast-mobile__bottom-bar" aria-label="Mobile guest controls">
 					<button id="mcastMobileRoomMicButton" type="button" class="mcast-mobile__control">Mic</button>
 					<button id="mcastMobileRoomCameraButton" type="button" class="mcast-mobile__control">Camera</button>
 					<button id="mcastMobileMoreButton" type="button" class="mcast-mobile__control">More</button>
 					<button id="mcastMobileLeaveButton" type="button" class="mcast-mobile__control mcast-mobile__control--leave">Leave</button>
 				</nav>
-				<div id="mcastMobileBackstageStatus" class="mcast-mobile__toast" role="status" aria-live="polite"></div>
 			</section>
 		</main>
 		<input id="zoomSlider" type="range" style="display: none;" />
@@ -3679,8 +3673,8 @@
 		<script type="text/javascript" crossorigin="anonymous" src="./mcast-route.js?v=34"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1066"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastNativeWebRtcBridge.js?v=14"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=20"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=18"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=21"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=19"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		
 	</body>

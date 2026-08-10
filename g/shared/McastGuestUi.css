@@ -28,7 +28,8 @@ html.mcast-owned-guest-ui [data-mcast-upstream-ui="quarantined"] {
 	pointer-events: none !important;
 }
 
-.mcast-guest-ui {
+.mcast-guest-ui,
+[data-mcast-footer-rail] {
 	--mcast-ui-blue: #1769e0;
 	--mcast-ui-blue-dark: #0f55bf;
 	--mcast-ui-ink: #101828;
@@ -37,6 +38,9 @@ html.mcast-owned-guest-ui [data-mcast-upstream-ui="quarantined"] {
 	--mcast-ui-danger: #d92d20;
 	--mcast-ui-warning: #b54708;
 	--mcast-ui-success: #15803d;
+}
+
+.mcast-guest-ui {
 	position: fixed;
 	inset: 0;
 	z-index: 2147483646;
@@ -53,11 +57,11 @@ html.mcast-owned-guest-ui [data-mcast-upstream-ui="quarantined"] {
 
 .mcast-guest-ui__toasts {
 	position: absolute;
-	right: max(20px, env(safe-area-inset-right));
-	bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
+	left: 50%;
+	top: max(12px, env(safe-area-inset-top));
 	display: grid;
-	gap: 10px;
-	width: min(390px, calc(100vw - 40px));
+	width: min(720px, calc(100vw - 40px));
+	transform: translateX(-50%);
 }
 
 .mcast-guest-ui__toast {
@@ -65,20 +69,21 @@ html.mcast-owned-guest-ui [data-mcast-upstream-ui="quarantined"] {
 	grid-template-columns: auto minmax(0, 1fr);
 	align-items: center;
 	gap: 11px;
-	padding: 13px 15px;
+	min-width: 0;
+	padding: 10px 13px;
 	border: 1px solid rgba(255, 255, 255, .14);
-	border-radius: 14px;
+	border-radius: 12px;
 	background: rgba(15, 23, 42, .94);
-	box-shadow: 0 18px 52px rgba(15, 23, 42, .26);
+	box-shadow: 0 10px 28px rgba(15, 23, 42, .18);
 	backdrop-filter: blur(18px);
 	color: #fff;
 	font-size: 13px;
-	line-height: 1.45;
+	line-height: 1.3;
 	font-weight: 720;
 	opacity: 0;
-	transform: translateY(10px) scale(.98);
+	transform: translateY(-6px);
 	transition: opacity .18s ease, transform .18s ease;
-	pointer-events: auto;
+	pointer-events: none;
 }
 
 .mcast-guest-ui__toast.is-visible {
@@ -98,19 +103,39 @@ html.mcast-owned-guest-ui [data-mcast-upstream-ui="quarantined"] {
 .mcast-guest-ui__toast--warning .mcast-guest-ui__toast-dot { background: #fbbf24; box-shadow: 0 0 0 5px rgba(251, 191, 36, .13); }
 .mcast-guest-ui__toast--error .mcast-guest-ui__toast-dot { background: #fb7185; box-shadow: 0 0 0 5px rgba(251, 113, 133, .13); }
 
+[data-mcast-notice-rail] .mcast-guest-ui__toast {
+	width: 100%;
+	box-shadow: none;
+}
+
+[data-mcast-notice-rail] .mcast-guest-ui__toast > span:last-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .mcast-guest-ui__backdrop {
 	position: absolute;
 	inset: 0;
-	display: grid;
-	place-items: center;
-	padding: max(22px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
-	background: rgba(15, 23, 42, .48);
-	backdrop-filter: blur(14px);
-	pointer-events: auto;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 0 max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
+	background: transparent;
+	backdrop-filter: none;
+	pointer-events: none;
 }
 
 .mcast-guest-ui__backdrop[hidden] {
 	display: none;
+}
+
+[data-mcast-footer-rail] > .mcast-guest-ui__backdrop {
+	position: static;
+	inset: auto;
+	width: 100%;
+	padding: 0 max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
 }
 
 html.mcast-route-error #mcastDesktopGuest,
@@ -120,22 +145,89 @@ html.mcast-route-error #mcastMobileGuest {
 }
 
 html.mcast-route-error .mcast-guest-ui__backdrop {
+	display: grid;
+	place-items: center;
+	padding: max(22px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
 	background:
 		radial-gradient(circle at 18% 12%, rgba(23, 105, 224, .14), transparent 32%),
 		linear-gradient(180deg, #f8fafc, #eef2f7);
+	pointer-events: auto;
 }
 
 .mcast-guest-ui__dialog {
 	position: relative;
+	width: min(760px, 100%);
+	max-height: min(54dvh, 620px);
+	overflow: auto;
+	padding: 20px 22px calc(20px + env(safe-area-inset-bottom));
+	border: 1px solid rgba(226, 232, 240, .96);
+	border-bottom: 0;
+	border-radius: 22px 22px 0 0;
+	background: #fff;
+	box-shadow: 0 -18px 60px rgba(15, 23, 42, .18);
+	color: var(--mcast-ui-ink);
+	pointer-events: auto;
+}
+
+html.mcast-route-error .mcast-guest-ui__dialog {
 	width: min(510px, 100%);
 	max-height: min(760px, calc(100dvh - 44px));
-	overflow: auto;
 	padding: 28px;
-	border: 1px solid rgba(226, 232, 240, .96);
+	border-bottom: 1px solid rgba(226, 232, 240, .96);
 	border-radius: 24px;
-	background: #fff;
 	box-shadow: 0 34px 110px rgba(15, 23, 42, .28);
-	color: var(--mcast-ui-ink);
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__dialog {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr);
+	column-gap: 16px;
+	align-items: start;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__brand {
+	display: none;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__signal {
+	grid-column: 1;
+	grid-row: 1 / span 7;
+	width: 44px;
+	height: 44px;
+	margin: 0;
+	border-radius: 13px;
+	font-size: 20px;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__eyebrow,
+html:not(.mcast-route-error) .mcast-guest-ui__dialog h2,
+html:not(.mcast-route-error) .mcast-guest-ui__message,
+html:not(.mcast-route-error) .mcast-guest-ui__hint,
+html:not(.mcast-route-error) .mcast-guest-ui__input-wrap,
+html:not(.mcast-route-error) .mcast-guest-ui__actions {
+	grid-column: 2;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__dialog h2 {
+	font-size: 21px;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__message,
+html:not(.mcast-route-error) .mcast-guest-ui__hint {
+	margin-top: 7px;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	margin-top: 14px;
+}
+
+html:not(.mcast-route-error) .mcast-guest-ui__button {
+	min-height: 42px;
 }
 
 .mcast-guest-ui__close {
@@ -294,28 +386,61 @@ html.mcast-route-error .mcast-guest-ui__backdrop {
 	.mcast-guest-ui__toasts {
 		left: 14px;
 		right: 14px;
-		bottom: calc(14px + env(safe-area-inset-bottom));
+		top: calc(10px + env(safe-area-inset-top));
 		width: auto;
+		transform: none;
 	}
 
 	.mcast-guest-ui__backdrop {
 		align-items: end;
-		padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+		padding: 0;
+	}
+
+	[data-mcast-footer-rail] > .mcast-guest-ui__backdrop {
+		padding: 0;
 	}
 
 	.mcast-guest-ui__dialog {
 		width: 100%;
-		max-height: calc(100dvh - 28px - env(safe-area-inset-bottom));
-		padding: 22px;
-		border-radius: 22px;
+		max-height: min(62dvh, 560px);
+		padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+		border-radius: 18px 18px 0 0;
 	}
 
-	.mcast-guest-ui__signal {
-		margin-top: 22px;
+	html:not(.mcast-route-error) .mcast-guest-ui__dialog {
+		grid-template-columns: 36px minmax(0, 1fr);
+		column-gap: 12px;
+	}
+
+	html:not(.mcast-route-error) .mcast-guest-ui__signal {
+		width: 36px;
+		height: 36px;
+		border-radius: 11px;
+		font-size: 17px;
 	}
 
 	.mcast-guest-ui__actions {
 		grid-template-columns: 1fr;
+	}
+
+	html:not(.mcast-route-error) .mcast-guest-ui__actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	html.mcast-route-error .mcast-guest-ui__backdrop {
+		padding: 14px;
+	}
+
+	html.mcast-route-error .mcast-guest-ui__dialog {
+		max-height: calc(100dvh - 28px - env(safe-area-inset-bottom));
+		padding: 22px;
+		border: 1px solid rgba(226, 232, 240, .96);
+		border-radius: 22px;
+	}
+
+	html.mcast-route-error .mcast-guest-ui__signal {
+		margin-top: 22px;
 	}
 }
 

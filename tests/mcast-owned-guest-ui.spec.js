@@ -30,7 +30,7 @@ test.describe("desktop MCast UI ownership", () => {
 		await page.evaluate(() => {
 			window.warnUser("NotReadableError: camera device raw-internal-driver-detail");
 		});
-		const dialog = page.locator("#mcastGuestUiRoot [data-mcast-dialog-backdrop]");
+		const dialog = page.locator("#mcastDesktopFooterRail > [data-mcast-dialog-backdrop]");
 		await expect(dialog).toBeVisible();
 		await expect(dialog).toContainText("The camera could not start");
 		await expect(dialog).not.toContainText("raw-internal-driver-detail");

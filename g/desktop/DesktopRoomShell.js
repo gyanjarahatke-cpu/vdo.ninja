@@ -272,8 +272,7 @@
 			root.classList.add("has-preview", "is-joined");
 			setStep("backstage");
 			bindLocalVideo("joined");
-			setStatus(state.experience.connectedMessage);
-			setRoomState(state.experience.connectedTitle, state.experience.connectedMessage);
+			setStatus(connectedNotice());
 			syncRoomTiles();
 			updateDesktopControls();
 			startNativeWebRtcBridge();
@@ -313,8 +312,7 @@
 			bindLocalVideo("screen-connected");
 			watchScreenShareEnded();
 			setStep("backstage");
-			setStatus(state.experience.connectedMessage);
-			setRoomState(state.experience.connectedTitle, state.experience.connectedMessage);
+			setStatus(connectedNotice());
 			syncRoomTiles();
 			updateDesktopControls();
 		} catch (error) {
@@ -701,7 +699,7 @@
 		setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
 		if (state.joined && sources.length > 0 && state.step !== "live") {
 			setStep("live");
-			setRoomState("Live room", "Guests are connected on the studio stage.");
+			setStatus("Guests are connected on the studio stage.");
 		}
 	}
 
@@ -758,7 +756,7 @@
 		setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
 		if (state.joined && state.step !== "live") {
 			setStep("live");
-			setRoomState("Live room", "Host feed is connected.");
+			setStatus("Host feed connected.");
 		}
 		return true;
 	}
@@ -992,13 +990,11 @@
 				var presence = String(payload && (payload.presenceState || payload.participantState) || "").toLowerCase();
 				if (presence === "onscreen") {
 					setStep("live");
-					setRoomState("Live room", "You are on screen.");
 					setStatus("The host moved you on screen.");
 				} else if (presence === "removed") {
 					leaveRoom();
 				} else {
 					setStep("backstage");
-					setRoomState("Ready backstage", "Your camera and microphone are connected.");
 					setStatus("You are backstage.");
 				}
 				return true;
@@ -1019,21 +1015,27 @@
 	}
 
 	function setStatus(message, isError) {
-		var status = byId("mcastDesktopStatus");
-		if (status) {
-			status.textContent = message;
-			status.classList.toggle("is-error", !!isError);
-		}
+		message = String(message || "");
 		state.lastStatus = message;
 		var loading = byId("mcastDesktopLoadingStatus");
 		if (loading && state.step === "loading") {
 			loading.textContent = message;
+			return;
+		}
+		if (!window.MCastGuestUi) {
+			return;
+		}
+		if (!message && typeof window.MCastGuestUi.clearNotices === "function") {
+			window.MCastGuestUi.clearNotices();
+			return;
+		}
+		if (typeof window.MCastGuestUi.showToast === "function") {
+			window.MCastGuestUi.showToast(message, { kind: isError ? "error" : "info", duration: 10000 });
 		}
 	}
 
-	function setRoomState(title, hint) {
-		setText("mcastDesktopRoomState", title);
-		setText("mcastDesktopRoomHint", hint);
+	function connectedNotice() {
+		return state.experience.connectedTitle + ". " + state.experience.connectedMessage;
 	}
 
 	function setButtonBusy(id, busy, label) {

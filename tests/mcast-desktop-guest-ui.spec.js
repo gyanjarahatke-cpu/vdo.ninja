@@ -91,7 +91,28 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect(page.locator(".mcast-desktop__logo")).toBeVisible();
 	await expect(page.locator("#mcastDesktopLeaveButton svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopLocalTile .mcast-desktop__tile-label")).toHaveText("Desktop Guest");
-	await expect(page.locator("#mcastDesktopBackstageMessage")).toBeVisible();
+	await expect(page.locator("#mcastDesktopBackstageMessage")).toHaveCount(0);
+	const noticeRail = page.locator("#mcastDesktopNoticeRail");
+	const backstageNotice = noticeRail.locator(".mcast-guest-ui__toast");
+	await expect(backstageNotice).toBeVisible();
+	await expect(backstageNotice).toContainText("You’re backstage");
+	const noticePlacement = await noticeRail.evaluate((rail) => {
+		const topbar = rail.closest(".mcast-desktop__topbar").getBoundingClientRect();
+		const notice = rail.getBoundingClientRect();
+		const stage = document.querySelector(".mcast-desktop__room").getBoundingClientRect();
+		return {
+			noticeTop: notice.top,
+			noticeBottom: notice.bottom,
+			topbarTop: topbar.top,
+			topbarBottom: topbar.bottom,
+			stageTop: stage.top
+		};
+	});
+	expect(noticePlacement.noticeTop).toBeGreaterThanOrEqual(noticePlacement.topbarTop);
+	expect(noticePlacement.noticeBottom).toBeLessThanOrEqual(noticePlacement.topbarBottom);
+	expect(noticePlacement.stageTop).toBeGreaterThanOrEqual(noticePlacement.topbarBottom);
+	await page.waitForTimeout(10300);
+	await expect(backstageNotice).toHaveCount(0);
 	await page.evaluate(() => {
 		const localVideo = document.querySelector("#mcastDesktopLocalTile video");
 		const duplicate = document.createElement("video");
@@ -153,7 +174,7 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	expect(logoTransform).toBe("none");
 });
 
-test("desktop camera errors use the branded MCast recovery modal", async ({ page }) => {
+test("desktop camera errors use the branded MCast footer recovery tray", async ({ page }) => {
 	await installInvite(page, { code: "DSK00001" });
 	await page.goto(baseUrl + "?case=camera-error", { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
@@ -165,7 +186,7 @@ test("desktop camera errors use the branded MCast recovery modal", async ({ page
 		};
 	});
 	await page.locator("#mcastDesktopPreviewButton").click();
-	const recovery = page.locator("#mcastGuestUiRoot [data-mcast-dialog-backdrop]");
+	const recovery = page.locator("#mcastDesktopFooterRail > [data-mcast-dialog-backdrop]");
 	await expect(recovery).toBeVisible({ timeout: 6000 });
 	await expect(recovery.locator("[data-mcast-dialog-title]")).toHaveText("The camera and microphone could not start");
 	await expect(recovery).toContainText("Another app or browser tab may be using the device");
@@ -174,6 +195,34 @@ test("desktop camera errors use the branded MCast recovery modal", async ({ page
 	await expect(recovery).toContainText("Join without camera");
 	await expect(recovery).not.toContainText("Raw internal device busy detail");
 	await expect(page.locator(".alertModal:visible, .promptModal:visible, #popupSelector:visible")).toHaveCount(0);
+	const recoveryPlacement = await recovery.evaluate((backdrop) => {
+		const panel = backdrop.querySelector("[data-mcast-dialog]");
+		const backdropStyle = getComputedStyle(backdrop);
+		const panelStyle = getComputedStyle(panel);
+		const panelRect = panel.getBoundingClientRect();
+		const footerRect = backdrop.parentElement.getBoundingClientRect();
+		const contentRect = document.querySelector(".mcast-desktop__setup").getBoundingClientRect();
+		return {
+			backdropBackground: backdropStyle.backgroundColor,
+			backdropPointerEvents: backdropStyle.pointerEvents,
+			panelPointerEvents: panelStyle.pointerEvents,
+			contentBottom: Math.round(contentRect.bottom),
+			footerTop: Math.round(footerRect.top),
+			panelTop: Math.round(panelRect.top),
+			panelBottom: Math.round(panelRect.bottom),
+			viewportBottom: window.innerHeight,
+			ariaModal: panel.getAttribute("aria-modal")
+		};
+	});
+	expect(recoveryPlacement).toMatchObject({
+		backdropBackground: "rgba(0, 0, 0, 0)",
+		backdropPointerEvents: "none",
+		panelPointerEvents: "auto",
+		ariaModal: "false"
+	});
+	expect(recoveryPlacement.contentBottom).toBeLessThanOrEqual(recoveryPlacement.footerTop);
+	expect(recoveryPlacement.footerTop).toBe(recoveryPlacement.panelTop);
+	expect(Math.abs(recoveryPlacement.viewportBottom - recoveryPlacement.panelBottom)).toBeLessThanOrEqual(1);
 
 	await recovery.getByRole("button", { name: "Open settings" }).click();
 	await expect(page.locator("#mcastDesktopSettingsPanel")).toBeVisible();
