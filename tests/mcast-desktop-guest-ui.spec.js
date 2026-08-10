@@ -16,31 +16,37 @@ test.use({
 });
 
 async function expectVideoToCoverSurface(page, surfaceSelector) {
-	const geometry = await page.locator(surfaceSelector).evaluate((surface) => {
-		const video = surface.querySelector("video");
-		const surfaceRect = surface.getBoundingClientRect();
-		const videoRect = video && video.getBoundingClientRect();
-		const surfaceStyle = getComputedStyle(surface);
-		const videoStyle = video && getComputedStyle(video);
-		const borderLeft = parseFloat(surfaceStyle.borderLeftWidth) || 0;
-		const borderTop = parseFloat(surfaceStyle.borderTopWidth) || 0;
-		const borderRight = parseFloat(surfaceStyle.borderRightWidth) || 0;
-		const borderBottom = parseFloat(surfaceStyle.borderBottomWidth) || 0;
-		let translateY = 0;
-		if (videoStyle && videoStyle.transform && videoStyle.transform !== "none") {
-			translateY = new DOMMatrixReadOnly(videoStyle.transform).m42;
-		}
-		return {
-			hasVideo: !!video,
-			position: videoStyle && videoStyle.position,
-			objectFit: videoStyle && videoStyle.objectFit,
-			leftDelta: videoRect ? Math.abs(videoRect.left - (surfaceRect.left + borderLeft)) : Infinity,
-			topDelta: videoRect ? Math.abs(videoRect.top - (surfaceRect.top + borderTop)) : Infinity,
-			rightDelta: videoRect ? Math.abs(videoRect.right - (surfaceRect.right - borderRight)) : Infinity,
-			bottomDelta: videoRect ? Math.abs(videoRect.bottom - (surfaceRect.bottom - borderBottom)) : Infinity,
-			translateY
-		};
-	});
+	let geometry;
+	await expect.poll(async () => {
+		geometry = await page.locator(surfaceSelector).evaluate((surface) => {
+			const video = surface.querySelector("video");
+			const surfaceRect = surface.getBoundingClientRect();
+			const videoRect = video && video.getBoundingClientRect();
+			const surfaceStyle = getComputedStyle(surface);
+			const videoStyle = video && getComputedStyle(video);
+			const borderLeft = parseFloat(surfaceStyle.borderLeftWidth) || 0;
+			const borderTop = parseFloat(surfaceStyle.borderTopWidth) || 0;
+			const borderRight = parseFloat(surfaceStyle.borderRightWidth) || 0;
+			const borderBottom = parseFloat(surfaceStyle.borderBottomWidth) || 0;
+			let translateY = 0;
+			if (videoStyle && videoStyle.transform && videoStyle.transform !== "none") {
+				translateY = new DOMMatrixReadOnly(videoStyle.transform).m42;
+			}
+			return {
+				hasVideo: !!video,
+				position: videoStyle && videoStyle.position,
+				objectFit: videoStyle && videoStyle.objectFit,
+				leftDelta: videoRect ? Math.abs(videoRect.left - (surfaceRect.left + borderLeft)) : Infinity,
+				topDelta: videoRect ? Math.abs(videoRect.top - (surfaceRect.top + borderTop)) : Infinity,
+				rightDelta: videoRect ? Math.abs(videoRect.right - (surfaceRect.right - borderRight)) : Infinity,
+				bottomDelta: videoRect ? Math.abs(videoRect.bottom - (surfaceRect.bottom - borderBottom)) : Infinity,
+				translateY
+			};
+		});
+		return geometry.hasVideo && geometry.position === "absolute" && geometry.objectFit === "cover" &&
+			geometry.leftDelta <= 1 && geometry.topDelta <= 1 && geometry.rightDelta <= 1 &&
+			geometry.bottomDelta <= 1 && Math.abs(geometry.translateY) < 0.01;
+	}, { timeout: 8000 }).toBe(true);
 	expect(geometry).toMatchObject({ hasVideo: true, position: "absolute", objectFit: "cover" });
 	expect(geometry.leftDelta).toBeLessThanOrEqual(1);
 	expect(geometry.topDelta).toBeLessThanOrEqual(1);

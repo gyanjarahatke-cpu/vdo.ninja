@@ -3,7 +3,7 @@
 
 	var root;
 	var state = {
-		step: "entering",
+		step: "permission",
 		previewStarted: false,
 		joining: false,
 		joined: false,
@@ -54,12 +54,7 @@
 		wireUi();
 		restoreGuestName();
 		fillRoomName();
-		setStep("entering");
-		window.setTimeout(function () {
-			if (state.step === "entering") {
-				setStep("permission");
-			}
-		}, 850);
+		setStep("permission");
 		state.devicePoll = window.setInterval(function () {
 			disableLegacyAuxiliaryModules();
 			removeLegacyBranding();
@@ -89,8 +84,6 @@
 			: {
 				kind: "guest",
 				capabilities: state.capabilities,
-				loadingTitle: "Preparing your guest studio",
-				loadingMessage: "Connecting camera and microphone...",
 				permissionTitle: "Set up your camera and microphone",
 				permissionMessage: "You’ll be able to check your video and audio in the next step.",
 				permissionAction: "Allow camera and microphone",
@@ -107,8 +100,6 @@
 		root.classList.toggle("is-screen-only", state.experience.kind === "remote_screen");
 		var settingsPanel = byId("mcastMobileSettingsPanel");
 		if (settingsPanel && settingsPanel.parentNode !== root) { root.appendChild(settingsPanel); }
-		setText("mcastMobileEnteringTitle", state.experience.loadingTitle);
-		setText("mcastMobileEnteringStatus", state.experience.loadingMessage);
 		setText("mcastMobilePermissionTitle", state.experience.permissionTitle);
 		setText("mcastMobilePermissionMessage", state.experience.permissionMessage);
 		setText("mcastMobilePermissionLead", "To continue");

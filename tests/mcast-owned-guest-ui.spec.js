@@ -189,6 +189,32 @@ test.describe("mobile remote-source UI", () => {
 		await expect(page.locator("#mcastMobileSetupCameraButton")).toBeHidden();
 		await page.locator("#mcastMobileAllowButton").click();
 		await expect(root).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+		for (const viewport of [
+			{ width: 320, height: 568 },
+			{ width: 390, height: 844 }
+		]) {
+			await page.setViewportSize(viewport);
+			const audioLayout = await page.locator(".mcast-mobile__setup-card").evaluate((card) => {
+				const preview = card.querySelector(".mcast-mobile__setup-preview");
+				const mic = card.querySelector(".mcast-mobile__mic-panel");
+				const cardRect = card.getBoundingClientRect();
+				const micRect = mic.getBoundingClientRect();
+				const scroller = document.querySelector(".mcast-mobile__setup-scroll");
+				return {
+					previewDisplay: getComputedStyle(preview).display,
+					cardHeight: cardRect.height,
+					micTopDelta: Math.abs(micRect.top - cardRect.top),
+					micBottomDelta: Math.abs(micRect.bottom - cardRect.bottom),
+					scrollHeight: scroller.scrollHeight,
+					clientHeight: scroller.clientHeight
+				};
+			});
+			expect(audioLayout.previewDisplay, JSON.stringify(viewport)).toBe("none");
+			expect(audioLayout.cardHeight, JSON.stringify(viewport)).toBeLessThanOrEqual(175);
+			expect(audioLayout.micTopDelta, JSON.stringify(viewport)).toBeLessThanOrEqual(1);
+			expect(audioLayout.micBottomDelta, JSON.stringify(viewport)).toBeLessThanOrEqual(1);
+			expect(audioLayout.scrollHeight, JSON.stringify(viewport)).toBeLessThanOrEqual(audioLayout.clientHeight + 1);
+		}
 		await page.locator("#mcastMobileSetupSettingsButton").click();
 		await expect(page.locator("#mcastMobileSettingsPanel")).toBeVisible();
 		await expect(page.locator("#mcastMobileMicField")).toBeVisible();
