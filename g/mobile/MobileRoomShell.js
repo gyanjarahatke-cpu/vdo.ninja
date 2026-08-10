@@ -7,6 +7,8 @@
 		previewStarted: false,
 		joining: false,
 		joined: false,
+		experience: null,
+		capabilities: { camera: true, microphone: true, screen: false, displayName: true },
 		devicePoll: 0,
 		videoPoll: 0,
 		meterFrame: 0,
@@ -16,8 +18,11 @@
 		correctionTimer: 0,
 		lastCorrectionLog: "",
 		toastTimer: 0,
-		autoJoinStarted: false,
-		nativeReturnConnected: false
+		screenTrack: null,
+		nativeReturnConnected: false,
+		boundLocalVideo: null,
+		boundLocalStream: null,
+		boundLocalSurface: null
 	};
 
 	var icons = {
@@ -42,6 +47,7 @@
 		document.body.classList.add("mcast-mobile-guest-active");
 		document.documentElement.classList.add("mcast-mobile-guest-active");
 		clearForcedBodyRotation();
+		configureExperience();
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
 		decorateButtons();
@@ -55,7 +61,6 @@
 				setStep("permission");
 			}
 		}, 850);
-		scheduleAutoJoin();
 		state.devicePoll = window.setInterval(function () {
 			disableLegacyAuxiliaryModules();
 			removeLegacyBranding();
@@ -75,7 +80,65 @@
 		window.addEventListener("offline", function () {
 			showStatus("You appear to be offline. Check your connection and try again.", true);
 		});
+		window.addEventListener("mcast:open-settings", openSettings);
 		logMobile("mobile app initialized", getViewportDebug());
+	}
+
+	function configureExperience() {
+		state.experience = window.MCastGuestUi && typeof window.MCastGuestUi.getExperience === "function"
+			? window.MCastGuestUi.getExperience()
+			: {
+				kind: "guest",
+				capabilities: state.capabilities,
+				loadingTitle: "Preparing your guest studio",
+				loadingMessage: "Connecting camera and microphone...",
+				permissionTitle: "Set up your camera and microphone",
+				permissionMessage: "You’ll be able to check your video and audio in the next step.",
+				permissionAction: "Allow camera and microphone",
+				setupTitle: "Let’s set up your studio",
+				setupMessage: "Entering the studio will not automatically start the broadcast.",
+				previewLabel: "Camera preview",
+				primaryAction: "Enter studio",
+				connectedTitle: "You’re backstage",
+				connectedMessage: "The host can bring you on screen when ready."
+			};
+		state.capabilities = state.experience.capabilities || state.capabilities;
+		root.dataset.experience = state.experience.kind;
+		root.classList.toggle("is-audio-only", state.experience.kind === "remote_audio");
+		root.classList.toggle("is-screen-only", state.experience.kind === "remote_screen");
+		var settingsPanel = byId("mcastMobileSettingsPanel");
+		if (settingsPanel && settingsPanel.parentNode !== root) { root.appendChild(settingsPanel); }
+		setText("mcastMobileEnteringTitle", state.experience.loadingTitle);
+		setText("mcastMobileEnteringStatus", state.experience.loadingMessage);
+		setText("mcastMobilePermissionTitle", state.experience.permissionTitle);
+		setText("mcastMobilePermissionMessage", state.experience.permissionMessage);
+		setText("mcastMobilePermissionLead", "To continue");
+		setText("mcastMobileSetupTitle", state.experience.setupTitle);
+		setText("mcastMobileSetupMessage", state.experience.setupMessage);
+		setText("mcastMobilePreviewLabel", state.experience.previewLabel);
+		setText("mcastMobileConnectedTitle", state.experience.connectedTitle);
+		setText("mcastMobileInfo", state.experience.kind === "guest"
+			? "You will enter as a guest. The host can bring you on screen at any time."
+			: state.experience.connectedMessage);
+		setButtonText("mcastMobileAllowButton", state.experience.permissionAction);
+		setButtonText("mcastMobileEnterButton", state.experience.primaryAction);
+		setHidden("mcastMobileGuestNameField", !state.capabilities.displayName);
+		setHidden("mcastMobileCameraField", !state.capabilities.camera);
+		setHidden("mcastMobileMicField", !state.capabilities.microphone);
+		setHidden("mcastMobileSpeakerField", state.experience.kind !== "guest");
+		setHidden("mcastMobileAudioOptions", !state.capabilities.microphone);
+		setHidden("mcastMobileScreenOptions", !state.capabilities.screen);
+		setHidden("mcastMobileMicPanel", !state.capabilities.microphone);
+		setHidden("mcastMobileSetupMicButton", !state.capabilities.microphone);
+		setHidden("mcastMobileSetupCameraButton", !state.capabilities.camera);
+		setHidden("mcastMobileRoomMicButton", !state.capabilities.microphone);
+		setHidden("mcastMobileRoomCameraButton", !state.capabilities.camera);
+		setHidden("mcastMobileTerms", state.experience.kind !== "guest");
+		if (!state.capabilities.displayName) {
+			var input = byId("mcastMobileGuestName");
+			if (input && !input.value) { input.value = routeSourceLabel(); }
+		}
+		initializeProcessingOptions();
 	}
 
 	function clearForcedBodyRotation() {
@@ -98,7 +161,11 @@
 
 	function wireUi() {
 		on("mcastMobileAllowButton", "click", function () {
-			startPreview().catch(function () {});
+			if (state.capabilities.screen) {
+				joinRoom();
+			} else {
+				startPreview().catch(function () {});
+			}
 		});
 		on("mcastMobileEnterButton", "click", joinRoom);
 		on("mcastMobileGuestName", "input", applyGuestName);
@@ -108,6 +175,7 @@
 		on("mcastMobileRoomCameraButton", "click", toggleCamera);
 		on("mcastMobileSetupSettingsButton", "click", toggleSettings);
 		on("mcastMobileMoreButton", "click", toggleSettings);
+		on("mcastMobileSettingsClose", "click", closeSettings);
 		on("mcastMobileLeaveButton", "click", leaveRoom);
 		on("mcastMobileCameraSelect", "change", function (event) {
 			applyCameraSelection(event.target.value);
@@ -115,34 +183,11 @@
 		on("mcastMobileMicSelect", "change", function (event) {
 			selectNativeMic(event.target.value);
 		});
-	}
-
-	function scheduleAutoJoin() {
-		if (!shouldAutoJoin()) {
-			return;
-		}
-		window.setTimeout(function () {
-			if (state.autoJoinStarted || state.joined) {
-				return;
-			}
-			state.autoJoinStarted = true;
-			logMobile("MCast requested automatic guest entry", {});
-			joinRoom();
-		}, 1000);
-	}
-
-	function shouldAutoJoin() {
-		if (window.MCastRoute && window.MCastRoute.autoStartRequested === true) {
-			return true;
-		}
-		if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has("mcastrequestedautostart")) {
-			return true;
-		}
-		try {
-			return new URLSearchParams(window.location.search).has("mcastrequestedautostart");
-		} catch (error) {
-			return false;
-		}
+		on("mcastMobileSpeakerSelect", "change", function (event) { selectNativeSpeaker(event.target.value); });
+		on("mcastMobileEchoCancel", "change", applyAudioProcessing);
+		on("mcastMobileNoiseSuppress", "change", applyAudioProcessing);
+		on("mcastMobileAutoGain", "change", applyAudioProcessing);
+		on("mcastMobileScreenAudio", "change", applyScreenAudioPreference);
 	}
 
 	function on(id, type, handler) {
@@ -180,19 +225,24 @@
 	}
 
 	async function startPreview() {
+		if (state.capabilities.screen) {
+			return joinScreenShare();
+		}
 		if (state.previewStarted) {
 			setStep("setup");
 			bindLocalVideo("preview-existing");
 			return;
 		}
-		setButtonBusy("mcastMobileAllowButton", true, "Opening camera...");
-		setStatus("mcastMobilePermissionStatus", "Requesting camera and microphone access...");
+		setButtonBusy("mcastMobileAllowButton", true, state.capabilities.camera ? "Opening devices..." : "Opening microphone...");
+		setStatus("mcastMobilePermissionStatus", state.capabilities.camera
+			? "Requesting camera and microphone access..."
+			: "Requesting microphone access...");
 		try {
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
 			}
 			await window.previewWebcam(false);
-			await waitForPreview(9000);
+			await waitForLocalMedia(9000);
 			state.previewStarted = true;
 			root.classList.add("has-preview");
 			setStep("setup");
@@ -200,28 +250,32 @@
 			bindLocalVideo("permission-granted");
 			syncDevices();
 			startAudioMeter();
-			showStatus("Camera and microphone are ready.");
+			showStatus(state.experience.kind === "remote_audio" ? "Microphone is ready." : "Camera and microphone are ready.");
 		} catch (error) {
 			setStatus("mcastMobilePermissionStatus", getPermissionMessage(error), true);
-			logMobile("getUserMedia error", { name: error && error.name, message: error && error.message });
+			logMobile("getUserMedia error", { name: error && error.name });
+			showMediaRecovery(error, startPreview);
 			throw error;
 		} finally {
-			setButtonBusy("mcastMobileAllowButton", false, "Allow mic/cam access");
+			setButtonBusy("mcastMobileAllowButton", false, state.experience.permissionAction);
 		}
 	}
 
 	async function joinRoom() {
-		if (state.joining || !validateName()) {
+		if (state.capabilities.screen) {
+			return joinScreenShare();
+		}
+		if (state.joining || (state.capabilities.displayName && !validateName())) {
 			return;
 		}
 		state.joining = true;
-		setButtonBusy("mcastMobileEnterButton", true, "Entering...");
-		setStatus("mcastMobileSetupStatus", "Preparing your backstage connection...");
+		setButtonBusy("mcastMobileEnterButton", true, "Connecting...");
+		setStatus("mcastMobileSetupStatus", "Preparing the secure connection...");
 		try {
 			if (!state.previewStarted) {
 				await startPreview();
 			}
-			applyGuestName();
+			if (state.capabilities.displayName) { applyGuestName(); }
 			bindLocalVideo("pre-publish");
 			if (typeof window.publishWebcam !== "function") {
 				await waitForFunction("publishWebcam", 4500);
@@ -234,14 +288,52 @@
 			bindLocalVideo("joined");
 			updateControls();
 			startNativeWebRtcBridge();
-			showToast("You are backstage. The host can add you to the stream.");
+			showToast(state.experience.connectedMessage);
 			logMobile("joined backstage", summarizeStream(getLocalStream(getLocalVideoElement())));
 		} catch (error) {
 			setStatus("mcastMobileSetupStatus", getPermissionMessage(error), true);
-			logMobile("join error", { name: error && error.name, message: error && error.message });
+			logMobile("join error", { name: error && error.name });
+			showMediaRecovery(error, joinRoom);
 		} finally {
 			state.joining = false;
-			setButtonBusy("mcastMobileEnterButton", false, "Enter studio");
+			setButtonBusy("mcastMobileEnterButton", false, state.experience.primaryAction);
+		}
+	}
+
+	async function joinScreenShare() {
+		if (state.joining || state.joined) {
+			return;
+		}
+		state.joining = true;
+		setButtonBusy("mcastMobileAllowButton", true, "Choose a screen...");
+		setButtonBusy("mcastMobileEnterButton", true, "Choose a screen...");
+		setStatus("mcastMobilePermissionStatus", "Choose a screen, window, or browser tab in the system prompt.");
+		applyScreenAudioPreference();
+		try {
+			if (typeof window.publishScreen !== "function") {
+				await waitForFunction("publishScreen", 6000);
+			}
+			await window.publishScreen();
+			if (!getScreenStream()) {
+				var selectionError = new Error("Screen selection was not completed");
+				selectionError.name = "NotAllowedError";
+				throw selectionError;
+			}
+			await waitForScreenStream(4000);
+			state.previewStarted = true;
+			state.joined = true;
+			root.classList.add("has-preview", "is-joined");
+			bindLocalVideo("screen-connected");
+			watchScreenShareEnded();
+			setStep("backstage");
+			showToast(state.experience.connectedMessage);
+		} catch (error) {
+			setStatus("mcastMobilePermissionStatus", getPermissionMessage(error), true);
+			showMediaRecovery(error, joinScreenShare);
+		} finally {
+			state.joining = false;
+			setButtonBusy("mcastMobileAllowButton", false, state.experience.permissionAction);
+			setButtonBusy("mcastMobileEnterButton", false, state.experience.primaryAction);
 		}
 	}
 
@@ -250,23 +342,41 @@
 		if (!surface) {
 			return false;
 		}
-		var video = getLocalVideoElement();
-		var stream = getLocalStream(video);
-		if (!video && stream) {
+		var video = state.capabilities.screen ? getScreenVideoElement() : getLocalVideoElement();
+		var stream = state.capabilities.screen ? getScreenStream() : getLocalStream(video);
+		var hasVideo = !!(stream && stream.getVideoTracks && stream.getVideoTracks().some(isLiveTrack));
+		if (!video && stream && hasVideo) {
 			video = document.createElement("video");
-			video.id = "mcastMobileLocalVideo";
+			video.id = state.capabilities.screen ? "mcastMobileScreenVideo" : "mcastMobileLocalVideo";
 			video.autoplay = true;
 			video.playsInline = true;
 			video.muted = true;
 			video.srcObject = stream;
 		}
 		if (!video) {
+			if (stream && state.experience.kind === "remote_audio") {
+				root.classList.add("has-preview");
+				state.previewStarted = true;
+				return true;
+			}
 			return false;
+		}
+		if (
+			state.boundLocalVideo === video &&
+			state.boundLocalStream === stream &&
+			state.boundLocalSurface === surface &&
+			video.parentNode === surface &&
+			video.srcObject === stream
+		) {
+			setSelfName();
+			ensureNameLabelOnTop(surface);
+			return !!stream;
 		}
 		video.setAttribute("playsinline", "");
 		video.setAttribute("autoplay", "");
 		video.muted = true;
 		video.dataset.mcastMobileLocal = "true";
+		if (state.capabilities.screen) { video.dataset.mcastScreenShare = "true"; }
 		if (stream && video.srcObject !== stream) {
 			video.srcObject = stream;
 			logMobile("stream acquired", summarizeStream(stream));
@@ -286,6 +396,9 @@
 		if (video.parentNode !== surface) {
 			surface.insertBefore(video, surface.firstChild);
 		}
+		state.boundLocalVideo = video;
+		state.boundLocalStream = stream;
+		state.boundLocalSurface = surface;
 		if (video.srcObject) {
 			root.classList.add("has-preview");
 			state.previewStarted = true;
@@ -361,6 +474,12 @@
 	function applyVideoCorrection() {
 		var video = getLocalVideoElement();
 		if (!video || !root || !isMobileGuestViewport()) {
+			return;
+		}
+		if (state.capabilities.screen) {
+			video.classList.remove("mcast-mobile-video-corrected", "mcast-mobile-video-mirrored");
+			video.style.removeProperty("--mcast-mobile-corrected-width");
+			video.style.removeProperty("--mcast-mobile-corrected-height");
 			return;
 		}
 		var viewportPortrait = window.innerWidth <= window.innerHeight;
@@ -450,8 +569,9 @@
 	}
 
 	function syncDevices() {
-		syncCameraDevices();
-		syncMicDevices();
+		if (state.capabilities.camera) { syncCameraDevices(); }
+		if (state.capabilities.microphone) { syncMicDevices(); }
+		if (state.experience.kind === "guest") { syncSpeakerDevices(); }
 	}
 
 	function syncCameraDevices() {
@@ -489,6 +609,32 @@
 		replaceOptions(select, options, "Microphone");
 		if (select && hasOption(select, active)) {
 			select.value = active;
+		}
+	}
+
+	function syncSpeakerDevices() {
+		var nativeSelect = byId("outputSource") || byId("outputSource3");
+		if (!nativeSelect) {
+			setHidden("mcastMobileSpeakerField", false);
+			setHidden("mcastMobileSpeakerSelect", false);
+			replaceOptions(byId("mcastMobileSpeakerSelect"), [], "System default");
+			return;
+		}
+		var options = Array.prototype.map.call(nativeSelect.options || [], function (option) {
+			return { value: option.value, text: option.textContent || option.label || "System default" };
+		});
+		if (!options.length) {
+			setHidden("mcastMobileSpeakerField", false);
+			setHidden("mcastMobileSpeakerSelect", false);
+			replaceOptions(byId("mcastMobileSpeakerSelect"), [], "System default");
+			return;
+		}
+		setHidden("mcastMobileSpeakerField", false);
+		setHidden("mcastMobileSpeakerSelect", false);
+		var select = byId("mcastMobileSpeakerSelect");
+		replaceOptions(select, options, "System default");
+		if (select && hasOption(select, nativeSelect.value || "")) {
+			select.value = nativeSelect.value || "";
 		}
 	}
 
@@ -548,6 +694,59 @@
 		});
 		showStatus("Switching microphone...");
 		window.setTimeout(startAudioMeter, 250);
+	}
+
+	function selectNativeSpeaker(value) {
+		var nativeSelect = byId("outputSource") || byId("outputSource3");
+		if (!nativeSelect || !hasOption(nativeSelect, value)) {
+			showStatus("This speaker is not available.", true);
+			return;
+		}
+		nativeSelect.value = value;
+		dispatchNativeChange(nativeSelect);
+		showStatus("Speaker updated.");
+	}
+
+	function initializeProcessingOptions() {
+		var echo = byId("mcastMobileEchoCancel");
+		var noise = byId("mcastMobileNoiseSuppress");
+		var gain = byId("mcastMobileAutoGain");
+		if (window.session) {
+			if (echo && typeof window.session.echoCancellation === "boolean") { echo.checked = window.session.echoCancellation; }
+			if (noise && typeof window.session.noiseSuppression === "boolean") { noise.checked = window.session.noiseSuppression; }
+			if (gain && typeof window.session.autoGainControl === "boolean") { gain.checked = window.session.autoGainControl; }
+		}
+		applyScreenAudioPreference();
+	}
+
+	function applyAudioProcessing() {
+		var settings = {
+			echoCancellation: !!(byId("mcastMobileEchoCancel") && byId("mcastMobileEchoCancel").checked),
+			noiseSuppression: !!(byId("mcastMobileNoiseSuppress") && byId("mcastMobileNoiseSuppress").checked),
+			autoGainControl: !!(byId("mcastMobileAutoGain") && byId("mcastMobileAutoGain").checked)
+		};
+		if (window.session) {
+			window.session.echoCancellation = settings.echoCancellation;
+			window.session.noiseSuppression = settings.noiseSuppression;
+			window.session.autoGainControl = settings.autoGainControl;
+		}
+		var stream = getLocalStream(getLocalVideoElement());
+		var tracks = stream && stream.getAudioTracks ? stream.getAudioTracks() : [];
+		if (!tracks.length || typeof tracks[0].applyConstraints !== "function") {
+			return;
+		}
+		tracks[0].applyConstraints(settings).then(function () {
+			showStatus("Microphone processing updated.");
+		}).catch(function () {
+			showStatus("This microphone does not support one of the selected options.", true);
+		});
+	}
+
+	function applyScreenAudioPreference() {
+		if (!window.session) { return; }
+		var includeAudio = !!(byId("mcastMobileScreenAudio") && byId("mcastMobileScreenAudio").checked);
+		window.session.systemAudio = includeAudio ? "include" : "exclude";
+		window.session.screenshareVideoOnly = !includeAudio;
 	}
 
 	function toggleMute(event) {
@@ -611,20 +810,75 @@
 			showToast("Settings are available before entering the studio.");
 			return;
 		}
-		panel.hidden = !panel.hidden;
-		if (!panel.hidden) {
-			syncDevices();
+		if (panel.hidden) { openSettings(); } else { closeSettings(); }
+	}
+
+	function openSettings() {
+		var panel = byId("mcastMobileSettingsPanel");
+		if (!panel) { return; }
+		panel.hidden = false;
+		syncDevices();
+		var focusTarget = state.capabilities.camera
+			? byId("mcastMobileCameraSelect")
+			: state.capabilities.microphone
+				? byId("mcastMobileMicSelect")
+				: byId("mcastMobileScreenAudio");
+		if (focusTarget) { focusTarget.focus(); }
+	}
+
+	function closeSettings() {
+		var panel = byId("mcastMobileSettingsPanel");
+		if (panel) { panel.hidden = true; }
+	}
+
+	function showMediaRecovery(error, retryAction) {
+		closeSettings();
+		if (!window.MCastGuestUi || typeof window.MCastGuestUi.showMediaError !== "function") {
+			return;
 		}
+		var capability = state.capabilities.screen
+			? "screen"
+			: state.capabilities.camera && state.capabilities.microphone
+				? "camera and microphone"
+				: state.capabilities.microphone ? "microphone" : "camera";
+		window.MCastGuestUi.showMediaError(error, capability, {
+			actions: [
+				{ label: "Close", value: false, variant: "secondary" },
+				{ label: "Open settings", value: "settings", variant: "secondary", onSelect: openSettings },
+				{ label: "Try again", value: "retry", variant: "primary", onSelect: function () { retryAction(); } }
+			]
+		});
 	}
 
 	function leaveRoom() {
-		showToast("You left the backstage room.");
+		showToast(state.capabilities.screen ? "Screen sharing stopped." : "You disconnected.");
 		state.joined = false;
-		setStep("setup");
+		state.previewStarted = false;
+		state.screenTrack = null;
+		root.classList.remove("is-joined");
+		setStep(state.capabilities.screen ? "permission" : "setup");
 		if (typeof window.hangup === "function") {
 			window.hangup();
 		}
 		updateControls();
+	}
+
+	function watchScreenShareEnded() {
+		var stream = getScreenStream();
+		var tracks = stream && stream.getVideoTracks ? stream.getVideoTracks() : [];
+		var track = tracks[0];
+		if (!track || state.screenTrack === track) { return; }
+		state.screenTrack = track;
+		track.addEventListener("ended", function () {
+			if (!state.joined) { return; }
+			state.joined = false;
+			state.previewStarted = false;
+			state.screenTrack = null;
+			root.classList.remove("has-preview", "is-joined");
+			setStep("permission");
+			setStatus("mcastMobilePermissionStatus", "Screen sharing stopped. Choose what to share to reconnect.");
+			showToast("Screen sharing stopped.");
+		});
 	}
 
 	function installNativeGuestControls() {
@@ -680,6 +934,9 @@
 	}
 
 	function applyGuestName() {
+		if (document.documentElement.classList.contains("mcast-route-error")) {
+			return "";
+		}
 		var input = byId("mcastMobileGuestName");
 		var name = input ? input.value.trim().slice(0, 60) : "";
 		if (!name) {
@@ -749,8 +1006,8 @@
 
 	function fillRoomName() {
 		var label = "Guest room";
-		if (window.MCastRoute && window.MCastRoute.mode) {
-			label = titleCase(String(window.MCastRoute.mode).replace(/_/g, " "));
+		if (window.MCastRoute && (window.MCastRoute.remoteSourceKind || window.MCastRoute.mode)) {
+			label = titleCase(String(window.MCastRoute.remoteSourceKind || window.MCastRoute.mode).replace(/_/g, " "));
 		} else if (window.urlParams && window.urlParams.get && window.urlParams.get("room")) {
 			label = "Room " + String(window.urlParams.get("room")).slice(0, 18);
 		}
@@ -878,6 +1135,9 @@
 	}
 
 	function getLocalVideoElement() {
+		if (state.capabilities.screen) {
+			return getScreenVideoElement();
+		}
 		var sessionVideo = window.session && window.session.videoElement;
 		if (sessionVideo && sessionVideo.nodeName === "VIDEO") {
 			return sessionVideo;
@@ -886,6 +1146,9 @@
 	}
 
 	function getLocalStream(video) {
+		if (state.capabilities.screen) {
+			return getScreenStream();
+		}
 		var candidates = [
 			video && video.srcObject,
 			window.session && window.session.streamSrc,
@@ -897,6 +1160,27 @@
 			if (isUsableStream(candidates[i])) {
 				return candidates[i];
 			}
+		}
+		return null;
+	}
+
+	function getScreenVideoElement() {
+		var sessionScreen = window.session && window.session.screenShareElement;
+		if (sessionScreen && sessionScreen.nodeName === "VIDEO") {
+			return sessionScreen;
+		}
+		return byId("screensharesource") || byId("mcastMobileScreenVideo");
+	}
+
+	function getScreenStream() {
+		var video = getScreenVideoElement();
+		var candidates = [
+			window.session && window.session.screenStream,
+			video && video.srcObject,
+			window.session && window.session.screenShareElement && window.session.screenShareElement.srcObject
+		];
+		for (var index = 0; index < candidates.length; index += 1) {
+			if (isUsableStream(candidates[index])) { return candidates[index]; }
 		}
 		return null;
 	}
@@ -968,6 +1252,14 @@
 		}, timeout);
 	}
 
+	function waitForLocalMedia(timeout) {
+		return state.capabilities.camera ? waitForPreview(timeout) : waitForLocalStream(timeout);
+	}
+
+	function waitForScreenStream(timeout) {
+		return waitUntil(function () { return !!getScreenStream(); }, timeout);
+	}
+
 	function waitForReadyButton(timeout) {
 		return waitUntil(function () {
 			return byId("gowebcam") || typeof window.publishWebcam === "function";
@@ -1023,17 +1315,26 @@
 		}
 	}
 
+	function setButtonText(id, text) {
+		var button = byId(id);
+		if (button) { button.textContent = text; }
+	}
+
+	function setHidden(id, hidden) {
+		var element = byId(id);
+		if (element) { element.hidden = !!hidden; }
+	}
+
 	function getPermissionMessage(error) {
-		if (!error) {
-			return "Unable to access camera or microphone.";
+		var capability = state.capabilities.screen
+			? "screen"
+			: state.capabilities.camera && state.capabilities.microphone
+				? "camera and microphone"
+				: state.capabilities.microphone ? "microphone" : "camera";
+		if (window.MCastGuestUi && typeof window.MCastGuestUi.safeErrorMessage === "function") {
+			return window.MCastGuestUi.safeErrorMessage(error, capability);
 		}
-		if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-			return "Camera or microphone permission was blocked. Allow access in your browser, then try again.";
-		}
-		if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
-			return "No camera or microphone was found. Check your device settings.";
-		}
-		return error.message || "Unable to access camera or microphone.";
+		return "The selected media could not start. Check browser permission and try again.";
 	}
 
 	function summarizeStream(stream) {
@@ -1089,6 +1390,16 @@
 		return String(value || "").replace(/\b\w/g, function (letter) {
 			return letter.toUpperCase();
 		});
+	}
+
+	function routeSourceLabel() {
+		if (window.MCastRoute && window.MCastRoute.guestName) {
+			return window.MCastRoute.guestName;
+		}
+		if (state.experience.kind === "remote_camera") { return "Remote camera"; }
+		if (state.experience.kind === "remote_audio") { return "Remote microphone"; }
+		if (state.experience.kind === "remote_screen") { return "Remote screen"; }
+		return "Guest";
 	}
 
 	function escapeHtml(value) {

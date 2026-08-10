@@ -590,7 +590,7 @@ async function main() {
 				getById("info").style.opacity = 0;
 				getById("chatBody").innerHTML = "";
 			} catch (e) {}
-		} else if (session.label === false) {
+		} else if (session.label === false && !document.documentElement.classList.contains("mcast-route")) {
 			document.title = location.hostname;
 		}
 		try {

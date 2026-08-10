@@ -1,26 +1,7 @@
-<html lang='en' class="mcast-native-guest">
+<html lang='en' class="mcast-native-guest mcast-owned-guest-ui">
 	<head>
 		<base href="../">
-		<script type="text/javascript">
-			//  MS Internet Explorer must not be given a chance to fail before I can give the user an error message.
-			try {
-				var msie = window.navigator.userAgent.indexOf("MSIE ");
-				if (msie>0 || !!navigator.userAgent.match(/Trident.*rv\:11\./)){ // If MSIE or IE 11
-					alert("Internet Explorer is not supported.\n\nPlease consider using Microsoft Edge or Google Chrome instead\n\nYou will be forwarded to the download page for MS Edge now.");
-					console.error("INTERNET EXPLORER IS EVIL");
-					document.write("Internet Explorer is not supported");
-					window.location = "https://www.microsoft.com/edge";
-				}
-			} catch(e){
-				console.error(e);
-			}
-		
-		</script>
-		<script>
-			if (new URLSearchParams(window.location.search).has('podcast')) {
-				document.write('<style>#directorlayout,#controlButtons{display:none!important}</style>');
-			}
-		</script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastGuestUi.js?v=6"></script>
 		<style>
 			html {
 				background-color: #0000;
@@ -34,7 +15,7 @@
 		<meta name="license" content="MCast Studio" />
 		<meta name="sourcecode" content="MCast Studio" />
 		<meta name="robots" content="noindex, nofollow">
-		<link rel="canonical" href="https://vn.mcaststudio.com/g/">
+		<link rel="canonical" href="https://co.mcaststudio.com/g/">
 		<link rel="manifest" href="manifest.json">
 		
 		<!-- Primary Meta Tags -->
@@ -46,31 +27,32 @@
 		
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
-		<link rel="stylesheet" href="./main.css?ver=4043" />
-		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=8" />
-		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=7" />
+		<link rel="stylesheet" href="./main.css?ver=4044" />
+		<link rel="stylesheet" href="./g/shared/McastGuestUi.css?v=1" />
+		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=12" />
+		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=8" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
 		<link id="favicon1" rel="icon" type="image/png" sizes="32x32" href="./media/mcast-favicon-32.png" />
 		<link id="favicon2" rel="icon" type="image/png" sizes="16x16" href="./media/mcast-favicon-16.png" />
 		<link rel="apple-touch-icon" sizes="180x180" href="./media/mcast-apple-touch-icon.png" />
-		<link id="thumbnailUrl" itemprop="thumbnailUrl" href="https://vn.mcaststudio.com/media/mcast-share.jpg" />
+		<link id="thumbnailUrl" itemprop="thumbnailUrl" href="https://co.mcaststudio.com/media/mcast-share.jpg" />
 		<link rel="alternate" type="text/markdown" href="/rawdoc.md" title="Developer and User Documentation">
 
 		<!-- X (Twitter) Card Tags -->
 		<meta name="twitter:card" content="summary_large_image">
 		<meta name="twitter:title" content="MCast Studio v9 Guest Invite">
 		<meta name="twitter:description" content="Join a secure MCast Studio guest room with your camera and microphone.">
-		<meta name="twitter:image" content="https://vn.mcaststudio.com/media/mcast-share.jpg">
+		<meta name="twitter:image" content="https://co.mcaststudio.com/media/mcast-share.jpg">
 		
 		<!-- Open Graph Tags (also used by X) -->
 		<meta property="og:type" content="website">
-		<meta property="og:url" content="https://vn.mcaststudio.com/g/">
+		<meta property="og:url" content="https://co.mcaststudio.com/g/">
 		<meta property="og:title" content="MCast Studio v9 Guest Invite">
 		<meta property="og:description" content="Join a secure MCast Studio guest room with your camera and microphone.">
-		<meta property="og:image" content="https://vn.mcaststudio.com/media/mcast-share.jpg">
-		<meta property="og:image:secure_url" content="https://vn.mcaststudio.com/media/mcast-share.jpg">
+		<meta property="og:image" content="https://co.mcaststudio.com/media/mcast-share.jpg">
+		<meta property="og:image:secure_url" content="https://co.mcaststudio.com/media/mcast-share.jpg">
 		<meta property="og:image:type" content="image/jpeg">
 		<meta property="og:image:width" content="1200">
 		<meta property="og:image:height" content="630">
@@ -82,13 +64,13 @@
 		<link rel="stylesheet" href="auth-styles.css">
 
 	</head>
-	<body id="main" class="main hidden mcast-native-guest" onload="main()">
+	<body id="main" class="main hidden mcast-native-guest mcast-owned-guest-ui" onload="main()">
 		<span itemprop="image" itemscope itemtype="http://schema.org/ImageObject">
-			<link itemprop="url" href="https://vn.mcaststudio.com/media/mcast-share.jpg" />
+			<link itemprop="url" href="https://co.mcaststudio.com/media/mcast-share.jpg" />
 		</span>
-		<link itemprop="thumbnailUrl" href="https://vn.mcaststudio.com/media/mcast-share.jpg" />
+		<link itemprop="thumbnailUrl" href="https://co.mcaststudio.com/media/mcast-share.jpg" />
 		<span itemprop="thumbnail" itemscope itemtype="http://schema.org/ImageObject">
-			<link itemprop="url" href="https://vn.mcaststudio.com/media/mcast-share.jpg" />
+			<link itemprop="url" href="https://co.mcaststudio.com/media/mcast-share.jpg" />
 		</span>
 		<script type="text/javascript" crossorigin="anonymous"  src="./thirdparty/CodecsHandler.js?ver=29"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/aes.js"></script>
@@ -103,7 +85,7 @@
 				</div>
 				<div class="mcast-desktop__loading-copy">
 					<p class="mcast-desktop__eyebrow">MCast Studio v9</p>
-					<h1>Connecting camera and microphone</h1>
+					<h1 id="mcastDesktopLoadingTitle">Preparing your guest studio</h1>
 					<p id="mcastDesktopLoadingStatus">Preparing your secure guest backstage.</p>
 				</div>
 			</section>
@@ -128,15 +110,15 @@
 				<section class="mcast-desktop__setup" data-desktop-panel="setup">
 					<div class="mcast-desktop__setup-flow">
 						<div class="mcast-desktop__setup-copy">
-							<h1>Let’s set up your studio</h1>
-							<p>Entering the studio will not automatically start the broadcast.</p>
+							<h1 id="mcastDesktopSetupTitle">Let’s set up your studio</h1>
+							<p id="mcastDesktopSetupMessage">Entering the studio will not automatically start the broadcast.</p>
 						</div>
 						<div class="mcast-desktop__setup-card">
 							<div class="mcast-desktop__preview-column">
 								<div id="mcastDesktopPreviewSurface" class="mcast-desktop__preview">
 									<div class="mcast-desktop__preview-empty">
-										<strong>Camera preview</strong>
-										<span>Start preview or enter studio to allow camera and mic access.</span>
+										<strong id="mcastDesktopPreviewLabel">Camera preview</strong>
+										<span id="mcastDesktopPreviewHint">Start preview or enter the studio to allow camera and microphone access.</span>
 									</div>
 								</div>
 								<div class="mcast-desktop__setup-controls" aria-label="Studio setup controls">
@@ -145,7 +127,7 @@
 									<button id="mcastDesktopPreviewButton" type="button" class="mcast-desktop__icon-button">Preview</button>
 								</div>
 							</div>
-							<div class="mcast-desktop__meter-card">
+							<div id="mcastDesktopMeterCard" class="mcast-desktop__meter-card">
 								<div class="mcast-desktop__meter-head">
 									<span>Microphone</span>
 									<strong>Mic check</strong>
@@ -157,7 +139,7 @@
 						</div>
 
 						<div class="mcast-desktop__setup-form">
-							<label class="mcast-desktop__field" for="mcastDesktopGuestName">
+							<label id="mcastDesktopGuestNameField" class="mcast-desktop__field" for="mcastDesktopGuestName">
 								<span>Display name</span>
 								<input id="mcastDesktopGuestName" class="mcast-desktop__input" type="text" autocomplete="name" maxlength="60" placeholder="Your name" />
 							</label>
@@ -177,8 +159,8 @@
 							<div id="mcastDesktopRemoteTiles" class="mcast-desktop__remote-tiles" aria-live="polite"></div>
 						</div>
 						<div id="mcastDesktopBackstageMessage" class="mcast-desktop__backstage-card">
-							<strong>Backstage</strong>
-							<span>Ready for host</span>
+							<strong id="mcastDesktopRoomState">Backstage</strong>
+							<span id="mcastDesktopRoomHint">Ready for host</span>
 						</div>
 					</div>
 
@@ -189,49 +171,36 @@
 					</div>
 				</section>
 
-				<div id="mcastDesktopSettingsPanel" class="mcast-desktop__settings-popover" hidden>
-					<label class="mcast-desktop__field" for="mcastDesktopCameraSelect">
+				<div id="mcastDesktopSettingsPanel" class="mcast-desktop__settings-popover" role="dialog" aria-modal="false" aria-labelledby="mcastDesktopSettingsTitle" hidden>
+					<div class="mcast-desktop__settings-head">
+						<div><span>Device setup</span><h2 id="mcastDesktopSettingsTitle">Settings</h2></div>
+						<button id="mcastDesktopSettingsClose" type="button" aria-label="Close settings">×</button>
+					</div>
+					<label id="mcastDesktopCameraField" class="mcast-desktop__field" for="mcastDesktopCameraSelect">
 						<span>Camera</span>
 						<select id="mcastDesktopCameraSelect" class="mcast-desktop__select">
 							<option value="">Camera will appear after permission</option>
 						</select>
 					</label>
-					<label class="mcast-desktop__field" for="mcastDesktopMicSelect">
+					<label id="mcastDesktopMicField" class="mcast-desktop__field" for="mcastDesktopMicSelect">
 						<span>Microphone</span>
 						<select id="mcastDesktopMicSelect" class="mcast-desktop__select">
 							<option value="">Microphone will appear after permission</option>
 						</select>
 					</label>
-					<label class="mcast-desktop__field" for="mcastDesktopRoomCameraSelect">
-						<span>Room camera</span>
-						<select id="mcastDesktopRoomCameraSelect" class="mcast-desktop__select">
-							<option value="">Camera will appear after permission</option>
+					<label id="mcastDesktopSpeakerField" class="mcast-desktop__field" for="mcastDesktopSpeakerSelect">
+						<span>Speaker</span>
+						<select id="mcastDesktopSpeakerSelect" class="mcast-desktop__select">
+							<option value="">System default</option>
 						</select>
 					</label>
-					<label class="mcast-desktop__field" for="mcastDesktopRoomMicSelect">
-						<span>Room microphone</span>
-						<select id="mcastDesktopRoomMicSelect" class="mcast-desktop__select">
-							<option value="">Microphone will appear after permission</option>
-						</select>
-					</label>
-					<div class="mcast-desktop__options">
+					<div id="mcastDesktopAudioOptions" class="mcast-desktop__options">
 						<label><input id="mcastDesktopEchoCancel" type="checkbox" checked /> Echo cancellation</label>
 						<label><input id="mcastDesktopNoiseSuppress" type="checkbox" checked /> Noise suppression</label>
+						<label><input id="mcastDesktopAutoGain" type="checkbox" checked /> Automatic microphone level</label>
 					</div>
-				</div>
-				<div id="mcastDesktopCameraErrorModal" class="mcast-desktop__modal" role="dialog" aria-modal="true" aria-labelledby="mcastDesktopCameraErrorTitle" hidden>
-					<div class="mcast-desktop__modal-card">
-						<div class="mcast-desktop__modal-icon" aria-hidden="true">!</div>
-						<div class="mcast-desktop__modal-copy">
-							<h2 id="mcastDesktopCameraErrorTitle">Camera could not start</h2>
-							<p>Your camera may already be used by another app, or the browser could not access it.</p>
-							<small>Close apps like Zoom, OBS, browser tabs, or other camera tools, then try again.</small>
-						</div>
-						<div class="mcast-desktop__modal-actions">
-							<button id="mcastDesktopCameraRetryButton" type="button" class="mcast-desktop__button mcast-desktop__button--primary">Try again</button>
-							<button id="mcastDesktopChooseCameraButton" type="button" class="mcast-desktop__button mcast-desktop__button--secondary">Choose another camera</button>
-							<button id="mcastDesktopJoinNoCameraButton" type="button" class="mcast-desktop__button mcast-desktop__button--ghost">Join without camera</button>
-						</div>
+					<div id="mcastDesktopScreenOptions" class="mcast-desktop__options" hidden>
+						<label><input id="mcastDesktopScreenAudio" type="checkbox" checked /> Share system audio when available</label>
 					</div>
 				</div>
 			</section>
@@ -243,14 +212,13 @@
 						<div class="mcast-mobile__logo" aria-hidden="true"></div>
 						<span>MCast Studio v9</span>
 					</div>
-					<button type="button" class="mcast-mobile__ghost-button" aria-label="Language">EN</button>
 				</header>
 				<div class="mcast-mobile__center">
 					<div class="mcast-mobile__enter-illustration" aria-hidden="true">
 						<span></span>
 						<i></i>
 					</div>
-					<h1>Entering the studio</h1>
+					<h1 id="mcastMobileEnteringTitle">Preparing your guest studio</h1>
 					<p id="mcastMobileEnteringStatus">Connecting camera and microphone...</p>
 				</div>
 			</section>
@@ -263,9 +231,9 @@
 					</div>
 				</header>
 				<div class="mcast-mobile__permission-center">
-					<h1>Set up your mic and camera</h1>
-					<p>You’ll be able to check your video and audio in the next step.</p>
-					<span>To enter the studio</span>
+					<h1 id="mcastMobilePermissionTitle">Set up your camera and microphone</h1>
+					<p id="mcastMobilePermissionMessage">You’ll be able to check your video and audio in the next step.</p>
+					<span id="mcastMobilePermissionLead">To enter the studio</span>
 					<button id="mcastMobileAllowButton" type="button" class="mcast-mobile__primary">Allow mic/cam access</button>
 					<div id="mcastMobilePermissionStatus" class="mcast-mobile__status" role="status" aria-live="polite"></div>
 				</div>
@@ -280,14 +248,14 @@
 				</header>
 				<div class="mcast-mobile__setup-scroll">
 					<div class="mcast-mobile__setup-copy">
-						<h1>Let’s set up your studio</h1>
-						<p>Entering the studio will not automatically start the broadcast.</p>
+						<h1 id="mcastMobileSetupTitle">Let’s set up your studio</h1>
+						<p id="mcastMobileSetupMessage">Entering the studio will not automatically start the broadcast.</p>
 					</div>
 					<div class="mcast-mobile__setup-card">
 						<div id="mcastMobileSetupPreview" class="mcast-mobile__setup-preview">
-							<div class="mcast-mobile__preview-empty">Camera preview</div>
+							<div id="mcastMobilePreviewLabel" class="mcast-mobile__preview-empty">Camera preview</div>
 						</div>
-						<div class="mcast-mobile__mic-panel">
+						<div id="mcastMobileMicPanel" class="mcast-mobile__mic-panel">
 							<div class="mcast-mobile__mic-icon" aria-hidden="true"></div>
 							<div id="mcastMobileMicMeter" class="mcast-mobile__mic-meter" aria-hidden="true">
 								<i></i>
@@ -300,23 +268,30 @@
 						<button id="mcastMobileSetupCameraButton" type="button" class="mcast-mobile__tool">Stop cam</button>
 						<button id="mcastMobileSetupSettingsButton" type="button" class="mcast-mobile__tool">Settings</button>
 					</div>
-					<div id="mcastMobileSettingsPanel" class="mcast-mobile__settings" hidden>
-						<label for="mcastMobileCameraSelect">Camera</label>
-						<select id="mcastMobileCameraSelect">
-							<option value="">Camera will appear after permission</option>
-						</select>
-						<label for="mcastMobileMicSelect">Microphone</label>
-						<select id="mcastMobileMicSelect">
-							<option value="">Microphone will appear after permission</option>
-						</select>
+					<div id="mcastMobileSettingsPanel" class="mcast-mobile__settings" role="dialog" aria-modal="false" aria-labelledby="mcastMobileSettingsTitle" hidden>
+						<div class="mcast-mobile__settings-head"><strong id="mcastMobileSettingsTitle">Device settings</strong><button id="mcastMobileSettingsClose" type="button" aria-label="Close settings">×</button></div>
+						<label id="mcastMobileCameraField" for="mcastMobileCameraSelect">Camera</label>
+						<select id="mcastMobileCameraSelect"><option value="">Camera will appear after permission</option></select>
+						<label id="mcastMobileMicField" for="mcastMobileMicSelect">Microphone</label>
+						<select id="mcastMobileMicSelect"><option value="">Microphone will appear after permission</option></select>
+						<label id="mcastMobileSpeakerField" for="mcastMobileSpeakerSelect">Speaker</label>
+						<select id="mcastMobileSpeakerSelect"><option value="">System default</option></select>
+						<div id="mcastMobileAudioOptions" class="mcast-mobile__settings-options">
+							<label><input id="mcastMobileEchoCancel" type="checkbox" checked /> Echo cancellation</label>
+							<label><input id="mcastMobileNoiseSuppress" type="checkbox" checked /> Noise suppression</label>
+							<label><input id="mcastMobileAutoGain" type="checkbox" checked /> Automatic microphone level</label>
+						</div>
+						<div id="mcastMobileScreenOptions" class="mcast-mobile__settings-options" hidden>
+							<label><input id="mcastMobileScreenAudio" type="checkbox" checked /> Share system audio when available</label>
+						</div>
 					</div>
-					<p class="mcast-mobile__info">You will enter the studio as a guest. The host can add you to the stage at any time.</p>
-					<label class="mcast-mobile__name-field" for="mcastMobileGuestName">
+					<p id="mcastMobileInfo" class="mcast-mobile__info">You will enter the studio as a guest. The host can add you to the stage at any time.</p>
+					<label id="mcastMobileGuestNameField" class="mcast-mobile__name-field" for="mcastMobileGuestName">
 						<span>Display name</span>
 						<input id="mcastMobileGuestName" type="text" autocomplete="name" maxlength="60" />
 					</label>
 					<button id="mcastMobileEnterButton" type="button" class="mcast-mobile__primary">Enter studio</button>
-					<p class="mcast-mobile__terms">By entering as a guest, you agree to MCast Studio’s Terms and Privacy Policy.</p>
+					<p id="mcastMobileTerms" class="mcast-mobile__terms">By continuing, you agree to MCast Studio’s Terms and Privacy Policy.</p>
 					<div id="mcastMobileSetupStatus" class="mcast-mobile__status" role="status" aria-live="polite"></div>
 				</div>
 			</section>
@@ -344,7 +319,7 @@
 						<div class="mcast-mobile__backstage-card">
 							<div class="mcast-mobile__door-icon" aria-hidden="true"></div>
 							<div>
-								<strong>You’re backstage</strong>
+								<strong id="mcastMobileConnectedTitle">You’re backstage</strong>
 								<p>Only the host can see you. The host may add you to the stage at any time. Be ready!</p>
 							</div>
 						</div>
@@ -3652,8 +3627,6 @@
 			
 		</script>
 		
-			<script type="text/javascript" crossorigin="anonymous" src="./mcast-route.js?v=32"></script>
-
 		<!-- Authentication client -->
 		<script type="text/javascript" crossorigin="anonymous" src="./auth-client.js?v=3"></script>
 
@@ -3702,11 +3675,12 @@
 					})();
 				</script>
 
-		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1415"></script>
-		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1064"></script>
+		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1416"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./mcast-route.js?v=34"></script>
+		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1065"></script>
 		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastNativeWebRtcBridge.js?v=14"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=16"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=13"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=20"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=18"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		
 	</body>

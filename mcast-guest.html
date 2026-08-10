@@ -2,117 +2,272 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 		<meta name="robots" content="noindex, nofollow">
-		<title>MCast Studio Guest Invite</title>
+		<meta name="theme-color" content="#f6f8fb">
+		<title>MCast Studio Secure Invite</title>
+		<link rel="icon" type="image/png" sizes="32x32" href="/media/mcast-favicon-32.png">
 		<style>
 			:root {
-				color-scheme: dark;
-				font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-				background: #060a10;
-				color: #f4f7fb;
+				color-scheme: light;
+				font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+				background: #f6f8fb;
+				color: #101828;
 			}
 
-			html,
-			body {
+			*, *::before, *::after { box-sizing: border-box; }
+
+			html, body {
+				min-width: 100%;
 				min-height: 100%;
 				margin: 0;
-				background: #060a10;
+				background: #f6f8fb;
 			}
 
 			body {
 				display: grid;
 				place-items: center;
-				padding: 24px;
-				text-align: center;
+				padding: max(22px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+				background:
+					radial-gradient(circle at 16% 10%, rgba(23, 105, 224, .12), transparent 34%),
+					radial-gradient(circle at 86% 88%, rgba(14, 165, 233, .08), transparent 36%),
+					linear-gradient(180deg, #fbfcfe, #eef2f7);
 			}
 
-			.panel {
-				display: grid;
-				gap: 14px;
-				width: min(420px, 100%);
+			.invite-card {
+				width: min(480px, 100%);
+				padding: 30px;
+				border: 1px solid rgba(226, 232, 240, .96);
+				border-radius: 24px;
+				background: rgba(255, 255, 255, .96);
+				box-shadow: 0 30px 100px rgba(15, 23, 42, .15);
+				text-align: left;
+			}
+
+			.brand {
+				display: inline-flex;
+				align-items: center;
+				gap: 10px;
+				color: #344054;
+				font-size: 13px;
+				font-weight: 850;
 			}
 
 			.mark {
-				width: 48px;
-				height: 48px;
-				margin: 0 auto;
-				border-radius: 10px;
-				background: #fff url("/media/mcast-apple-touch-icon.png") center / cover no-repeat;
+				width: 38px;
+				height: 38px;
+				border-radius: 11px;
+				background: #fff url("/media/mcast-apple-touch-icon.png") center / contain no-repeat;
+				box-shadow: 0 9px 25px rgba(15, 23, 42, .10);
 			}
+
+			.signal {
+				position: relative;
+				width: 72px;
+				height: 72px;
+				margin: 32px 0 22px;
+				border-radius: 22px;
+				background: #eaf2ff;
+			}
+
+			.signal::before,
+			.signal::after {
+				content: "";
+				position: absolute;
+				border-radius: 999px;
+			}
+
+			.signal::before {
+				inset: 17px;
+				border: 3px solid rgba(23, 105, 224, .22);
+				border-top-color: #1769e0;
+				animation: spin .9s linear infinite;
+			}
+
+			.signal::after {
+				inset: 31px;
+				background: #1769e0;
+			}
+
+			.invite-card.is-error .signal {
+				display: grid;
+				place-items: center;
+				background: #fff0ef;
+				color: #d92d20;
+				font-size: 28px;
+				font-weight: 900;
+			}
+
+			.invite-card.is-error .signal::before { content: "!"; position: static; border: 0; animation: none; }
+			.invite-card.is-error .signal::after { display: none; }
+
+			.eyebrow {
+				margin: 0 0 8px;
+				color: #1769e0;
+				font-size: 11px;
+				font-weight: 900;
+				letter-spacing: .11em;
+				text-transform: uppercase;
+			}
+
+			.invite-card.is-error .eyebrow { color: #d92d20; }
 
 			h1 {
 				margin: 0;
-				font-size: 22px;
-				line-height: 1.2;
-				font-weight: 800;
-				letter-spacing: 0;
+				font-size: clamp(28px, 7vw, 36px);
+				line-height: 1.12;
+				letter-spacing: -.035em;
 			}
 
 			p {
-				margin: 0;
-				color: #a8b3c4;
-				font-size: 14px;
-				line-height: 1.45;
-				font-weight: 650;
+				margin: 13px 0 0;
+				color: #475467;
+				font-size: 15px;
+				line-height: 1.55;
+				font-weight: 560;
 			}
 
-			.spinner {
-				width: 22px;
-				height: 22px;
-				margin: 6px auto 0;
+			.progress {
+				height: 5px;
+				margin-top: 26px;
 				border-radius: 999px;
-				border: 2px solid rgba(255, 255, 255, .16);
-				border-top-color: #7dd3fc;
-				animation: spin .8s linear infinite;
+				background: #e7edf5;
+				overflow: hidden;
 			}
 
-			@keyframes spin {
-				to {
-					transform: rotate(360deg);
-				}
+			.progress span {
+				display: block;
+				width: 42%;
+				height: 100%;
+				border-radius: inherit;
+				background: linear-gradient(90deg, #1769e0, #38bdf8);
+				animation: travel 1.35s ease-in-out infinite;
+			}
+
+			.invite-card.is-error .progress { display: none; }
+
+			button {
+				display: none;
+				width: 100%;
+				min-height: 50px;
+				margin-top: 24px;
+				border: 0;
+				border-radius: 11px;
+				background: #1769e0;
+				color: #fff;
+				font: inherit;
+				font-size: 14px;
+				font-weight: 850;
+				cursor: pointer;
+				box-shadow: 0 12px 26px rgba(23, 105, 224, .20);
+			}
+
+			.invite-card.is-error button { display: block; }
+
+			@keyframes spin { to { transform: rotate(360deg); } }
+			@keyframes travel { 0% { transform: translateX(-110%); } 55%, 100% { transform: translateX(245%); } }
+
+			@media (max-width: 560px) {
+				body { align-items: end; padding: 14px 14px max(14px, env(safe-area-inset-bottom)); }
+				.invite-card { padding: 24px; border-radius: 22px; }
+				.signal { margin-top: 28px; }
+			}
+
+			@media (prefers-reduced-motion: reduce) {
+				.signal::before, .progress span { animation-duration: 3s; }
 			}
 		</style>
 	</head>
 	<body>
-		<main class="panel">
-			<div class="mark" aria-hidden="true"></div>
-			<h1>Opening secure room</h1>
-			<p data-message>Preparing your MCast Studio invite.</p>
-			<div class="spinner" aria-hidden="true"></div>
+		<main class="invite-card" data-card aria-live="polite">
+			<div class="brand"><span class="mark" aria-hidden="true"></span><span>MCast Studio</span></div>
+			<div class="signal" aria-hidden="true"></div>
+			<p class="eyebrow" data-eyebrow>Secure invite</p>
+			<h1 data-title>Opening your studio</h1>
+			<p data-message>Checking this link and preparing a secure connection.</p>
+			<div class="progress" aria-hidden="true"><span></span></div>
+			<button data-retry type="button">Try again</button>
 		</main>
 		<script>
 			(function () {
 				"use strict";
 
+				var resolverUrl = "/api/vdoShortInviteResolve";
+				var card = document.querySelector("[data-card]");
+				var title = document.querySelector("[data-title]");
 				var message = document.querySelector("[data-message]");
-				var params = new URLSearchParams(window.location.search || "");
-				var code = params.get("s") || params.get("code") || readCodeFromPath(window.location.pathname || "");
+				var eyebrow = document.querySelector("[data-eyebrow]");
+				var retry = document.querySelector("[data-retry]");
+				var code = readInviteCode();
 
-				if (code && !params.has("s") && !params.has("t") && !params.has("token")) {
-					params.set("s", code);
+				retry.addEventListener("click", function () { window.location.reload(); });
+				if (!code) {
+					showFailure("invalid");
+					return;
 				}
 
-				fetch("/g/index.html" + (params.toString() ? "?" + params.toString() : "") + (window.location.hash || ""), {
-					credentials: "same-origin",
-					cache: "no-store"
-				}).then(function (response) {
-					if (!response.ok) {
-						throw new Error("Guest shell failed to load");
-					}
-					return response.text();
-				}).then(function (html) {
-					var prepared = ensureRootBase(html);
-					document.open();
-					document.write(prepared);
-					document.close();
-				}).catch(function () {
-					setMessage("This MCast Studio invitation could not be opened. Refresh the page or request a new invite.");
-				});
+				resolveInvite(code)
+					.then(function (payload) { return loadGuestEngine(code, payload); })
+					.catch(function (error) { showFailure(error && error.kind || "unavailable"); });
 
-				function readCodeFromPath(pathname) {
-					var match = pathname.match(/^\/(?:g|m|c|s|w|p|i|rv|ra|rs)\/([A-Za-z0-9]{6,32})\/?$/i);
-					return match ? match[1] : "";
+				function readInviteCode() {
+					var params = new URLSearchParams(window.location.search || "");
+					if (params.has("t") || params.has("token")) { return ""; }
+					var fromQuery = params.get("s") || params.get("code") || "";
+					var match = (window.location.pathname || "").match(/^\/s\/([A-Za-z0-9]{6,32})\/?$/i);
+					var value = fromQuery || (match ? match[1] : "");
+					return /^[A-Za-z0-9]{6,32}$/.test(value) ? value : "";
+				}
+
+				function resolveInvite(inviteCode) {
+					var controller = typeof AbortController === "function" ? new AbortController() : null;
+					var timer = window.setTimeout(function () { if (controller) { controller.abort(); } }, 12000);
+					return fetch(resolverUrl + "?code=" + encodeURIComponent(inviteCode), {
+						method: "GET",
+						headers: { "Accept": "application/json" },
+						credentials: "same-origin",
+						cache: "no-store",
+						signal: controller ? controller.signal : undefined
+					}).then(function (response) {
+						if (!response.ok) { throw createFailure(response.status === 410 ? "expired" : "invalid"); }
+						return response.json();
+					}).then(function (payload) {
+						var query = payload && typeof payload.query === "string" ? payload.query.trim().replace(/^\?/, "") : "";
+						if (!query || query.length > 16384) { throw createFailure("invalid"); }
+						return { query: query };
+					}).catch(function (error) {
+						if (error && error.kind) { throw error; }
+						throw createFailure(error && error.name === "AbortError" ? "timeout" : "unavailable");
+					}).finally(function () { window.clearTimeout(timer); });
+				}
+
+				function loadGuestEngine(inviteCode, payload) {
+					setStatus("Preparing your devices", "Loading the MCast Studio guest experience.");
+					return fetch("/g/index.html", {
+						credentials: "same-origin",
+						cache: "no-store",
+						headers: { "Accept": "text/html" }
+					}).then(function (response) {
+						if (!response.ok) { throw createFailure("unavailable"); }
+						return response.text();
+					}).then(function (html) {
+						var prepared = prepareEngineHtml(html, { code: inviteCode, query: payload.query });
+						document.open();
+						document.write(prepared);
+						document.close();
+					});
+				}
+
+				function prepareEngineHtml(html, routePayload) {
+					var prepared = ensureRootBase(html);
+					var serialized = JSON.stringify(routePayload)
+						.replace(/</g, "\\u003c")
+						.replace(/\u2028/g, "\\u2028")
+						.replace(/\u2029/g, "\\u2029");
+					var bootstrap = "<script>Object.defineProperty(window,'__MCastResolvedGuestRoute',{value:Object.freeze(" + serialized + "),configurable:true,writable:true});<\/script>";
+					var routeScript = /<script[^>]+src=["'][^"']*mcast-route\.js[^"']*["'][^>]*><\/script>/i;
+					if (!routeScript.test(prepared)) { throw createFailure("unavailable"); }
+					return prepared.replace(routeScript, function (match) { return bootstrap + match; });
 				}
 
 				function ensureRootBase(html) {
@@ -120,15 +275,37 @@
 					if (/<base\s+href=["'][^"']*["']\s*>/i.test(html)) {
 						return html.replace(/<base\s+href=["'][^"']*["']\s*>/i, base);
 					}
-					return html.replace(/<head(\s[^>]*)?>/i, function (match) {
-						return match + base;
-					});
+					return html.replace(/<head(\s[^>]*)?>/i, function (match) { return match + base; });
 				}
 
-				function setMessage(value) {
-					if (message) {
-						message.textContent = value;
+				function showFailure(kind) {
+					card.classList.add("is-error");
+					eyebrow.textContent = "Secure invite";
+					if (kind === "expired") {
+						title.textContent = "This invite has expired";
+						message.textContent = "Ask the host to create a new MCast Studio link.";
+						return;
 					}
+					if (kind === "invalid") {
+						title.textContent = "This invite is not valid";
+						message.textContent = "Open the complete MCast Studio link, or ask the host for a new one.";
+						return;
+					}
+					title.textContent = "This invite could not be opened";
+					message.textContent = kind === "timeout"
+						? "The connection took too long. Check your internet connection and try again."
+						: "Check your internet connection and try again. If the issue continues, ask the host for a new invite.";
+				}
+
+				function setStatus(nextTitle, nextMessage) {
+					title.textContent = nextTitle;
+					message.textContent = nextMessage;
+				}
+
+				function createFailure(kind) {
+					var error = new Error("MCast invite could not be opened");
+					error.kind = kind;
+					return error;
 				}
 			})();
 		</script>

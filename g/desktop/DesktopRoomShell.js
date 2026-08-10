@@ -6,6 +6,8 @@
 		previewStarted: false,
 		joining: false,
 		joined: false,
+		experience: null,
+		capabilities: { camera: true, microphone: true, screen: false, displayName: true },
 		step: "loading",
 		devicePoll: 0,
 		tilePoll: 0,
@@ -14,7 +16,10 @@
 		meterAnalyser: null,
 		lastStatus: "",
 		joinWithoutCamera: false,
-		autoJoinStarted: false
+		screenTrack: null,
+		boundLocalVideo: null,
+		boundLocalStream: null,
+		boundLocalSurface: null
 	};
 
 	var icons = {
@@ -38,6 +43,7 @@
 		}
 		document.body.classList.add("mcast-desktop-guest-active");
 		document.documentElement.classList.add("mcast-desktop-guest-active");
+		configureExperience();
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
 		wireDesktopUi();
@@ -47,17 +53,18 @@
 		fillDesktopRouteDetails();
 		restoreGuestName();
 		setStep("loading");
-		setStatus("Preparing your secure guest backstage.");
+		setStatus(state.experience.loadingMessage);
 		window.setTimeout(function () {
 			if (!state.joined) {
 				setStep("setup");
-				setStatus("Check your camera and microphone before joining.");
+				setStatus(setupReadyMessage());
 			}
 		}, 850);
-		scheduleAutoJoin();
 		state.devicePoll = window.setInterval(syncDevices, 900);
 		state.tilePoll = window.setInterval(function () {
-			bindLocalVideo("poll");
+			if (state.previewStarted || state.joined) {
+				bindLocalVideo("poll");
+			}
 			syncRoomTiles();
 			updateDesktopControls();
 			startNativeWebRtcBridge();
@@ -68,6 +75,54 @@
 		window.addEventListener("offline", function () {
 			setStatus("You appear to be offline. Check your connection, then rejoin.", true);
 		});
+		window.addEventListener("mcast:open-settings", openSettings);
+	}
+
+	function configureExperience() {
+		state.experience = window.MCastGuestUi && typeof window.MCastGuestUi.getExperience === "function"
+			? window.MCastGuestUi.getExperience()
+			: {
+				kind: "guest",
+				capabilities: state.capabilities,
+				loadingTitle: "Preparing your guest studio",
+				loadingMessage: "Preparing your secure guest backstage.",
+				setupTitle: "Let’s set up your studio",
+				setupMessage: "Entering the studio will not automatically start the broadcast.",
+				previewLabel: "Camera preview",
+				previewHint: "Start preview or enter the studio to allow camera and microphone access.",
+				primaryAction: "Enter studio",
+				connectedTitle: "You’re backstage",
+				connectedMessage: "Your camera and microphone are connected.",
+				badge: "Backstage"
+			};
+		state.capabilities = state.experience.capabilities || state.capabilities;
+		root.dataset.experience = state.experience.kind;
+		root.classList.toggle("is-audio-only", state.experience.kind === "remote_audio");
+		root.classList.toggle("is-screen-only", state.experience.kind === "remote_screen");
+		setText("mcastDesktopLoadingTitle", state.experience.loadingTitle);
+		setText("mcastDesktopLoadingStatus", state.experience.loadingMessage);
+		setText("mcastDesktopSetupTitle", state.experience.setupTitle);
+		setText("mcastDesktopSetupMessage", state.experience.setupMessage);
+		setText("mcastDesktopPreviewLabel", state.experience.previewLabel);
+		setText("mcastDesktopPreviewHint", state.experience.previewHint);
+		setButtonText("mcastDesktopJoinButton", state.experience.primaryAction);
+		setHidden("mcastDesktopGuestNameField", !state.capabilities.displayName);
+		setHidden("mcastDesktopCameraField", !state.capabilities.camera);
+		setHidden("mcastDesktopMicField", !state.capabilities.microphone);
+		setHidden("mcastDesktopSpeakerField", state.experience.kind !== "guest");
+		setHidden("mcastDesktopAudioOptions", !state.capabilities.microphone);
+		setHidden("mcastDesktopScreenOptions", !state.capabilities.screen);
+		setHidden("mcastDesktopMeterCard", !state.capabilities.microphone);
+		setHidden("mcastDesktopMicToggle", !state.capabilities.microphone);
+		setHidden("mcastDesktopCameraToggle", !state.capabilities.camera);
+		setHidden("mcastDesktopPreviewButton", state.capabilities.screen);
+		setHidden("mcastDesktopRoomMicButton", !state.capabilities.microphone);
+		setHidden("mcastDesktopRoomCameraButton", !state.capabilities.camera);
+		if (!state.capabilities.displayName) {
+			var input = byId("mcastDesktopGuestName");
+			if (input && !input.value) { input.value = routeSourceLabel(); }
+		}
+		initializeProcessingOptions();
 	}
 
 	function isDesktopViewport() {
@@ -82,63 +137,22 @@
 		on("mcastDesktopGuestName", "input", applyGuestName);
 		on("mcastDesktopCameraSelect", "change", function (event) {
 			applyCameraSelection(event.target.value);
-			setSelectValue("mcastDesktopRoomCameraSelect", event.target.value);
-		});
-		on("mcastDesktopRoomCameraSelect", "change", function (event) {
-			applyCameraSelection(event.target.value);
-			setSelectValue("mcastDesktopCameraSelect", event.target.value);
 		});
 		on("mcastDesktopMicSelect", "change", function (event) {
 			selectNativeMic(event.target.value);
-			setSelectValue("mcastDesktopRoomMicSelect", event.target.value);
 		});
-		on("mcastDesktopRoomMicSelect", "change", function (event) {
-			selectNativeMic(event.target.value);
-			setSelectValue("mcastDesktopMicSelect", event.target.value);
-		});
+		on("mcastDesktopSpeakerSelect", "change", function (event) { selectNativeSpeaker(event.target.value); });
+		on("mcastDesktopEchoCancel", "change", applyAudioProcessing);
+		on("mcastDesktopNoiseSuppress", "change", applyAudioProcessing);
+		on("mcastDesktopAutoGain", "change", applyAudioProcessing);
+		on("mcastDesktopScreenAudio", "change", applyScreenAudioPreference);
 		on("mcastDesktopMicToggle", "click", toggleMute);
 		on("mcastDesktopRoomMicButton", "click", toggleMute);
 		on("mcastDesktopCameraToggle", "click", toggleCamera);
 		on("mcastDesktopRoomCameraButton", "click", toggleCamera);
 		on("mcastDesktopSettingsButton", "click", toggleSettings);
+		on("mcastDesktopSettingsClose", "click", hideSettings);
 		on("mcastDesktopLeaveButton", "click", leaveRoom);
-		on("mcastDesktopCameraRetryButton", "click", function () {
-			hideCameraErrorModal();
-			startPreview().catch(function () {});
-		});
-		on("mcastDesktopChooseCameraButton", "click", function () {
-			hideCameraErrorModal();
-			openSettings();
-		});
-		on("mcastDesktopJoinNoCameraButton", "click", joinWithoutCamera);
-	}
-
-	function scheduleAutoJoin() {
-		if (!shouldAutoJoin()) {
-			return;
-		}
-		window.setTimeout(function () {
-			if (state.autoJoinStarted || state.joined) {
-				return;
-			}
-			state.autoJoinStarted = true;
-			logDesktop("MCast requested automatic guest entry", {});
-			joinRoom();
-		}, 1000);
-	}
-
-	function shouldAutoJoin() {
-		if (window.MCastRoute && window.MCastRoute.autoStartRequested === true) {
-			return true;
-		}
-		if (window.urlParams && typeof window.urlParams.has === "function" && window.urlParams.has("mcastrequestedautostart")) {
-			return true;
-		}
-		try {
-			return new URLSearchParams(window.location.search).has("mcastrequestedautostart");
-		} catch (error) {
-			return false;
-		}
 	}
 
 	function on(id, type, handler) {
@@ -174,7 +188,7 @@
 		root.dataset.step = step;
 		var liveBadge = byId("mcastDesktopLiveBadge");
 		if (liveBadge) {
-			liveBadge.textContent = step === "live" ? "Live room" : step === "backstage" ? "Backstage" : "Setup";
+			liveBadge.textContent = step === "live" ? "Live room" : step === "backstage" ? state.experience.badge : "Setup";
 		}
 	}
 
@@ -183,12 +197,25 @@
 		if (!meta || !window.MCastRoute) {
 			return;
 		}
-		meta.textContent = titleCase((window.MCastRoute.mode || "guest").replace(/_/g, " ")) + " invite";
+		var routeLabel = window.MCastRoute.remoteSourceKind || window.MCastRoute.mode || "guest";
+		meta.textContent = titleCase(routeLabel.replace(/_/g, " ")) + " invite";
+	}
+
+	function setupReadyMessage() {
+		if (state.experience.kind === "remote_camera") { return "Choose the devices this camera should use, then connect when ready."; }
+		if (state.experience.kind === "remote_audio") { return "Choose the microphone this device should use, then connect when ready."; }
+		if (state.experience.kind === "remote_screen") { return "Choose Start sharing when you are ready to select a screen."; }
+		return "Ready when you are.";
 	}
 
 	async function startPreview() {
+		if (state.capabilities.screen) {
+			return joinScreenShare();
+		}
 		setButtonBusy("mcastDesktopPreviewButton", true, "Starting...");
-		setStatus(state.joinWithoutCamera ? "Requesting microphone access..." : "Requesting camera and microphone access...");
+		setStatus(state.capabilities.camera && !state.joinWithoutCamera
+			? "Requesting camera and microphone access..."
+			: "Requesting microphone access...");
 		try {
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
@@ -197,16 +224,18 @@
 				applyNoCameraSession();
 			}
 			await window.previewWebcam(false);
-			await waitForPreview(9000);
+			await waitForLocalMedia(9000);
 			state.previewStarted = true;
 			bindLocalVideo("preview-ready");
 			syncDevices();
 			startAudioMeter();
-			setStatus("Preview is ready. Confirm your setup, then join backstage.");
+			setStatus(state.experience.kind === "remote_audio"
+				? "Microphone is ready. Confirm the level, then connect."
+				: "Preview is ready. Confirm your setup, then continue.");
 		} catch (error) {
-			logDesktop("camera preview error", summarizeError(error));
+			logDesktop("media preview error", summarizeError(error));
 			setStatus(getPermissionMessage(error), true);
-			showCameraErrorModal();
+			showMediaRecovery(error, startPreview);
 			throw error;
 		} finally {
 			setButtonBusy("mcastDesktopPreviewButton", false, "Preview");
@@ -214,12 +243,15 @@
 	}
 
 	async function joinRoom() {
-		if (state.joining || !validateName()) {
+		if (state.capabilities.screen) {
+			return joinScreenShare();
+		}
+		if (state.joining || (state.capabilities.displayName && !validateName())) {
 			return;
 		}
 		state.joining = true;
-		setButtonBusy("mcastDesktopJoinButton", true, "Joining...");
-		setStatus("Preparing your backstage connection...");
+		setButtonBusy("mcastDesktopJoinButton", true, "Connecting...");
+		setStatus("Preparing the secure connection...");
 		try {
 			if (!state.previewStarted) {
 				await startPreview();
@@ -227,7 +259,7 @@
 			if (state.joinWithoutCamera) {
 				applyNoCameraSession();
 			}
-			applyGuestName();
+			if (state.capabilities.displayName) { applyGuestName(); }
 			await waitForReadyButton(9000);
 			if (typeof window.publishWebcam !== "function") {
 				await waitForFunction("publishWebcam", 4500);
@@ -240,18 +272,57 @@
 			root.classList.add("has-preview", "is-joined");
 			setStep("backstage");
 			bindLocalVideo("joined");
-			setStatus("You are backstage. The host will add you to the stream shortly.");
-			setRoomState("Ready backstage", "Your camera and microphone are connected.");
+			setStatus(state.experience.connectedMessage);
+			setRoomState(state.experience.connectedTitle, state.experience.connectedMessage);
 			syncRoomTiles();
 			updateDesktopControls();
 			startNativeWebRtcBridge();
 		} catch (error) {
 			logDesktop("join error", summarizeError(error));
 			setStatus(getPermissionMessage(error), true);
-			showCameraErrorModal();
+			showMediaRecovery(error, joinRoom);
 		} finally {
 			state.joining = false;
-			setButtonBusy("mcastDesktopJoinButton", false, "Enter studio");
+			setButtonBusy("mcastDesktopJoinButton", false, state.experience.primaryAction);
+		}
+	}
+
+	async function joinScreenShare() {
+		if (state.joining || state.joined) {
+			return;
+		}
+		state.joining = true;
+		setButtonBusy("mcastDesktopJoinButton", true, "Choose a screen...");
+		setStatus("Choose a screen, window, or browser tab in the system prompt.");
+		applyScreenAudioPreference();
+		try {
+			if (typeof window.publishScreen !== "function") {
+				await waitForFunction("publishScreen", 6000);
+			}
+			await window.publishScreen();
+			if (!getScreenStream()) {
+				var selectionError = new Error("Screen selection was not completed");
+				selectionError.name = "NotAllowedError";
+				throw selectionError;
+			}
+			await waitForScreenStream(4000);
+			state.previewStarted = true;
+			state.joined = true;
+			document.body.classList.add("mcast-desktop-room-active");
+			root.classList.add("has-preview", "is-joined");
+			bindLocalVideo("screen-connected");
+			watchScreenShareEnded();
+			setStep("backstage");
+			setStatus(state.experience.connectedMessage);
+			setRoomState(state.experience.connectedTitle, state.experience.connectedMessage);
+			syncRoomTiles();
+			updateDesktopControls();
+		} catch (error) {
+			setStatus(getPermissionMessage(error), true);
+			showMediaRecovery(error, joinScreenShare);
+		} finally {
+			state.joining = false;
+			setButtonBusy("mcastDesktopJoinButton", false, state.experience.primaryAction);
 		}
 	}
 
@@ -260,22 +331,40 @@
 		if (!surface) {
 			return false;
 		}
-		var video = getLocalVideoElement();
-		var stream = getLocalStream(video);
-		if (!video && stream) {
+		var video = state.capabilities.screen ? getScreenVideoElement() : getLocalVideoElement();
+		var stream = state.capabilities.screen ? getScreenStream() : getLocalStream(video);
+		var hasVideo = !!(stream && stream.getVideoTracks && stream.getVideoTracks().some(isLiveTrack));
+		if (!video && stream && hasVideo) {
 			video = document.createElement("video");
-			video.id = "mcastDesktopLocalVideo";
+			video.id = state.capabilities.screen ? "mcastDesktopScreenVideo" : "mcastDesktopLocalVideo";
 			video.autoplay = true;
 			video.playsInline = true;
 			video.muted = true;
 		}
 		if (!video) {
+			if (stream && state.experience.kind === "remote_audio") {
+				root.classList.add("has-preview");
+				state.previewStarted = true;
+				updateLocalTileLabel();
+				return true;
+			}
 			return false;
+		}
+		if (
+			state.boundLocalVideo === video &&
+			state.boundLocalStream === stream &&
+			state.boundLocalSurface === surface &&
+			video.parentNode === surface &&
+			video.srcObject === stream
+		) {
+			updateLocalTileLabel();
+			return !!stream;
 		}
 		video.setAttribute("playsinline", "");
 		video.setAttribute("autoplay", "");
 		video.muted = true;
 		video.dataset.mcastDesktopLocal = "true";
+		if (state.capabilities.screen) { video.dataset.mcastScreenShare = "true"; }
 		if (stream && video.srcObject !== stream) {
 			video.srcObject = stream;
 			logDesktop("stream acquired", summarizeStream(stream));
@@ -283,6 +372,9 @@
 		if (video.parentNode !== surface) {
 			surface.insertBefore(video, surface.firstChild);
 		}
+		state.boundLocalVideo = video;
+		state.boundLocalStream = stream;
+		state.boundLocalSurface = surface;
 		updateLocalTileLabel();
 		if (video.srcObject) {
 			root.classList.add("has-preview");
@@ -340,8 +432,9 @@
 	function syncDevices() {
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
-		syncCameraDevices();
-		syncMicDevices();
+		if (state.capabilities.camera) { syncCameraDevices(); }
+		if (state.capabilities.microphone) { syncMicDevices(); }
+		if (state.experience.kind === "guest") { syncSpeakerDevices(); }
 		updateDesktopControls();
 	}
 
@@ -354,9 +447,7 @@
 			return { value: option.value, text: option.textContent || option.label || "Camera" };
 		});
 		replaceOptions(byId("mcastDesktopCameraSelect"), options, "Camera");
-		replaceOptions(byId("mcastDesktopRoomCameraSelect"), options, "Camera");
 		setSelectValue("mcastDesktopCameraSelect", nativeSelect.value || "");
-		setSelectValue("mcastDesktopRoomCameraSelect", nativeSelect.value || "");
 	}
 
 	function syncMicDevices() {
@@ -377,9 +468,27 @@
 			};
 		}).filter(function (item) { return item.value; });
 		replaceOptions(byId("mcastDesktopMicSelect"), options, "Microphone");
-		replaceOptions(byId("mcastDesktopRoomMicSelect"), options, "Microphone");
 		setSelectValue("mcastDesktopMicSelect", active);
-		setSelectValue("mcastDesktopRoomMicSelect", active);
+	}
+
+	function syncSpeakerDevices() {
+		var nativeSelect = byId("outputSource") || byId("outputSource3");
+		if (!nativeSelect) {
+			setHidden("mcastDesktopSpeakerField", false);
+			replaceOptions(byId("mcastDesktopSpeakerSelect"), [], "System default");
+			return;
+		}
+		var options = Array.prototype.map.call(nativeSelect.options || [], function (option) {
+			return { value: option.value, text: option.textContent || option.label || "System default" };
+		});
+		if (!options.length) {
+			setHidden("mcastDesktopSpeakerField", false);
+			replaceOptions(byId("mcastDesktopSpeakerSelect"), [], "System default");
+			return;
+		}
+		setHidden("mcastDesktopSpeakerField", false);
+		replaceOptions(byId("mcastDesktopSpeakerSelect"), options, "System default");
+		setSelectValue("mcastDesktopSpeakerSelect", nativeSelect.value || "");
 	}
 
 	function replaceOptions(select, options, fallbackLabel) {
@@ -436,6 +545,61 @@
 			dispatchNativeChange(input);
 		});
 		setStatus("Switching microphone...");
+	}
+
+	function selectNativeSpeaker(value) {
+		var nativeSelect = byId("outputSource") || byId("outputSource3");
+		if (!nativeSelect || !hasOption(nativeSelect, value)) {
+			setStatus("This speaker is not available.", true);
+			return;
+		}
+		nativeSelect.value = value;
+		dispatchNativeChange(nativeSelect);
+		setStatus("Speaker updated.");
+	}
+
+	function initializeProcessingOptions() {
+		var echo = byId("mcastDesktopEchoCancel");
+		var noise = byId("mcastDesktopNoiseSuppress");
+		var gain = byId("mcastDesktopAutoGain");
+		if (window.session) {
+			if (echo && typeof window.session.echoCancellation === "boolean") { echo.checked = window.session.echoCancellation; }
+			if (noise && typeof window.session.noiseSuppression === "boolean") { noise.checked = window.session.noiseSuppression; }
+			if (gain && typeof window.session.autoGainControl === "boolean") { gain.checked = window.session.autoGainControl; }
+		}
+		applyScreenAudioPreference();
+	}
+
+	function applyAudioProcessing() {
+		var settings = {
+			echoCancellation: !!(byId("mcastDesktopEchoCancel") && byId("mcastDesktopEchoCancel").checked),
+			noiseSuppression: !!(byId("mcastDesktopNoiseSuppress") && byId("mcastDesktopNoiseSuppress").checked),
+			autoGainControl: !!(byId("mcastDesktopAutoGain") && byId("mcastDesktopAutoGain").checked)
+		};
+		if (window.session) {
+			window.session.echoCancellation = settings.echoCancellation;
+			window.session.noiseSuppression = settings.noiseSuppression;
+			window.session.autoGainControl = settings.autoGainControl;
+		}
+		var stream = getLocalStream(getLocalVideoElement());
+		var tracks = stream && stream.getAudioTracks ? stream.getAudioTracks() : [];
+		if (!tracks.length || typeof tracks[0].applyConstraints !== "function") {
+			return;
+		}
+		tracks[0].applyConstraints(settings).then(function () {
+			setStatus("Microphone processing updated.");
+		}).catch(function () {
+			setStatus("This microphone does not support one of the selected options.", true);
+		});
+	}
+
+	function applyScreenAudioPreference() {
+		if (!window.session) {
+			return;
+		}
+		var includeAudio = !!(byId("mcastDesktopScreenAudio") && byId("mcastDesktopScreenAudio").checked);
+		window.session.systemAudio = includeAudio ? "include" : "exclude";
+		window.session.screenshareVideoOnly = !includeAudio;
 	}
 
 	function toggleMute(event) {
@@ -621,6 +785,9 @@
 	}
 
 	function applyGuestName() {
+		if (document.documentElement.classList.contains("mcast-route-error")) {
+			return "";
+		}
 		var input = byId("mcastDesktopGuestName");
 		var name = input ? input.value.trim().slice(0, 60) : "";
 		if (!name) {
@@ -708,9 +875,13 @@
 		if (panel) {
 			panel.hidden = false;
 			syncDevices();
-			var cameraSelect = byId("mcastDesktopCameraSelect");
-			if (cameraSelect) {
-				cameraSelect.focus();
+			var focusTarget = state.capabilities.camera
+				? byId("mcastDesktopCameraSelect")
+				: state.capabilities.microphone
+					? byId("mcastDesktopMicSelect")
+					: byId("mcastDesktopScreenAudio");
+			if (focusTarget) {
+				focusTarget.focus();
 			}
 		}
 	}
@@ -722,34 +893,32 @@
 		}
 	}
 
-	function showCameraErrorModal() {
-		var modal = byId("mcastDesktopCameraErrorModal");
-		if (!modal) {
-			return;
-		}
-		hideSettings();
-		modal.hidden = false;
-		window.setTimeout(function () {
-			var retry = byId("mcastDesktopCameraRetryButton");
-			if (retry) {
-				retry.focus();
-			}
-		}, 0);
-	}
-
-	function hideCameraErrorModal() {
-		var modal = byId("mcastDesktopCameraErrorModal");
-		if (modal) {
-			modal.hidden = true;
-		}
-	}
-
 	function joinWithoutCamera() {
 		state.joinWithoutCamera = true;
-		hideCameraErrorModal();
 		applyNoCameraSession();
 		setVideoTracksEnabled(false);
 		joinRoom();
+	}
+
+	function showMediaRecovery(error, retryAction) {
+		hideSettings();
+		if (!window.MCastGuestUi || typeof window.MCastGuestUi.showMediaError !== "function") {
+			return;
+		}
+		var capability = state.capabilities.screen
+			? "screen"
+			: state.capabilities.camera && state.capabilities.microphone && !state.joinWithoutCamera
+				? "camera and microphone"
+				: state.capabilities.microphone ? "microphone" : "camera";
+		var actions = [
+			{ label: "Close", value: false, variant: "secondary" },
+			{ label: "Open settings", value: "settings", variant: "secondary", onSelect: openSettings },
+			{ label: "Try again", value: "retry", variant: "primary", onSelect: function () { retryAction(); } }
+		];
+		if (state.experience.kind === "guest" && state.capabilities.microphone && !state.joinWithoutCamera) {
+			actions.splice(2, 0, { label: "Join without camera", value: "audio-only", variant: "secondary", onSelect: joinWithoutCamera });
+		}
+		window.MCastGuestUi.showMediaError(error, capability, { actions: actions });
 	}
 
 	function applyNoCameraSession() {
@@ -761,13 +930,38 @@
 	}
 
 	function leaveRoom() {
-		setStatus("You left the room. Refresh this invite to join again.");
+		setStatus(state.capabilities.screen ? "Screen sharing stopped." : "You disconnected. You can reconnect from this page.");
 		setStep("setup");
 		state.joined = false;
+		state.previewStarted = false;
+		state.screenTrack = null;
+		root.classList.remove("is-joined");
 		document.body.classList.remove("mcast-desktop-room-active");
 		if (typeof window.hangup === "function") {
 			window.hangup();
 		}
+	}
+
+	function watchScreenShareEnded() {
+		var stream = getScreenStream();
+		var tracks = stream && stream.getVideoTracks ? stream.getVideoTracks() : [];
+		var track = tracks[0];
+		if (!track || state.screenTrack === track) {
+			return;
+		}
+		state.screenTrack = track;
+		track.addEventListener("ended", function () {
+			if (!state.joined) { return; }
+			state.joined = false;
+			state.previewStarted = false;
+			state.screenTrack = null;
+			root.classList.remove("has-preview", "is-joined");
+			setStep("setup");
+			setStatus("Screen sharing stopped. Choose Start sharing to reconnect.");
+			if (window.MCastGuestUi) {
+				window.MCastGuestUi.showToast("Screen sharing stopped.", { kind: "info" });
+			}
+		});
 	}
 
 	function installNativeGuestControls() {
@@ -910,6 +1104,9 @@
 	}
 
 	function getLocalVideoElement() {
+		if (state.capabilities.screen) {
+			return getScreenVideoElement();
+		}
 		var sessionVideo = window.session && window.session.videoElement;
 		if (sessionVideo && sessionVideo.nodeName === "VIDEO") {
 			return sessionVideo;
@@ -918,6 +1115,9 @@
 	}
 
 	function getLocalStream(video) {
+		if (state.capabilities.screen) {
+			return getScreenStream();
+		}
 		var candidates = [
 			video && video.srcObject,
 			window.session && window.session.streamSrc,
@@ -929,6 +1129,27 @@
 			if (isUsableStream(candidates[i])) {
 				return candidates[i];
 			}
+		}
+		return null;
+	}
+
+	function getScreenVideoElement() {
+		var sessionScreen = window.session && window.session.screenShareElement;
+		if (sessionScreen && sessionScreen.nodeName === "VIDEO") {
+			return sessionScreen;
+		}
+		return byId("screensharesource") || byId("mcastDesktopScreenVideo");
+	}
+
+	function getScreenStream() {
+		var video = getScreenVideoElement();
+		var candidates = [
+			window.session && window.session.screenStream,
+			video && video.srcObject,
+			window.session && window.session.screenShareElement && window.session.screenShareElement.srcObject
+		];
+		for (var index = 0; index < candidates.length; index += 1) {
+			if (isUsableStream(candidates[index])) { return candidates[index]; }
 		}
 		return null;
 	}
@@ -1017,6 +1238,14 @@
 			var video = getLocalVideoElement();
 			return !!(video && (video.srcObject || video.readyState >= 2));
 		}, timeout);
+	}
+
+	function waitForLocalMedia(timeout) {
+		return state.capabilities.camera && !state.joinWithoutCamera ? waitForPreview(timeout) : waitForLocalStream(timeout);
+	}
+
+	function waitForScreenStream(timeout) {
+		return waitUntil(function () { return !!getScreenStream(); }, timeout);
 	}
 
 	function waitForReadyButton(timeout) {
@@ -1141,17 +1370,21 @@
 		}
 	}
 
+	function setHidden(id, hidden) {
+		var element = byId(id);
+		if (element) { element.hidden = !!hidden; }
+	}
+
 	function getPermissionMessage(error) {
-		if (!error) {
-			return "Camera could not start. Check your browser permissions, then try again.";
+		var capability = state.capabilities.screen
+			? "screen"
+			: state.capabilities.camera && state.capabilities.microphone && !state.joinWithoutCamera
+				? "camera and microphone"
+				: state.capabilities.microphone ? "microphone" : "camera";
+		if (window.MCastGuestUi && typeof window.MCastGuestUi.safeErrorMessage === "function") {
+			return window.MCastGuestUi.safeErrorMessage(error, capability);
 		}
-		if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-			return "Camera or microphone permission was blocked. Allow access in the browser prompt, then try again.";
-		}
-		if (error.name === "NotFoundError" || error.name === "OverconstrainedError") {
-			return "No matching camera or microphone was found. Check your device settings.";
-		}
-		return "Camera could not start. Try again, choose another camera, or join without camera.";
+		return "The selected media could not start. Check browser permission and try again.";
 	}
 
 	function summarizeError(error) {
@@ -1191,6 +1424,16 @@
 		return String(value || "").replace(/\b\w/g, function (letter) {
 			return letter.toUpperCase();
 		});
+	}
+
+	function routeSourceLabel() {
+		if (window.MCastRoute && window.MCastRoute.guestName) {
+			return window.MCastRoute.guestName;
+		}
+		if (state.experience.kind === "remote_camera") { return "Remote camera"; }
+		if (state.experience.kind === "remote_audio") { return "Remote microphone"; }
+		if (state.experience.kind === "remote_screen") { return "Remote screen"; }
+		return "Guest";
 	}
 
 	function byId(id) {

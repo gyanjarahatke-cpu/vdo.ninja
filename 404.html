@@ -2,27 +2,28 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 		<meta name="robots" content="noindex, nofollow">
-		<title>MCast Studio Guest Invite</title>
-		<style>html,body{min-height:100%;margin:0;background:#111315;color:#eef2f7;font:600 15px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}body{display:grid;place-items:center;padding:24px;text-align:center}</style>
+		<title>Page not found | MCast Studio</title>
+		<style>
+			:root { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #101828; background: #f6f8fb; }
+			*,*::before,*::after { box-sizing: border-box; }
+			html,body { min-height: 100%; margin: 0; }
+			body { display: grid; place-items: center; padding: 22px; background: radial-gradient(circle at 16% 10%, rgba(23,105,224,.12), transparent 34%), linear-gradient(180deg,#fbfcfe,#eef2f7); }
+			main { width: min(460px,100%); padding: 30px; border: 1px solid #e2e8f0; border-radius: 24px; background: #fff; box-shadow: 0 30px 100px rgba(15,23,42,.14); }
+			.brand { display: flex; align-items: center; gap: 10px; color: #344054; font-size: 13px; font-weight: 850; }
+			.mark { width: 38px; height: 38px; border-radius: 11px; background: #fff url("/media/mcast-apple-touch-icon.png") center/contain no-repeat; box-shadow: 0 9px 25px rgba(15,23,42,.10); }
+			.badge { display: grid; place-items: center; width: 58px; height: 58px; margin: 30px 0 18px; border-radius: 18px; background: #eaf2ff; color: #1769e0; font-size: 18px; font-weight: 900; }
+			h1 { margin: 0; font-size: clamp(28px,7vw,34px); line-height: 1.12; letter-spacing: -.03em; }
+			p { margin: 13px 0 0; color: #475467; font-size: 15px; line-height: 1.55; }
+		</style>
 	</head>
 	<body>
-		<p>Loading invite...</p>
-		<script>
-			fetch("/mcast-guest.html?v=3", { cache: "no-store" })
-				.then(function (response) {
-					if (!response.ok) throw new Error("load failed");
-					return response.text();
-				})
-				.then(function (html) {
-					document.open();
-					document.write(html);
-					document.close();
-				})
-				.catch(function () {
-					document.body.textContent = "This MCast Studio invite could not be loaded.";
-				});
-		</script>
+		<main>
+			<div class="brand"><span class="mark" aria-hidden="true"></span><span>MCast Studio</span></div>
+			<div class="badge" aria-hidden="true">404</div>
+			<h1>This page isn’t available</h1>
+			<p>Check the complete link. If this was a guest invite, ask the host to create a new one.</p>
+		</main>
 	</body>
 </html>

@@ -1,8 +1,6 @@
 (function () {
 	"use strict";
 
-	var shortInviteResolveUrl = "https://mcast-studio.web.app/api/vdoShortInviteResolve";
-	var tokenResolveUrl = "https://mcast-studio.web.app/api/vdoTokenResolve";
 	var roomTicketResolveUrl = "https://mcast-studio.web.app/api/vdoRoomTicketResolve";
 	var rawPath = (window.location.pathname || "").replace(/\/+$/, "");
 	var path = rawPath.toLowerCase();
@@ -18,27 +16,17 @@
 		document.documentElement.classList.add("mcast-vcall");
 	}
 
-	var search = window.location.search || "";
-	var params = new URLSearchParams(search);
+	var params = new URLSearchParams(window.location.search || "");
 	var decoded = "";
-	var token = params.get("t") || params.get("token") || "";
 	var shortCode = route === "call"
-		? params.get("r") || params.get("s") || params.get("code")
+		? params.get("r") || ""
 		: params.get("s") || params.get("code") || readShortInviteCodeFromPath(rawPath);
 
-	if (token) {
-		if (route === "call") {
-			showInviteError("This MCast Studio room link is not authorized.");
-			return;
-		}
-		decoded = resolvePackedToken(token, route);
+	if (route === "guest") {
+		decoded = consumePreloadedGuestRoute(shortCode);
 	} else if (shortCode) {
 		decoded = resolveStoredRoute(shortCode, route);
-	} else if (route === "guest" && search.length > 1) {
-		decoded = search.substring(1);
-	} else if (route === "guest") {
-		decoded = readStoredResolvedGuestRoute();
-	} else if (route === "call") {
+	} else {
 		showInviteError("This MCast Studio room link is not authorized.");
 		return;
 	}
@@ -50,7 +38,7 @@
 		return;
 	}
 
-	if ((token || shortCode) && route !== "guest") {
+	if (shortCode && route !== "guest") {
 		cleanTransportRouteParams(params);
 	}
 
@@ -59,10 +47,6 @@
 		if (!hasGuestRoomTarget(decoded)) {
 			showInviteError("This MCast Studio room link is missing or has expired.");
 			return;
-		}
-		persistResolvedGuestRoute(decoded);
-		if (!token && !shortCode) {
-			persistResolvedGuestRouteInLocation(decoded);
 		}
 	}
 
@@ -81,19 +65,14 @@
 				applyRemoteSourceDefaults(routedParams, remoteSource);
 				return serializeParams(routedParams);
 			}
-			var shouldAutostart = routedParams.has("mcastautojoin");
 			setFlag(routedParams, "webcam");
-			preserveGuestAutostartIntent(routedParams);
 			disableGuestAuxiliaryUiParams(routedParams);
 			removeMcastGuestShellParams(routedParams);
 			cleanEmptyNativeDeviceParams(routedParams);
 			normalizeGuestNameParams(routedParams);
 
-			if (!routedParams.has("push") && (mode === "meeting" || mode === "classroom" || mode === "webinar")) {
+			if (!routedParams.has("push") && (mode === "meeting" || mode === "classroom")) {
 				routedParams.set("push", getOrCreateSingleLinkGuestPush(routedParams));
-			}
-			if (shouldAutostart) {
-				routedParams.set("mcastrequestedautostart", "1");
 			}
 			removeGuestAutostartParams(routedParams);
 			disableGuestAuxiliaryUiParams(routedParams);
@@ -121,15 +100,10 @@
 	}
 
 	function applyRemoteSourceDefaults(routedParams, remoteSource) {
-		var shouldAutostart = routedParams.has("autostart") ||
-			routedParams.has("autojoin") ||
-			routedParams.has("aj") ||
-			routedParams.has("as") ||
-			routedParams.has("mcastautojoin");
-
-		preserveGuestAutostartIntent(routedParams);
 		disableGuestAuxiliaryUiParams(routedParams);
 		removeMcastGuestShellParams(routedParams);
+		removeGuestAutostartParams(routedParams);
+		routedParams.delete("mcastrequestedautostart");
 		cleanEmptyNativeDeviceParams(routedParams);
 		normalizeGuestNameParams(routedParams);
 
@@ -148,11 +122,6 @@
 			setFlag(routedParams, "webcam");
 		}
 
-		if (shouldAutostart) {
-			setFlag(routedParams, "autostart");
-			routedParams.set("mcastrequestedautostart", "1");
-		}
-
 		disableGuestAuxiliaryUiParams(routedParams);
 	}
 
@@ -169,24 +138,14 @@
 		});
 	}
 
-	function preserveGuestAutostartIntent(routedParams) {
-		if (
-			routedParams.has("autostart") ||
-			routedParams.has("autojoin") ||
-			routedParams.has("aj") ||
-			routedParams.has("as") ||
-			routedParams.has("mcastautojoin")
-		) {
-			routedParams.set("mcastrequestedautostart", "1");
-		}
-	}
-
 	function removeGuestAutostartParams(routedParams) {
 		[
 			"autostart",
 			"autojoin",
 			"aj",
-			"as"
+			"as",
+			"mcastautojoin",
+			"mcastrequestedautostart"
 		].forEach(function (key) {
 			routedParams.delete(key);
 		});
@@ -343,33 +302,47 @@
 	function applyRouteMetadata(query, currentRoute) {
 		var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
 		var mode = normalizeRouteToken(routedParams.get("mcastmode") || "stream_guest", "stream_guest");
+		var remoteSourceKind = normalizeRemoteSourceKind(routedParams.get("mcastremote") || "");
 		var role = normalizeRouteToken(routedParams.get("mcastrole") || (currentRoute === "guest" ? "participant" : "source"), "participant");
 		var state = normalizeRouteToken(routedParams.get("mcaststate") || "backstage", "backstage");
 		var routing = normalizeRouteToken(routedParams.get("mcastrouting") || "low_bitrate", "low_bitrate");
 		var guestName = normalizeGuestDisplayName(routedParams.get("label") || routedParams.get("l") || "");
-		var autoStartRequested = currentRoute === "guest" && routedParams.has("mcastrequestedautostart");
 		var nativeWebRtcRequested = currentRoute === "guest" &&
 			(routedParams.has("mcastnativewebrtc") || routedParams.has("mcastnative"));
 		window.MCastRoute = {
 			route: currentRoute,
 			mode: mode,
+			remoteSourceKind: remoteSourceKind,
 			role: role,
 			state: state,
 			routing: routing,
 			guestName: guestName,
-			autoStartRequested: autoStartRequested,
 			nativeWebRtcRequested: nativeWebRtcRequested
 		};
 		var root = document.documentElement;
 		root.classList.add("mcast-route");
 		root.classList.add("mcast-route-" + currentRoute);
 		root.classList.add("mcast-mode-" + mode);
+		if (remoteSourceKind) {
+			root.classList.add("mcast-remote-" + remoteSourceKind.replace(/^remote_/, ""));
+		}
 		root.classList.add("mcast-role-" + role);
 		root.classList.add("mcast-state-" + state);
 		root.classList.add("mcast-routing-" + routing);
 		if (currentRoute !== "guest" && role === "participant") {
-			document.title = "MCast Studio v8 " + toTitleCase(mode);
+			document.title = "MCast Studio " + toTitleCase(mode);
 		}
+		if (currentRoute === "guest") {
+			document.title = "MCast Studio " + toTitleCase(remoteSourceKind || mode);
+			if (window.MCastGuestUi && typeof window.MCastGuestUi.configureRoute === "function") {
+				window.MCastGuestUi.configureRoute(window.MCastRoute);
+			}
+		}
+	}
+
+	function normalizeRemoteSourceKind(value) {
+		var normalized = normalizeRouteToken(value, "");
+		return /^(remote_camera|remote_audio|remote_screen)$/.test(normalized) ? normalized : "";
 	}
 
 	function normalizeRouteToken(value, fallback) {
@@ -378,7 +351,7 @@
 	}
 
 	function isGuestInvitePath(currentPath) {
-		return /^\/(?:g|m|c|s|w|p|i|rv|ra|rs)(?:\/|$)/.test(currentPath || "");
+		return /^\/s(?:\/|$)/.test(currentPath || "") || currentPath === "/g/index.html";
 	}
 
 	function isCallPath(currentPath) {
@@ -476,8 +449,30 @@
 	}
 
 	function readShortInviteCodeFromPath(currentPath) {
-		var match = (currentPath || "").match(/^\/(?:g|m|c|s|w|p|i|rv|ra|rs)\/([A-Za-z0-9]{6,16})\/?$/i);
+		var match = (currentPath || "").match(/^\/s\/([A-Za-z0-9]{6,32})\/?$/i);
 		return match ? match[1] : "";
+	}
+
+	function consumePreloadedGuestRoute(code) {
+		if (!/^[A-Za-z0-9]{6,32}$/.test(code || "")) {
+			return "";
+		}
+		var payload = window.__MCastResolvedGuestRoute;
+		try { delete window.__MCastResolvedGuestRoute; } catch (error) { window.__MCastResolvedGuestRoute = null; }
+		if (!payload || payload.code !== code || typeof payload.query !== "string") {
+			return "";
+		}
+		var query = payload.query.trim().replace(/^\?/, "");
+		if (!query || !hasSupportedGuestExperience(query)) {
+			return "";
+		}
+		return query;
+	}
+
+	function hasSupportedGuestExperience(query) {
+		var params = new URLSearchParams(query.replace(/^\?/, ""));
+		var requestedRemote = normalizeRouteToken(params.get("mcastremote") || "", "");
+		return !requestedRemote || !!normalizeRemoteSourceKind(requestedRemote);
 	}
 
 	function cleanTransportRouteParams(sourceParams) {
@@ -501,60 +496,15 @@
 		}
 	}
 
-	function persistResolvedGuestRoute(query) {
-		try {
-			if (!window.sessionStorage) {
-				return;
-			}
-			window.sessionStorage.setItem("mcastResolvedGuestRoute", serializeParams(new URLSearchParams(query.replace(/^\?/, ""))));
-		} catch (error) {}
-	}
-
-	function readStoredResolvedGuestRoute() {
-		try {
-			if (!window.sessionStorage) {
-				return "";
-			}
-			return (window.sessionStorage.getItem("mcastResolvedGuestRoute") || "").toString().trim();
-		} catch (error) {
-			return "";
-		}
-	}
-
-	function persistResolvedGuestRouteInLocation(query) {
-		try {
-			if (!window.history || typeof window.history.replaceState !== "function") {
-				return;
-			}
-			var routedParams = new URLSearchParams(query.replace(/^\?/, ""));
-			["t", "token", "s", "code"].forEach(function (key) {
-				routedParams.delete(key);
-			});
-			var nextQuery = serializeParams(routedParams);
-			if (!nextQuery) {
-				return;
-			}
-			var nextUrl = window.location.pathname.replace(/\/+$/, "/") +
-				"?" + nextQuery +
-				(window.location.hash || "");
-			if (nextUrl !== window.location.pathname + window.location.search + window.location.hash) {
-				window.history.replaceState({ path: nextUrl }, "", nextUrl);
-			}
-		} catch (error) {
-			console.warn("MCast could not persist the guest room route", error);
-		}
-	}
-
 	function resolveStoredRoute(code, currentRoute) {
-		if (!/^[A-Za-z0-9]{6,16}$/.test(code || "")) {
+		if (currentRoute !== "call" || !/^[A-Za-z0-9]{6,32}$/.test(code || "")) {
 			showInviteError("This MCast Studio invitation link is not valid.");
 			return "";
 		}
 
 		try {
 			var request = new XMLHttpRequest();
-			var endpoint = currentRoute === "call" ? roomTicketResolveUrl : shortInviteResolveUrl;
-			request.open("GET", endpoint + "?code=" + encodeURIComponent(code), false);
+			request.open("GET", roomTicketResolveUrl + "?code=" + encodeURIComponent(code), false);
 			request.setRequestHeader("Accept", "application/json");
 			request.send(null);
 			if (request.status < 200 || request.status >= 300) {
@@ -572,27 +522,11 @@
 		}
 	}
 
-	function resolvePackedToken(tokenValue, currentRoute) {
-		try {
-			var request = new XMLHttpRequest();
-			request.open("POST", tokenResolveUrl, false);
-			request.setRequestHeader("Accept", "application/json");
-			request.setRequestHeader("Content-Type", "application/json");
-			request.send(JSON.stringify({ token: tokenValue, route: currentRoute }));
-			if (request.status < 200 || request.status >= 300) {
-				showInviteError("This MCast Studio link is not valid.");
-				return "";
-			}
-			var payload = JSON.parse(request.responseText || "{}");
-			return (payload.query || "").toString().trim();
-		} catch (error) {
-			console.error("MCast packed route resolve failed", error);
-			showInviteError("This MCast Studio link could not be loaded.");
-			return "";
-		}
-	}
-
 	function showInviteError(message) {
+		if (route === "guest" && window.MCastGuestUi && typeof window.MCastGuestUi.showRouteError === "function") {
+			window.MCastGuestUi.showRouteError(message);
+			return;
+		}
 		document.documentElement.classList.add("mcast-route-error");
 		var style = document.getElementById("mcastRouteErrorStyles");
 		if (!style) {

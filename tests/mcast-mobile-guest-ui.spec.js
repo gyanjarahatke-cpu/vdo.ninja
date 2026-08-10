@@ -1,8 +1,9 @@
 const { test, expect } = require("@playwright/test");
 const fs = require("fs");
 const path = require("path");
+const { installInvite, inviteUrl } = require("./mcast-playwright-invite");
 
-const baseUrl = process.env.MCAST_TEST_URL || "http://127.0.0.1:8089/g/?push=mcast-mobile-regression&room=mcast-mobile-regression";
+const baseUrl = process.env.MCAST_TEST_URL || inviteUrl("MOB00001");
 
 test.use({
 	viewport: { width: 390, height: 844 },
@@ -19,6 +20,7 @@ test.use({
 });
 
 test("mobile guest flow owns the route and reaches backstage", async ({ page }) => {
+	await installInvite(page, { code: "MOB00001" });
 	await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastMobileGuest")).toBeVisible();
 	await expect(page.locator("#mcastGuestEntry")).toHaveCount(0);
@@ -53,7 +55,8 @@ test("guest route uses separated desktop and mobile shell assets", async ({ page
 	expect(html).not.toContain("mcast-guest-entry");
 	expect(html).not.toContain("id=\"mcastGuestEntry\"");
 
-	await page.goto(baseUrl + "&case=architecture", { waitUntil: "domcontentloaded" });
+	await installInvite(page, { code: "MOB00001" });
+	await page.goto(baseUrl + "?case=architecture", { waitUntil: "domcontentloaded" });
 	await expect(page.locator(".DesktopRoomShell")).toHaveCount(1);
 	await expect(page.locator(".DesktopTopBar")).toHaveCount(1);
 	await expect(page.locator(".DesktopStageLayout")).toHaveCount(1);
@@ -66,7 +69,8 @@ test("guest route uses separated desktop and mobile shell assets", async ({ page
 });
 
 test("force-landscape params do not rotate mobile setup UI in portrait viewport", async ({ page }) => {
-	await page.goto(baseUrl + "&fl=1&forcelandscape=1", { waitUntil: "domcontentloaded" });
+	await installInvite(page, { code: "MOB00001" });
+	await page.goto(baseUrl + "?fl=1&forcelandscape=1", { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 6000 });
 	await page.evaluate(() => {
 		if (typeof window.updateForceRotatedCSS === "function") {
@@ -108,7 +112,8 @@ test.describe("mobile landscape backstage", () => {
 	test.use({ viewport: { width: 844, height: 390 } });
 
 	test("uses the dedicated landscape layout after joining", async ({ page }) => {
-		await page.goto(baseUrl + "&landscape=1", { waitUntil: "domcontentloaded" });
+		await installInvite(page, { code: "MOB00001" });
+		await page.goto(baseUrl + "?landscape=1", { waitUntil: "domcontentloaded" });
 		await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 6000 });
 		await page.locator("#mcastMobileAllowButton").click();
 		await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup", { timeout: 12000 });

@@ -1,0 +1,324 @@
+html.mcast-native-guest,
+html.mcast-native-guest body {
+	margin: 0;
+	min-width: 100%;
+	min-height: 100%;
+	background: #f6f8fb;
+}
+
+html.mcast-owned-guest-ui body > *:not(#mcastDesktopGuest):not(#mcastMobileGuest):not(#mcastGuestUiRoot):not(script):not(style):not(link) {
+	position: fixed !important;
+	left: -100000px !important;
+	top: -100000px !important;
+	width: 1px !important;
+	height: 1px !important;
+	min-width: 0 !important;
+	min-height: 0 !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	opacity: 0 !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+	overflow: hidden !important;
+}
+
+html.mcast-owned-guest-ui [data-mcast-upstream-ui="quarantined"] {
+	display: none !important;
+	visibility: hidden !important;
+	pointer-events: none !important;
+}
+
+.mcast-guest-ui {
+	--mcast-ui-blue: #1769e0;
+	--mcast-ui-blue-dark: #0f55bf;
+	--mcast-ui-ink: #101828;
+	--mcast-ui-muted: #667085;
+	--mcast-ui-line: #dce3ed;
+	--mcast-ui-danger: #d92d20;
+	--mcast-ui-warning: #b54708;
+	--mcast-ui-success: #15803d;
+	position: fixed;
+	inset: 0;
+	z-index: 2147483646;
+	pointer-events: none;
+	font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	color: var(--mcast-ui-ink);
+}
+
+.mcast-guest-ui *,
+.mcast-guest-ui *::before,
+.mcast-guest-ui *::after {
+	box-sizing: border-box;
+}
+
+.mcast-guest-ui__toasts {
+	position: absolute;
+	right: max(20px, env(safe-area-inset-right));
+	bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
+	display: grid;
+	gap: 10px;
+	width: min(390px, calc(100vw - 40px));
+}
+
+.mcast-guest-ui__toast {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 11px;
+	padding: 13px 15px;
+	border: 1px solid rgba(255, 255, 255, .14);
+	border-radius: 14px;
+	background: rgba(15, 23, 42, .94);
+	box-shadow: 0 18px 52px rgba(15, 23, 42, .26);
+	backdrop-filter: blur(18px);
+	color: #fff;
+	font-size: 13px;
+	line-height: 1.45;
+	font-weight: 720;
+	opacity: 0;
+	transform: translateY(10px) scale(.98);
+	transition: opacity .18s ease, transform .18s ease;
+	pointer-events: auto;
+}
+
+.mcast-guest-ui__toast.is-visible {
+	opacity: 1;
+	transform: none;
+}
+
+.mcast-guest-ui__toast-dot {
+	width: 9px;
+	height: 9px;
+	border-radius: 50%;
+	background: #60a5fa;
+	box-shadow: 0 0 0 5px rgba(96, 165, 250, .13);
+}
+
+.mcast-guest-ui__toast--success .mcast-guest-ui__toast-dot { background: #4ade80; box-shadow: 0 0 0 5px rgba(74, 222, 128, .13); }
+.mcast-guest-ui__toast--warning .mcast-guest-ui__toast-dot { background: #fbbf24; box-shadow: 0 0 0 5px rgba(251, 191, 36, .13); }
+.mcast-guest-ui__toast--error .mcast-guest-ui__toast-dot { background: #fb7185; box-shadow: 0 0 0 5px rgba(251, 113, 133, .13); }
+
+.mcast-guest-ui__backdrop {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	padding: max(22px, env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) max(22px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+	background: rgba(15, 23, 42, .48);
+	backdrop-filter: blur(14px);
+	pointer-events: auto;
+}
+
+.mcast-guest-ui__backdrop[hidden] {
+	display: none;
+}
+
+html.mcast-route-error #mcastDesktopGuest,
+html.mcast-route-error #mcastMobileGuest {
+	visibility: hidden !important;
+	pointer-events: none !important;
+}
+
+html.mcast-route-error .mcast-guest-ui__backdrop {
+	background:
+		radial-gradient(circle at 18% 12%, rgba(23, 105, 224, .14), transparent 32%),
+		linear-gradient(180deg, #f8fafc, #eef2f7);
+}
+
+.mcast-guest-ui__dialog {
+	position: relative;
+	width: min(510px, 100%);
+	max-height: min(760px, calc(100dvh - 44px));
+	overflow: auto;
+	padding: 28px;
+	border: 1px solid rgba(226, 232, 240, .96);
+	border-radius: 24px;
+	background: #fff;
+	box-shadow: 0 34px 110px rgba(15, 23, 42, .28);
+	color: var(--mcast-ui-ink);
+}
+
+.mcast-guest-ui__close {
+	position: absolute;
+	right: 18px;
+	top: 18px;
+	display: grid;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	padding: 0;
+	border: 1px solid var(--mcast-ui-line);
+	border-radius: 12px;
+	background: #fff;
+	color: #475467;
+	font: inherit;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.mcast-guest-ui__brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 9px;
+	margin-right: 52px;
+	color: #344054;
+	font-size: 13px;
+	font-weight: 850;
+}
+
+.mcast-guest-ui__brand-mark {
+	width: 34px;
+	height: 34px;
+	border-radius: 10px;
+	background: #fff url("../../media/mcast-apple-touch-icon.png") center / contain no-repeat;
+	box-shadow: 0 8px 22px rgba(15, 23, 42, .10);
+}
+
+.mcast-guest-ui__signal {
+	display: grid;
+	place-items: center;
+	width: 52px;
+	height: 52px;
+	margin: 26px 0 17px;
+	border-radius: 17px;
+	background: #eaf2ff;
+	color: var(--mcast-ui-blue);
+	font-size: 24px;
+	font-weight: 900;
+}
+
+.mcast-guest-ui__dialog[data-kind="error"] .mcast-guest-ui__signal { background: #fff0ef; color: var(--mcast-ui-danger); }
+.mcast-guest-ui__dialog[data-kind="warning"] .mcast-guest-ui__signal { background: #fff7e8; color: var(--mcast-ui-warning); }
+.mcast-guest-ui__dialog[data-kind="success"] .mcast-guest-ui__signal { background: #ecfdf3; color: var(--mcast-ui-success); }
+
+.mcast-guest-ui__eyebrow {
+	margin: 0 0 8px;
+	color: var(--mcast-ui-blue);
+	font-size: 12px;
+	font-weight: 900;
+	letter-spacing: .09em;
+	text-transform: uppercase;
+}
+
+.mcast-guest-ui__dialog[data-kind="error"] .mcast-guest-ui__eyebrow { color: var(--mcast-ui-danger); }
+.mcast-guest-ui__dialog[data-kind="warning"] .mcast-guest-ui__eyebrow { color: var(--mcast-ui-warning); }
+.mcast-guest-ui__dialog[data-kind="success"] .mcast-guest-ui__eyebrow { color: var(--mcast-ui-success); }
+
+.mcast-guest-ui__dialog h2 {
+	margin: 0;
+	color: var(--mcast-ui-ink);
+	font-size: clamp(24px, 4vw, 30px);
+	line-height: 1.14;
+	letter-spacing: -.025em;
+}
+
+.mcast-guest-ui__message,
+.mcast-guest-ui__hint {
+	margin: 12px 0 0;
+	color: #475467;
+	font-size: 15px;
+	line-height: 1.55;
+	font-weight: 560;
+}
+
+.mcast-guest-ui__hint {
+	padding: 11px 12px;
+	border: 1px solid #eaecf0;
+	border-radius: 12px;
+	background: #f8fafc;
+	color: var(--mcast-ui-muted);
+	font-size: 13px;
+}
+
+.mcast-guest-ui__input-wrap {
+	display: grid;
+	gap: 8px;
+	margin-top: 18px;
+	color: #344054;
+	font-size: 13px;
+	font-weight: 800;
+}
+
+.mcast-guest-ui__input-wrap[hidden] { display: none; }
+
+.mcast-guest-ui__input-wrap input {
+	width: 100%;
+	min-height: 48px;
+	padding: 0 13px;
+	border: 1px solid #98a2b3;
+	border-radius: 10px;
+	background: #fff;
+	color: var(--mcast-ui-ink);
+	font: inherit;
+	font-size: 15px;
+	outline: none;
+}
+
+.mcast-guest-ui__input-wrap input:focus {
+	border-color: var(--mcast-ui-blue);
+	box-shadow: 0 0 0 4px rgba(23, 105, 224, .12);
+}
+
+.mcast-guest-ui__actions {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+	gap: 10px;
+	margin-top: 22px;
+}
+
+.mcast-guest-ui__button {
+	min-height: 48px;
+	padding: 0 18px;
+	border: 1px solid var(--mcast-ui-line);
+	border-radius: 11px;
+	background: #fff;
+	color: #344054;
+	font: inherit;
+	font-size: 14px;
+	font-weight: 850;
+	cursor: pointer;
+}
+
+.mcast-guest-ui__button--primary {
+	border-color: var(--mcast-ui-blue);
+	background: var(--mcast-ui-blue);
+	color: #fff;
+	box-shadow: 0 10px 24px rgba(23, 105, 224, .20);
+}
+
+.mcast-guest-ui__button--primary:hover { background: var(--mcast-ui-blue-dark); }
+.mcast-guest-ui__button--danger { border-color: var(--mcast-ui-danger); background: var(--mcast-ui-danger); color: #fff; }
+
+@media (max-width: 640px), (hover: none), (pointer: coarse) {
+	.mcast-guest-ui__toasts {
+		left: 14px;
+		right: 14px;
+		bottom: calc(14px + env(safe-area-inset-bottom));
+		width: auto;
+	}
+
+	.mcast-guest-ui__backdrop {
+		align-items: end;
+		padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+	}
+
+	.mcast-guest-ui__dialog {
+		width: 100%;
+		max-height: calc(100dvh - 28px - env(safe-area-inset-bottom));
+		padding: 22px;
+		border-radius: 22px;
+	}
+
+	.mcast-guest-ui__signal {
+		margin-top: 22px;
+	}
+
+	.mcast-guest-ui__actions {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.mcast-guest-ui__toast { transition: none; }
+}

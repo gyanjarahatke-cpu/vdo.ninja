@@ -1,6 +1,7 @@
 const { test, expect } = require("@playwright/test");
+const { installInvite, inviteUrl } = require("./mcast-playwright-invite");
 
-const baseUrl = process.env.MCAST_TEST_URL || "http://127.0.0.1:8089/g/?push=mcast-desktop-regression&room=mcast-desktop-regression";
+const baseUrl = process.env.MCAST_TEST_URL || inviteUrl("DSK00001");
 
 test.use({
 	viewport: { width: 1440, height: 920 },
@@ -15,10 +16,11 @@ test.use({
 });
 
 test("desktop setup is light, simple, and icon-first", async ({ page }) => {
+	await installInvite(page, { code: "DSK00001" });
 	await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastDesktopGuest")).toBeVisible();
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
-	await expect(page.locator("#mcastDesktopGuest").getByText("Let’s set up your studio")).toBeVisible();
+	await expect(page.locator("#mcastDesktopSetupTitle")).toHaveText("Let’s set up your studio");
 	await expect(page.locator("#mcastDesktopGuest").getByText("Backstage check")).toHaveCount(0);
 	await expect(page.locator(".mcast-desktop__setup-card")).toBeVisible();
 	await expect(page.locator("#mcastDesktopMicToggle svg")).toBeVisible();
@@ -68,7 +70,8 @@ test("desktop setup is light, simple, and icon-first", async ({ page }) => {
 });
 
 test("desktop joins backstage with compact icon controls", async ({ page }) => {
-	await page.goto(baseUrl + "&case=join", { waitUntil: "domcontentloaded" });
+	await installInvite(page, { code: "DSK00001" });
+	await page.goto(baseUrl + "?case=join", { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
 	await page.locator("#mcastDesktopPreviewButton").click();
 	await expect.poll(() => page.locator("#mcastDesktopPreviewSurface video").evaluate((video) => !!video.srcObject), {
@@ -151,7 +154,8 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 });
 
 test("desktop camera errors use the branded MCast recovery modal", async ({ page }) => {
-	await page.goto(baseUrl + "&case=camera-error", { waitUntil: "domcontentloaded" });
+	await installInvite(page, { code: "DSK00001" });
+	await page.goto(baseUrl + "?case=camera-error", { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
 	await page.evaluate(() => {
 		window.previewWebcam = function () {
@@ -161,14 +165,16 @@ test("desktop camera errors use the branded MCast recovery modal", async ({ page
 		};
 	});
 	await page.locator("#mcastDesktopPreviewButton").click();
-	await expect(page.locator("#mcastDesktopCameraErrorModal")).toBeVisible({ timeout: 6000 });
-	await expect(page.locator("#mcastDesktopCameraErrorTitle")).toHaveText("Camera could not start");
-	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Your camera may already be used by another app");
-	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Try again");
-	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Choose another camera");
-	await expect(page.locator("#mcastDesktopCameraErrorModal")).toContainText("Join without camera");
-	await expect(page.locator("#mcastDesktopCameraErrorModal")).not.toContainText("Raw internal device busy detail");
+	const recovery = page.locator("#mcastGuestUiRoot [data-mcast-dialog-backdrop]");
+	await expect(recovery).toBeVisible({ timeout: 6000 });
+	await expect(recovery.locator("[data-mcast-dialog-title]")).toHaveText("The camera and microphone could not start");
+	await expect(recovery).toContainText("Another app or browser tab may be using the device");
+	await expect(recovery).toContainText("Try again");
+	await expect(recovery).toContainText("Open settings");
+	await expect(recovery).toContainText("Join without camera");
+	await expect(recovery).not.toContainText("Raw internal device busy detail");
+	await expect(page.locator(".alertModal:visible, .promptModal:visible, #popupSelector:visible")).toHaveCount(0);
 
-	await page.locator("#mcastDesktopChooseCameraButton").click();
+	await recovery.getByRole("button", { name: "Open settings" }).click();
 	await expect(page.locator("#mcastDesktopSettingsPanel")).toBeVisible();
 });

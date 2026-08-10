@@ -6,130 +6,152 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const routeScript = fs.readFileSync(path.join(__dirname, "..", "mcast-route.js"), "utf8");
-const guestLoader = fs.readFileSync(path.join(__dirname, "..", "mcast-guest.html"), "utf8");
-const rootNotFoundLoader = fs.readFileSync(path.join(__dirname, "..", "404.html"), "utf8");
-const streamGuestIndexLoader = fs.readFileSync(path.join(__dirname, "..", "s", "index.html"), "utf8");
-const streamGuestNotFoundLoader = fs.readFileSync(path.join(__dirname, "..", "s", "404.html"), "utf8");
+const root = path.join(__dirname, "..");
+const routeScript = fs.readFileSync(path.join(root, "mcast-route.js"), "utf8");
+const guestLoader = fs.readFileSync(path.join(root, "mcast-guest.html"), "utf8");
+const guestEngine = fs.readFileSync(path.join(root, "g", "index.html"), "utf8");
+const sharedUi = fs.readFileSync(path.join(root, "g", "shared", "McastGuestUi.js"), "utf8");
+const sharedCss = fs.readFileSync(path.join(root, "g", "shared", "McastGuestUi.css"), "utf8");
+const desktopShell = fs.readFileSync(path.join(root, "g", "desktop", "DesktopRoomShell.js"), "utf8");
+const mobileShell = fs.readFileSync(path.join(root, "g", "mobile", "MobileRoomShell.js"), "utf8");
+const mainCss = fs.readFileSync(path.join(root, "main.css"), "utf8");
+const notFound = fs.readFileSync(path.join(root, "404.html"), "utf8");
 
 function createStorage() {
 	const store = new Map();
 	return {
-		getItem(key) {
-			return store.has(key) ? store.get(key) : null;
-		},
-		setItem(key, value) {
-			store.set(key, String(value));
-		},
-		removeItem(key) {
-			store.delete(key);
-		}
+		getItem(key) { return store.has(key) ? store.get(key) : null; },
+		setItem(key, value) { store.set(key, String(value)); },
+		removeItem(key) { store.delete(key); },
+		keys() { return Array.from(store.keys()); }
 	};
 }
 
-function runRoute({ pathname, search, resolvedQuery }) {
+function createClassList() {
+	const values = new Set();
+	return {
+		add(...items) { items.forEach((item) => values.add(item)); },
+		contains(item) { return values.has(item); },
+		values
+	};
+}
+
+function runRoute({ pathname, search = "", payload = null, resolvedCallQuery = "" }) {
 	const requests = [];
 	const historyUpdates = [];
-	const classList = new Set();
-	const sessionStorage = createStorage();
+	const routeErrors = [];
+	const configuredRoutes = [];
+	const classList = createClassList();
 	const localStorage = createStorage();
-	const context = {
-		URLSearchParams,
-		JSON,
-		Math,
-		Date,
-		Uint8Array,
-		console: {
-			warn() {},
-			error() {},
-			log() {}
-		},
-		session: {},
-		document: {
-			title: "",
-			documentElement: {
-				classList: {
-					add(value) {
-						classList.add(value);
-					}
-				}
-			},
-			body: {
-				appendChild() {}
-			},
-			createElement() {
-				return {
-					id: "",
-					style: {},
-					className: "",
-				 textContent: "",
-					appendChild() {}
-				};
-			}
-		},
-		window: {
-			location: {
-				pathname,
-				search,
-				hash: "",
-				origin: "https://vn.mcaststudio.com"
-			},
-			history: {
-				replaceState(_state, _title, nextUrl) {
-					historyUpdates.push(nextUrl);
-				}
-			},
-			sessionStorage,
-			localStorage,
-			crypto: {
-				getRandomValues(values) {
-					for (let index = 0; index < values.length; index++) {
-						values[index] = index + 1;
-					}
-					return values;
-				}
-			}
-		},
-		XMLHttpRequest: function XMLHttpRequestMock() {
-			this.headers = {};
-			this.status = 200;
-			this.open = (method, url) => {
-				this.method = method;
-				this.url = url;
-				requests.push({ method, url });
-			};
-			this.setRequestHeader = (key, value) => {
-				this.headers[key] = value;
-			};
-			this.send = () => {
-				this.responseText = JSON.stringify({ query: resolvedQuery });
+	const sessionStorage = createStorage();
+	const session = {};
+	const elements = new Map();
+	const document = {
+		title: "",
+		readyState: "complete",
+		documentElement: { classList, dataset: {} },
+		body: { appendChild(element) { if (element.id) { elements.set(element.id, element); } } },
+		head: { appendChild(element) { if (element.id) { elements.set(element.id, element); } } },
+		querySelector() { return null; },
+		getElementById(id) { return elements.get(id) || null; },
+		addEventListener() {},
+		createElement(tagName) {
+			return {
+				tagName: String(tagName || "").toUpperCase(),
+				id: "",
+				style: {},
+				className: "",
+				textContent: "",
+				appendChild() {},
+				addEventListener() {},
+				setAttribute() {}
 			};
 		}
 	};
-	context.window.window = context.window;
-	context.window.document = context.document;
-	context.window.console = context.console;
-	context.window.XMLHttpRequest = context.XMLHttpRequest;
-	context.window.URLSearchParams = URLSearchParams;
-	context.window.JSON = JSON;
-	context.window.Uint8Array = Uint8Array;
-	context.window.MCastRoute = undefined;
-	context.globalThis = context.window;
-	context.self = context.window;
+	const window = {
+		location: {
+			pathname,
+			search,
+			hash: "",
+			origin: "https://co.mcaststudio.com"
+		},
+		history: {
+			replaceState(_state, _title, nextUrl) { historyUpdates.push(nextUrl); }
+		},
+		localStorage,
+		sessionStorage,
+		session,
+		crypto: {
+			getRandomValues(values) {
+				for (let index = 0; index < values.length; index++) { values[index] = index + 1; }
+				return values;
+			}
+		},
+		MCastGuestUi: {
+			isOwnedRoute() { return true; },
+			configureRoute(route) { configuredRoutes.push(route); },
+			showRouteError(message) { routeErrors.push(message); }
+		}
+	};
+	if (payload) { window.__MCastResolvedGuestRoute = payload; }
+	window.window = window;
+	window.document = document;
+	window.console = { warn() {}, error() {}, log() {} };
+
+	function XMLHttpRequestMock() {
+		this.status = 200;
+		this.responseText = JSON.stringify({ query: resolvedCallQuery });
+		this.open = (method, url, async) => {
+			this.method = method;
+			this.url = url;
+			requests.push({ method, url, async });
+		};
+		this.setRequestHeader = () => {};
+		this.send = () => {};
+	}
+
+	const context = {
+		window,
+		document,
+		session,
+		URLSearchParams,
+		XMLHttpRequest: XMLHttpRequestMock,
+		Uint8Array,
+		console: window.console,
+		setTimeout,
+		clearTimeout
+	};
+	context.globalThis = context;
+	context.self = window;
 	vm.createContext(context);
 	vm.runInContext(routeScript, context, { filename: "mcast-route.js" });
 
 	return {
 		requests,
 		historyUpdates,
-		classList,
-		session: context.session,
-		route: context.window.MCastRoute,
-		storedRoute: sessionStorage.getItem("mcastResolvedGuestRoute")
+		routeErrors,
+		configuredRoutes,
+		classes: classList.values,
+		localStorage,
+		sessionStorage,
+		session,
+		route: window.MCastRoute,
+		preloadedPayload: window.__MCastResolvedGuestRoute
 	};
 }
 
-const resolvedQuery = [
+function paramsFromSession(result) {
+	assert.ok(result.session.decrypted, "route must provide the validated query to the private engine");
+	return new URLSearchParams(result.session.decrypted.replace(/^\?/, ""));
+}
+
+function assertNoAutostart(params, label) {
+	["autostart", "autojoin", "aj", "as", "mcastautojoin", "mcastrequestedautostart"].forEach((key) => {
+		assert.strictEqual(params.has(key), false, `${label} must not request media without an explicit user action`);
+	});
+}
+
+const guestQuery = [
 	"room=secureRoom",
 	"push=guestKey",
 	"webcam",
@@ -145,59 +167,206 @@ const resolvedQuery = [
 	"broadcasttransfer=1"
 ].join("&");
 
-const result = runRoute({
-	pathname: "/s/ABC123",
-	search: "",
-	resolvedQuery
+const guest = runRoute({
+	pathname: "/s/ABC12345",
+	payload: { code: "ABC12345", query: guestQuery }
+});
+const guestParams = paramsFromSession(guest);
+assert.strictEqual(guest.requests.length, 0, "the private engine must consume only the loader-validated payload");
+assert.deepStrictEqual(guest.historyUpdates, [], "the opaque branded invite URL must remain visible");
+assert.strictEqual(guestParams.get("room"), "secureRoom");
+assert.strictEqual(guestParams.get("push"), "guestKey");
+assert.strictEqual(guestParams.get("l"), "Guest One");
+assertNoAutostart(guestParams, "guest route");
+assert.strictEqual(guestParams.get("chatbutton"), "off");
+assert.ok(guestParams.has("nofileshare"));
+assert.strictEqual(guestParams.get("mcastdisableauxui"), "1");
+["chat", "chatlite", "fileshare", "broadcasttransfer"].forEach((key) => assert.strictEqual(guestParams.has(key), false));
+assert.strictEqual(guest.route.route, "guest");
+assert.strictEqual(guest.route.mode, "meeting");
+assert.strictEqual(guest.route.guestName, "Guest One");
+assert.ok(guest.classes.has("mcast-route-guest"));
+assert.strictEqual(guest.configuredRoutes.length, 1, "the shared MCast UI must receive authoritative route metadata");
+assert.strictEqual(guest.preloadedPayload, undefined, "decoded guest route data must be consumed once and removed");
+assert.deepStrictEqual(guest.sessionStorage.keys(), [], "route credentials must never be persisted in browser session storage");
+
+const missingPayload = runRoute({
+	pathname: "/s/ABC12345",
+	search: "?room=rawRoom&push=rawGuest&autostart"
+});
+assert.strictEqual(missingPayload.session.decrypted, undefined, "raw public query parameters must not enter the engine");
+assert.strictEqual(missingPayload.routeErrors.length, 1, "missing loader authorization must fail through branded UI");
+
+const directToken = runRoute({ pathname: "/s/ABC12345", search: "?t=v1.secret" });
+assert.strictEqual(directToken.session.decrypted, undefined, "direct public tokens must not be accepted");
+assert.strictEqual(directToken.requests.length, 0, "the engine must not expose a direct-token resolver");
+
+const remoteCases = [
+	{
+		path: "/s/CAMERA1",
+		code: "CAMERA1",
+		kind: "remote_camera",
+		query: "room=remoteRoom&push=cameraFeed&mcastmode=stream_guest&mcastremote=remote_camera&autostart",
+		assertParams(params) {
+			assert.ok(params.has("webcam"));
+			assert.strictEqual(params.has("miconly"), false);
+			assert.strictEqual(params.has("screenshare"), false);
+		}
+	},
+	{
+		path: "/s/AUDIO001",
+		code: "AUDIO001",
+		kind: "remote_audio",
+		query: "room=remoteRoom&push=audioFeed&mcastmode=stream_guest&mcastremote=remote_audio&autostart",
+		assertParams(params) {
+			assert.ok(params.has("webcam"));
+			assert.ok(params.has("miconly"));
+			assert.strictEqual(params.has("screenshare"), false);
+		}
+	},
+	{
+		path: "/s/SCREEN01",
+		code: "SCREEN01",
+		kind: "remote_screen",
+		query: "room=remoteRoom&push=screenFeed&screenshareid=screenFeed&mcastmode=stream_guest&mcastremote=remote_screen&autostart",
+		assertParams(params) {
+			assert.ok(params.has("screenshare"));
+			assert.strictEqual(params.get("push"), "screenFeed");
+			assert.strictEqual(params.has("webcam"), false);
+		}
+	}
+];
+
+remoteCases.forEach((testCase) => {
+	const result = runRoute({
+		pathname: testCase.path,
+		payload: { code: testCase.code, query: testCase.query }
+	});
+	const params = paramsFromSession(result);
+	assert.strictEqual(result.route.remoteSourceKind, testCase.kind);
+	assert.ok(result.classes.has(`mcast-remote-${testCase.kind.replace(/^remote_/, "")}`));
+	assertNoAutostart(params, `${testCase.kind} route`);
+	testCase.assertParams(params);
 });
 
-assert.strictEqual(result.requests.length, 1, "short invite should resolve once");
-assert.match(result.requests[0].url, /vdoShortInviteResolve\?code=ABC123$/, "short code should be sent to resolver");
-assert.deepStrictEqual(result.historyUpdates, [], "short branded path must remain visible");
-assert.ok(result.session.decrypted, "route must pass params internally via session.decrypted");
+const unsupportedRemote = runRoute({
+	pathname: "/s/CAMERA1",
+	payload: {
+		code: "CAMERA1",
+		query: "room=remoteRoom&push=unknownFeed&mcastmode=stream_guest&mcastremote=remote_unknown"
+	}
+});
+assert.strictEqual(unsupportedRemote.session.decrypted, undefined, "unsupported remote source kinds must fail closed");
+assert.strictEqual(unsupportedRemote.routeErrors.length, 1);
 
-const internalParams = new URLSearchParams(result.session.decrypted.replace(/^\?/, ""));
-assert.strictEqual(internalParams.get("room"), "secureRoom", "room param should reach VideoNinja engine");
-assert.strictEqual(internalParams.get("push"), "guestKey", "push param should reach VideoNinja engine");
-assert.strictEqual(internalParams.get("l"), "Guest One", "guest label should be normalized internally");
-assert.ok(internalParams.has("webcam"), "webcam flag should be preserved");
-assert.strictEqual(internalParams.has("autostart"), false, "guest flow must not auto-request permissions");
-assert.strictEqual(internalParams.get("mcastrequestedautostart"), "1", "autostart intent should be preserved safely");
-assert.strictEqual(internalParams.get("chatbutton"), "off", "chat must be disabled internally");
-assert.ok(internalParams.has("nofileshare"), "file sharing must be disabled internally");
-assert.strictEqual(internalParams.get("mcastdisableauxui"), "1", "guest aux UI disable flag should be passed internally");
-assert.strictEqual(internalParams.has("chat"), false, "chat enable param must be stripped");
-assert.strictEqual(internalParams.has("chatlite"), false, "chat-lite enable param must be stripped");
-assert.strictEqual(internalParams.has("fileshare"), false, "file-share enable param must be stripped");
-assert.strictEqual(internalParams.has("broadcasttransfer"), false, "transfer enable param must be stripped");
+const remoteOnAuthoritativePath = runRoute({
+	pathname: "/s/REMOTE01",
+	payload: {
+		code: "REMOTE01",
+		query: "room=remoteRoom&push=cameraFeed&mcastmode=stream_guest&mcastremote=remote_camera"
+	}
+});
+assert.strictEqual(remoteOnAuthoritativePath.route.remoteSourceKind, "remote_camera", "all remote source experiences must use the authoritative short-link path");
+assert.strictEqual(paramsFromSession(remoteOnAuthoritativePath).get("push"), "cameraFeed");
 
-assert.strictEqual(result.route.route, "guest", "MCast route metadata should mark guest flow");
-assert.strictEqual(result.route.mode, "meeting", "MCast mode metadata should survive");
-assert.ok(result.classList.has("mcast-route-guest"), "guest route class should be applied");
-assert.ok(result.storedRoute, "resolved route should be stored for refresh recovery");
+const call = runRoute({
+	pathname: "/vcall/",
+	search: "?r=ROOM1234",
+	resolvedCallQuery: "room=secureRoom&mcastbridge&mcastmode=meeting&mcastrole=source"
+});
+const callParams = paramsFromSession(call);
+assert.strictEqual(call.requests.length, 1);
+assert.match(call.requests[0].url, /vdoRoomTicketResolve\?code=ROOM1234$/);
+assert.strictEqual(call.requests[0].async, false, "the protected internal engine bootstrap remains synchronous");
+assert.deepStrictEqual(call.historyUpdates, ["/vcall/"], "internal room ticket must be removed from the visible URL");
+assert.ok(callParams.has("showdirector"));
+assert.ok(callParams.has("mutespeaker"));
+assert.ok(callParams.has("autostart"));
+assert.strictEqual(callParams.get("quality"), "0");
 
-assert.ok(/fetch\("\/g\/index\.html"/.test(guestLoader), "short URL loader should fetch the guest engine document");
-assert.ok(/document\.write\(prepared\)/.test(guestLoader), "short URL loader should inject the guest engine document");
+assert.ok(guestLoader.includes('var resolverUrl = "/api/vdoShortInviteResolve"'));
+assert.ok(guestLoader.includes('fetch(resolverUrl + "?code="'));
+assert.ok(guestLoader.includes('credentials: "same-origin"'));
+assert.ok(guestLoader.includes('fetch("/g/index.html"'));
+assert.ok(guestLoader.includes("__MCastResolvedGuestRoute"));
+assert.ok(
+	guestLoader.includes("replace(/</g,") && guestLoader.includes("\\\\u003c"),
+	"loader bootstrap must neutralize script-breaking payload text"
+);
+assert.ok(!guestLoader.includes("vdoTokenResolve"));
+assert.ok(!guestLoader.includes("sessionStorage"));
+assert.ok(!guestLoader.includes("history.replaceState"));
+assert.ok(!guestLoader.includes("window.location.replace"));
+assert.ok(!guestLoader.includes("g|m|c|s|p|i|rv|ra|rs"), "the loader must not retain legacy route aliases");
+assert.ok(!routeScript.includes('params.get("t")'));
+assert.ok(!routeScript.includes("mcastResolvedGuestRoute"));
+assert.ok(!routeScript.includes("vdoTokenResolve"));
+assert.ok(!routeScript.includes("g|m|c|s|p|i|rv|ra|rs"), "the engine must not retain legacy route aliases");
+
 const ensureRootBaseStart = guestLoader.indexOf("function ensureRootBase(html) {");
-const ensureRootBaseEnd = guestLoader.indexOf("\n\n\t\t\t\tfunction setMessage", ensureRootBaseStart);
-assert.notStrictEqual(ensureRootBaseStart, -1, "short URL loader should define root base preparation");
-assert.notStrictEqual(ensureRootBaseEnd, -1, "short URL loader root base preparation should be extractable");
+const ensureRootBaseEnd = guestLoader.indexOf("\n\n\t\t\t\tfunction showFailure", ensureRootBaseStart);
+assert.notStrictEqual(ensureRootBaseStart, -1);
+assert.notStrictEqual(ensureRootBaseEnd, -1);
 const ensureRootBaseContext = {};
 vm.createContext(ensureRootBaseContext);
-vm.runInContext(guestLoader.slice(ensureRootBaseStart, ensureRootBaseEnd), ensureRootBaseContext, { filename: "mcast-guest.ensureRootBase.js" });
-const preparedWithoutBase = ensureRootBaseContext.ensureRootBase("<!doctype html><html><head><title>Guest</title></head><body></body></html>");
-assert.match(preparedWithoutBase, /<head><base href="\/">/, "short URL loader must add a root base when the engine document has none");
-assert.strictEqual((preparedWithoutBase.match(/<base href="\/">/g) || []).length, 1, "short URL loader must add exactly one root base");
-const preparedWithBase = ensureRootBaseContext.ensureRootBase("<!doctype html><html><head><base href=\"./g/\"><title>Guest</title></head><body></body></html>");
-assert.match(preparedWithBase, /<base href="\/">/, "short URL loader must replace an existing relative base with the root base");
-assert.strictEqual((preparedWithBase.match(/<base href="\/">/g) || []).length, 1, "short URL loader must keep exactly one root base");
-assert.ok(!/window\.location\.replace\(target\.href/.test(guestLoader), "short URL loader must not redirect away from branded URL");
-[
-	rootNotFoundLoader,
-	streamGuestIndexLoader,
-	streamGuestNotFoundLoader
-].forEach((loader) => {
-	assert.ok(loader.includes('fetch("/mcast-guest.html?v=3"'), "short URL entry loaders must fetch the cache-busted guest loader");
+vm.runInContext(guestLoader.slice(ensureRootBaseStart, ensureRootBaseEnd), ensureRootBaseContext, {
+	filename: "mcast-guest.ensureRootBase.js"
 });
+const preparedWithoutBase = ensureRootBaseContext.ensureRootBase("<!doctype html><html><head><title>Guest</title></head><body></body></html>");
+assert.match(preparedWithoutBase, /<head><base href="\/">/);
+assert.strictEqual((preparedWithoutBase.match(/<base href="\/">/g) || []).length, 1);
+const preparedWithBase = ensureRootBaseContext.ensureRootBase("<!doctype html><html><head><base href=\".\/g\/\"><title>Guest</title></head><body></body></html>");
+assert.match(preparedWithBase, /<base href="\/">/);
+assert.strictEqual((preparedWithBase.match(/<base href="\/">/g) || []).length, 1);
 
-console.log("MCast route regression passed");
+["s", "m", "c", "p", "i", "w"].forEach((routeDirectory) => {
+	assert.strictEqual(fs.existsSync(path.join(root, routeDirectory, "index.html")), false, `${routeDirectory} must not own a parallel loader`);
+	assert.strictEqual(fs.existsSync(path.join(root, routeDirectory, "404.html")), false, `${routeDirectory} must not own a parallel not-found loader`);
+});
+assert.ok(!notFound.includes("mcast-guest.html"), "root not-found page must not behave as another invite loader");
+
+const sharedUiIndex = guestEngine.indexOf("./g/shared/McastGuestUi.js");
+const adapterIndex = guestEngine.indexOf("./thirdparty/adapter.js");
+const routeIndex = guestEngine.indexOf("./mcast-route.js");
+const engineSessionIndex = guestEngine.indexOf("./lib.js");
+const engineStartupIndex = guestEngine.indexOf("./main.js");
+assert.ok(
+	sharedUiIndex >= 0 && adapterIndex > sharedUiIndex && engineSessionIndex > sharedUiIndex && routeIndex > engineSessionIndex && engineStartupIndex > routeIndex,
+	"startup order must be branded UI, engine session, validated route, then engine startup"
+);
+assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || []).length, 1);
+assert.ok(!/document\.write|Internet Explorer|\balert\s*\(/i.test(guestEngine), "private engine startup must not own browser warnings or rewrite the document");
+assert.match(guestEngine, /<html[^>]+mcast-owned-guest-ui/);
+assert.match(guestEngine, /<body[^>]+mcast-owned-guest-ui/);
+assert.ok(sharedUi.includes("installLegacyUiQuarantine"));
+assert.ok(sharedUi.includes("quarantineLegacyNodes(document.body, false)"));
+assert.ok(sharedUi.includes("isActiveLegacyUi"));
+assert.ok(sharedUi.includes("installLegacyBrowserDialogGuard"));
+assert.ok(sharedUi.includes("captureEngineMessage"));
+assert.ok(sharedUi.includes("showMediaError"));
+assert.ok(sharedUi.includes("mcast:open-settings"));
+assert.ok(sharedUi.includes("lockRouteErrorTitle"), "route failures must keep an MCast-owned browser title");
+assert.ok(!sharedUi.includes("g|m|c|s|p|i|rv|ra|rs"), "shared UI must not retain legacy route aliases");
+assert.ok(sharedCss.includes('[data-mcast-upstream-ui="quarantined"]'));
+assert.ok(sharedCss.includes("body > *:not(#mcastDesktopGuest):not(#mcastMobileGuest):not(#mcastGuestUiRoot)"));
+assert.ok(!mainCss.includes("MCast native guest route"), "discarded parallel guest restyle must stay removed");
+assert.ok(!mainCss.includes("body.mcast-native-guest"), "main engine stylesheet must not own the MCast guest shell");
+
+[desktopShell, mobileShell].forEach((shell) => {
+	assert.ok(shell.includes("MCastGuestUi"), "each responsive shell must use the shared branded UI authority");
+	assert.ok(shell.includes('addEventListener("mcast:open-settings"'));
+	assert.ok(shell.includes("state.boundLocalVideo === video"));
+	assert.ok(shell.includes("state.boundLocalStream === stream"));
+	assert.ok(shell.includes("state.boundLocalSurface === surface"));
+	assert.ok(
+		!/setStatus\s*\(\s*error\.message|textContent\s*=\s*error\.message|innerHTML\s*=\s*error\.message/.test(shell),
+		"raw media errors must not be rendered by a shell"
+	);
+	assert.ok(!/VDO\.Ninja|Video\s*Ninja/i.test(shell), "custom shell copy must remain MCast-owned");
+});
+assert.ok(
+	desktopShell.includes("if (state.previewStarted || state.joined)"),
+	"desktop polling must not touch the private engine video before the user starts media"
+);
+
+console.log("MCast short-route and branded-UI regression passed");

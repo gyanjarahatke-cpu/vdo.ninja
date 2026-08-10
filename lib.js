@@ -1633,6 +1633,9 @@ async function delay(ms) {
 
 var Prompts = {};
 async function promptAlt(inputText, block = false, asterix = false, value = false, time = false, recording = false, hotkey = false, field = null) {
+	if (window.MCastGuestUi && window.MCastGuestUi.isOwnedRoute() && typeof window.MCastGuestUi.promptEngineAction === "function") {
+		return window.MCastGuestUi.promptEngineAction(inputText, { password: !!asterix, value: value || "" });
+	}
 	var result = null;
 	if (session.beepToNotify) {
 		playtone();
@@ -2588,6 +2591,9 @@ function youreWaitingToBeActivated() {
 }
 
 async function confirmAlt(inputText, block = false, context = null) {
+	if (window.MCastGuestUi && window.MCastGuestUi.isOwnedRoute() && typeof window.MCastGuestUi.confirmEngineAction === "function") {
+		return window.MCastGuestUi.confirmEngineAction(inputText, { block: !!block, context: context });
+	}
 	var result = null;
 	if (session.beepToNotify) {
 		playtone();
@@ -2733,6 +2739,11 @@ function warnUser(message, timeout = false, sanitize = true, modalID = false) {
 	// to block the previous modal
 	if (!message) {
 		return;
+	}
+	if (window.MCastGuestUi && window.MCastGuestUi.isOwnedRoute() && typeof window.MCastGuestUi.captureEngineMessage === "function") {
+		var delegatedModalID = modalID || Math.floor(Math.random() * 999) + 1000;
+		window.MCastGuestUi.captureEngineMessage(message, { timeout: timeout, sanitize: sanitize, modalID: delegatedModalID });
+		return delegatedModalID;
 	}
 
 	if (document.getElementById("modalBackdrop")) {
@@ -19775,6 +19786,10 @@ var toggleSettingsState = false;
 let settingsClickHandler = null;
 
 async function toggleSettings(forceShow = false) {
+	if (window.MCastGuestUi && window.MCastGuestUi.isOwnedRoute() && typeof window.MCastGuestUi.openSettings === "function") {
+		window.MCastGuestUi.openSettings();
+		return;
+	}
 	if (session.nosettings) return;
 
 	const multiselectTrigger = getById("multiselect-trigger3");
@@ -50434,6 +50449,10 @@ function gotDevices3(deviceInfos, vid) {
 }
 
 function popupMessage(e, message = "Copied to Clipboard") {
+	if (window.MCastGuestUi && window.MCastGuestUi.isOwnedRoute() && typeof window.MCastGuestUi.showToast === "function") {
+		window.MCastGuestUi.showToast(message, { kind: "success" });
+		return;
+	}
 	// right click menu
 
 	var posx = 0;
