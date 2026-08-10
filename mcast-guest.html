@@ -206,9 +206,18 @@
 					return;
 				}
 
-				resolveInvite(code)
-					.then(function (payload) { return loadGuestEngine(code, payload); })
+				startGuestLoad(code)
 					.catch(function (error) { showFailure(error && error.kind || "unavailable"); });
+
+				function startGuestLoad(inviteCode) {
+					setStatus("Preparing your devices", "Loading the MCast Studio guest experience.");
+					return Promise.all([
+						resolveInvite(inviteCode),
+						fetchGuestEngine()
+					]).then(function (results) {
+						return loadGuestEngine(inviteCode, results[0], results[1]);
+					});
+				}
 
 				function readInviteCode() {
 					var params = new URLSearchParams(window.location.search || "");
@@ -241,8 +250,7 @@
 					}).finally(function () { window.clearTimeout(timer); });
 				}
 
-				function loadGuestEngine(inviteCode, payload) {
-					setStatus("Preparing your devices", "Loading the MCast Studio guest experience.");
+				function fetchGuestEngine() {
 					return fetch("/g/index.html", {
 						credentials: "same-origin",
 						cache: "no-store",
@@ -250,12 +258,14 @@
 					}).then(function (response) {
 						if (!response.ok) { throw createFailure("unavailable"); }
 						return response.text();
-					}).then(function (html) {
-						var prepared = prepareEngineHtml(html, { code: inviteCode, query: payload.query });
-						document.open();
-						document.write(prepared);
-						document.close();
 					});
+				}
+
+				function loadGuestEngine(inviteCode, payload, html) {
+					var prepared = prepareEngineHtml(html, { code: inviteCode, query: payload.query });
+					document.open();
+					document.write(prepared);
+					document.close();
 				}
 
 				function prepareEngineHtml(html, routePayload) {

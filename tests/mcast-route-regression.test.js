@@ -289,6 +289,11 @@ assert.ok(guestLoader.includes('var resolverUrl = "/api/vdoShortInviteResolve"')
 assert.ok(guestLoader.includes('fetch(resolverUrl + "?code="'));
 assert.ok(guestLoader.includes('credentials: "same-origin"'));
 assert.ok(guestLoader.includes('fetch("/g/index.html"'));
+assert.match(
+	guestLoader,
+	/Promise\.all\(\[\s*resolveInvite\(inviteCode\),\s*fetchGuestEngine\(\)\s*\]\)/,
+	"invite resolution and engine download must start concurrently"
+);
 assert.ok(guestLoader.includes("__MCastResolvedGuestRoute"));
 assert.ok(
 	guestLoader.includes("replace(/</g,") && guestLoader.includes("\\\\u003c"),
@@ -346,10 +351,11 @@ assert.ok(guestEngine.includes('./g/shared/McastGuestUi.js?v=9'));
 assert.ok(guestEngine.includes('./g/shared/McastGuestUi.css?v=3'));
 assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=15'));
 assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=22'));
-assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=12'));
-assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=19'));
-assert.strictEqual((guestEngine.match(/data-mcast-notice-rail/g) || []).length, 5, "every active shell header must own a notice rail");
-assert.strictEqual((guestEngine.match(/data-mcast-footer-rail/g) || []).length, 5, "every active shell must own a non-overlapping footer rail");
+assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=13'));
+assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=20'));
+assert.strictEqual((guestEngine.match(/data-mcast-notice-rail/g) || []).length, 4, "every reachable shell header must own a notice rail");
+assert.strictEqual((guestEngine.match(/data-mcast-footer-rail/g) || []).length, 4, "every reachable shell must own a non-overlapping footer rail");
+assert.ok(!guestEngine.includes('data-mobile-step="entering"'), "the removed artificial mobile delay must not leave a dead loading screen");
 assert.ok(!/mcastDesktopBackstageMessage|mcast-mobile__backstage-card|mcastMobileBackstageStatus/.test(guestEngine), "content-area notices must stay removed");
 assert.ok(!/document\.write|Internet Explorer|\balert\s*\(/i.test(guestEngine), "private engine startup must not own browser warnings or rewrite the document");
 assert.match(guestEngine, /<html[^>]+mcast-owned-guest-ui/);
@@ -394,5 +400,111 @@ assert.ok(
 	desktopShell.includes("if (state.previewStarted || state.joined)"),
 	"desktop polling must not touch the private engine video before the user starts media"
 );
+assert.ok(mobileShell.includes('setStep("permission");'), "mobile setup must be ready as soon as its shell initializes");
+assert.ok(!mobileShell.includes("}, 850);"), "mobile setup must not add an artificial preparation delay");
+assert.ok(!mobileShell.includes('step: "entering"'), "mobile state must not retain the removed artificial loading step");
 
-console.log("MCast short-route and branded-UI regression passed");
+function deferred() {
+	let resolve;
+	const promise = new Promise((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
+
+function createGuestLoaderHarness() {
+	const inlineScripts = Array.from(guestLoader.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi));
+	assert.ok(inlineScripts.length > 0, "guest loader must contain an executable bootstrap");
+	const loaderSource = inlineScripts[inlineScripts.length - 1][1];
+	const resolver = deferred();
+	const engine = deferred();
+	const requests = [];
+	const writes = [];
+	const classes = new Set();
+	const elements = {
+		"[data-card]": { classList: { add(value) { classes.add(value); } } },
+		"[data-title]": { textContent: "" },
+		"[data-message]": { textContent: "" },
+		"[data-eyebrow]": { textContent: "" },
+		"[data-retry]": { addEventListener() {} }
+	};
+	const document = {
+		querySelector(selector) { return elements[selector] || null; },
+		open() {},
+		write(value) { writes.push(String(value)); },
+		close() {}
+	};
+	const window = {
+		location: { pathname: "/s/LOAD0001", search: "", reload() {} },
+		setTimeout() { return 1; },
+		clearTimeout() {}
+	};
+	const fetch = (url) => {
+		requests.push(String(url));
+		return String(url).startsWith("/api/") ? resolver.promise : engine.promise;
+	};
+	window.document = document;
+	window.fetch = fetch;
+	window.window = window;
+	const context = {
+		window,
+		document,
+		fetch,
+		URLSearchParams,
+		encodeURIComponent,
+		console: { error() {}, warn() {}, log() {} }
+	};
+	context.globalThis = context;
+	context.self = window;
+	vm.createContext(context);
+	vm.runInContext(loaderSource, context, { filename: "mcast-guest.loader.js" });
+	return { resolver, engine, requests, writes, classes, elements };
+}
+
+async function flushPromises() {
+	for (let index = 0; index < 8; index++) { await Promise.resolve(); }
+	await new Promise((resolve) => setImmediate(resolve));
+}
+
+async function runLoaderConcurrencyRegression() {
+	const valid = createGuestLoaderHarness();
+	assert.deepStrictEqual(
+		valid.requests,
+		["/api/vdoShortInviteResolve?code=LOAD0001", "/g/index.html"],
+		"resolver and private engine fetch must begin in the same bootstrap turn"
+	);
+	valid.engine.resolve({
+		ok: true,
+		text() { return Promise.resolve('<!doctype html><html><head></head><body><script src="/mcast-route.js"></script></body></html>'); }
+	});
+	await flushPromises();
+	assert.strictEqual(valid.writes.length, 0, "downloaded engine text must remain inert until invite validation succeeds");
+	valid.resolver.resolve({
+		ok: true,
+		status: 200,
+		json() { return Promise.resolve({ query: "room=secure&push=guest&webcam" }); }
+	});
+	await flushPromises();
+	assert.strictEqual(valid.writes.length, 1, "a validated invite must install the private engine exactly once");
+	const bootstrapIndex = valid.writes[0].indexOf("__MCastResolvedGuestRoute");
+	const routeScriptIndex = valid.writes[0].indexOf('<script src="/mcast-route.js"></script>');
+	assert.ok(bootstrapIndex >= 0 && routeScriptIndex > bootstrapIndex, "validated payload must be installed before route execution");
+
+	const invalid = createGuestLoaderHarness();
+	invalid.engine.resolve({
+		ok: true,
+		text() { return Promise.resolve('<!doctype html><html><head></head><body><script src="/mcast-route.js"></script></body></html>'); }
+	});
+	invalid.resolver.resolve({ ok: false, status: 410, json() { return Promise.resolve({}); } });
+	await flushPromises();
+	assert.strictEqual(invalid.writes.length, 0, "an invalid invite must never install or execute the private engine");
+	assert.ok(invalid.classes.has("is-error"), "an invalid invite must stay on the branded failure screen");
+	assert.strictEqual(invalid.elements["[data-title]"].textContent, "This invite has expired");
+}
+
+runLoaderConcurrencyRegression().then(() => {
+	console.log("MCast short-route and branded-UI regression passed");
+}).catch((error) => {
+	console.error(error);
+	process.exitCode = 1;
+});
