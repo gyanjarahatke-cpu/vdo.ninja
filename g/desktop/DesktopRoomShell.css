@@ -420,12 +420,17 @@
 
 .mcast-desktop__preview video,
 .mcast-desktop__tile video {
-	position: static !important;
+	position: absolute !important;
+	inset: 0 !important;
+	display: block !important;
 	width: 100% !important;
 	height: 100% !important;
 	max-width: none !important;
 	max-height: none !important;
+	margin: 0 !important;
 	object-fit: cover !important;
+	transform: var(--mcast-desktop-video-transform, none) !important;
+	transform-origin: center center !important;
 	background: #050914;
 }
 
@@ -703,6 +708,7 @@
 
 .mcast-desktop__tile-label {
 	position: absolute;
+	z-index: 2;
 	left: 12px;
 	bottom: 12px;
 	max-width: calc(100% - 24px);

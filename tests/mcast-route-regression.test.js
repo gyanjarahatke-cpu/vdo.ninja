@@ -344,8 +344,8 @@ assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || [])
 assert.ok(guestEngine.includes('./main.js?ver=1066'), "the private engine must request the current managed runtime revision");
 assert.ok(guestEngine.includes('./g/shared/McastGuestUi.js?v=9'));
 assert.ok(guestEngine.includes('./g/shared/McastGuestUi.css?v=3'));
-assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=14'));
-assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=21'));
+assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=15'));
+assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=22'));
 assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=12'));
 assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=19'));
 assert.strictEqual((guestEngine.match(/data-mcast-notice-rail/g) || []).length, 5, "every active shell header must own a notice rail");
@@ -374,6 +374,7 @@ assert.ok(sharedCss.includes("body > *:not(#mcastDesktopGuest):not(#mcastMobileG
 assert.ok(sharedCss.includes("html:not(.mcast-route-error) .mcast-guest-ui__dialog"), "action-required messages must use the footer tray");
 assert.ok(sharedCss.includes('[data-mcast-footer-rail] > .mcast-guest-ui__backdrop'), "action-required messages must dock inside the active footer rail");
 assert.ok(sharedCss.includes("pointer-events: none"), "message chrome must not block the content surface");
+assert.ok(desktopShell.includes("syncLocalVideoPresentation"), "desktop media surfaces must discard upstream positioning transforms");
 assert.ok(!mainCss.includes("MCast native guest route"), "discarded parallel guest restyle must stay removed");
 assert.ok(!mainCss.includes("body.mcast-native-guest"), "main engine stylesheet must not own the MCast guest shell");
 

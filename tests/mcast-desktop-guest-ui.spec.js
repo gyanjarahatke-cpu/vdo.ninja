@@ -15,6 +15,40 @@ test.use({
 	}
 });
 
+async function expectVideoToCoverSurface(page, surfaceSelector) {
+	const geometry = await page.locator(surfaceSelector).evaluate((surface) => {
+		const video = surface.querySelector("video");
+		const surfaceRect = surface.getBoundingClientRect();
+		const videoRect = video && video.getBoundingClientRect();
+		const surfaceStyle = getComputedStyle(surface);
+		const videoStyle = video && getComputedStyle(video);
+		const borderLeft = parseFloat(surfaceStyle.borderLeftWidth) || 0;
+		const borderTop = parseFloat(surfaceStyle.borderTopWidth) || 0;
+		const borderRight = parseFloat(surfaceStyle.borderRightWidth) || 0;
+		const borderBottom = parseFloat(surfaceStyle.borderBottomWidth) || 0;
+		let translateY = 0;
+		if (videoStyle && videoStyle.transform && videoStyle.transform !== "none") {
+			translateY = new DOMMatrixReadOnly(videoStyle.transform).m42;
+		}
+		return {
+			hasVideo: !!video,
+			position: videoStyle && videoStyle.position,
+			objectFit: videoStyle && videoStyle.objectFit,
+			leftDelta: videoRect ? Math.abs(videoRect.left - (surfaceRect.left + borderLeft)) : Infinity,
+			topDelta: videoRect ? Math.abs(videoRect.top - (surfaceRect.top + borderTop)) : Infinity,
+			rightDelta: videoRect ? Math.abs(videoRect.right - (surfaceRect.right - borderRight)) : Infinity,
+			bottomDelta: videoRect ? Math.abs(videoRect.bottom - (surfaceRect.bottom - borderBottom)) : Infinity,
+			translateY
+		};
+	});
+	expect(geometry).toMatchObject({ hasVideo: true, position: "absolute", objectFit: "cover" });
+	expect(geometry.leftDelta).toBeLessThanOrEqual(1);
+	expect(geometry.topDelta).toBeLessThanOrEqual(1);
+	expect(geometry.rightDelta).toBeLessThanOrEqual(1);
+	expect(geometry.bottomDelta).toBeLessThanOrEqual(1);
+	expect(Math.abs(geometry.translateY)).toBeLessThan(0.01);
+}
+
 test("desktop setup is light, simple, and icon-first", async ({ page }) => {
 	await installInvite(page, { code: "DSK00001" });
 	await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
@@ -77,10 +111,12 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect.poll(() => page.locator("#mcastDesktopPreviewSurface video").evaluate((video) => !!video.srcObject), {
 		timeout: 10000
 	}).toBe(true);
+	await expectVideoToCoverSurface(page, "#mcastDesktopPreviewSurface");
 	await page.locator("#mcastDesktopGuestName").fill("Desktop Guest");
 	await page.locator("#mcastDesktopJoinButton").click();
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "backstage", { timeout: 15000 });
 	await expect(page.locator("#mcastDesktopLocalTile video")).toBeVisible();
+	await expectVideoToCoverSurface(page, "#mcastDesktopLocalTile");
 	await expect(page.locator("#mcastDesktopRoomMicButton svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopRoomCameraButton svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopRoomChatButton")).toHaveCount(0);

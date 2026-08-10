@@ -355,6 +355,7 @@
 			video.parentNode === surface &&
 			video.srcObject === stream
 		) {
+			syncLocalVideoPresentation(video);
 			updateLocalTileLabel();
 			return !!stream;
 		}
@@ -373,6 +374,7 @@
 		state.boundLocalVideo = video;
 		state.boundLocalStream = stream;
 		state.boundLocalSurface = surface;
+		syncLocalVideoPresentation(video);
 		updateLocalTileLabel();
 		if (video.srcObject) {
 			root.classList.add("has-preview");
@@ -386,6 +388,34 @@
 			videoHeight: video.videoHeight || 0
 		});
 		return !!video.srcObject;
+	}
+
+	function syncLocalVideoPresentation(video) {
+		if (!video || !video.style) {
+			return;
+		}
+		var declaredTransform = String(video.dataset.transform || "").trim();
+		var upstreamTransform = declaredTransform || String(video.style.transform || "");
+		var transforms = [];
+		var mirrored = /scaleX\(\s*-1\s*\)/i.test(upstreamTransform) ||
+			(!declaredTransform && video.classList.contains("mirrorControl"));
+		var flipped = /scaleY\(\s*-1\s*\)/i.test(upstreamTransform);
+		if (mirrored) {
+			transforms.push("scaleX(-1)");
+		}
+		if (flipped) {
+			transforms.push("scaleY(-1)");
+		}
+		var rotation = parseInt(video.dataset.rotated || video.rotated || "0", 10);
+		if (!rotation) {
+			var rotationMatch = upstreamTransform.match(/rotate\(\s*(-?[0-9.]+)deg\s*\)/i);
+			rotation = rotationMatch ? parseFloat(rotationMatch[1]) : 0;
+		}
+		rotation = ((rotation % 360) + 360) % 360;
+		if (rotation) {
+			transforms.push("rotate(" + rotation + "deg)");
+		}
+		video.style.setProperty("--mcast-desktop-video-transform", transforms.join(" ") || "none");
 	}
 
 	function startAudioMeter() {
