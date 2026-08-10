@@ -341,6 +341,7 @@ assert.ok(
 	"startup order must be branded UI, engine session, validated route, then engine startup"
 );
 assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || []).length, 1);
+assert.ok(guestEngine.includes('./main.js?ver=1066'), "the private engine must request the current managed runtime revision");
 assert.ok(!/document\.write|Internet Explorer|\balert\s*\(/i.test(guestEngine), "private engine startup must not own browser warnings or rewrite the document");
 assert.match(guestEngine, /<html[^>]+mcast-owned-guest-ui/);
 assert.match(guestEngine, /<body[^>]+mcast-owned-guest-ui/);
