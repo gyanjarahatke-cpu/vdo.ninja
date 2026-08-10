@@ -3652,7 +3652,9 @@ async function main() {
 		}
 		if (session.label != null) {
 			session.label = sanitizeLabel(session.label); // alphanumeric was too strict.
-			document.title = session.label; // what the result is.
+			if (!document.documentElement.classList.contains("mcast-route")) {
+				document.title = session.label; // what the result is.
+			}
 
 			if (updateURLAsNeed) {
 				var label = encodeURIComponent(session.label);
@@ -3680,7 +3682,7 @@ async function main() {
 			}
 		}
 
-		if (session.label) {
+		if (session.label && !document.documentElement.classList.contains("mcast-route")) {
 			document.title = session.label; // what the result is.
 		}
 

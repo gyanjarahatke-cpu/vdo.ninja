@@ -10,6 +10,7 @@ const root = path.join(__dirname, "..");
 const routeScript = fs.readFileSync(path.join(root, "mcast-route.js"), "utf8");
 const guestLoader = fs.readFileSync(path.join(root, "mcast-guest.html"), "utf8");
 const guestEngine = fs.readFileSync(path.join(root, "g", "index.html"), "utf8");
+const engineStartup = fs.readFileSync(path.join(root, "main.js"), "utf8");
 const sharedUi = fs.readFileSync(path.join(root, "g", "shared", "McastGuestUi.js"), "utf8");
 const sharedCss = fs.readFileSync(path.join(root, "g", "shared", "McastGuestUi.css"), "utf8");
 const desktopShell = fs.readFileSync(path.join(root, "g", "desktop", "DesktopRoomShell.js"), "utf8");
@@ -302,6 +303,11 @@ assert.ok(!routeScript.includes('params.get("t")'));
 assert.ok(!routeScript.includes("mcastResolvedGuestRoute"));
 assert.ok(!routeScript.includes("vdoTokenResolve"));
 assert.ok(!routeScript.includes("g|m|c|s|p|i|rv|ra|rs"), "the engine must not retain legacy route aliases");
+assert.ok(
+	engineStartup.includes('if (!document.documentElement.classList.contains("mcast-route")) {\n\t\t\t\tdocument.title = session.label;') &&
+		engineStartup.includes('if (session.label && !document.documentElement.classList.contains("mcast-route")) {'),
+	"the private engine must not replace the branded browser title with a participant label"
+);
 
 const ensureRootBaseStart = guestLoader.indexOf("function ensureRootBase(html) {");
 const ensureRootBaseEnd = guestLoader.indexOf("\n\n\t\t\t\tfunction showFailure", ensureRootBaseStart);
