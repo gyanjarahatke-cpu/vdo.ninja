@@ -338,6 +338,7 @@ assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || [])
 assert.ok(!/document\.write|Internet Explorer|\balert\s*\(/i.test(guestEngine), "private engine startup must not own browser warnings or rewrite the document");
 assert.match(guestEngine, /<html[^>]+mcast-owned-guest-ui/);
 assert.match(guestEngine, /<body[^>]+mcast-owned-guest-ui/);
+assert.ok(!/<body[^>]+class="[^"]*\bhidden\b/i.test(guestEngine), "MCast loading UI must remain visible while the private engine starts");
 assert.ok(sharedUi.includes("installLegacyUiQuarantine"));
 assert.ok(sharedUi.includes("quarantineLegacyNodes(document.body, false)"));
 assert.ok(sharedUi.includes("isActiveLegacyUi"));
