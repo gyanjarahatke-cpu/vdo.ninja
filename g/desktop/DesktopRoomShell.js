@@ -3,9 +3,13 @@
 
 	var root;
 	var state = {
+		initialized: false,
+		active: false,
+		activationFrame: 0,
 		previewStarted: false,
 		joining: false,
 		joined: false,
+		disconnecting: false,
 		experience: null,
 		capabilities: { camera: true, microphone: true, screen: false, displayName: true },
 		step: "loading",
@@ -30,19 +34,18 @@
 		leave: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg>'
 	};
 
-	if (document.readyState === "loading") {
-		document.addEventListener("DOMContentLoaded", init);
-	} else {
-		init();
-	}
+	installResponsiveActivation();
 
 	function init() {
 		root = byId("mcastDesktopGuest");
-		if (!root || !isDesktopViewport()) {
+		if (!root || !isDesktopViewport() || !activateResponsiveShell()) {
 			return;
 		}
-		document.body.classList.add("mcast-desktop-guest-active");
-		document.documentElement.classList.add("mcast-desktop-guest-active");
+		if (state.initialized) {
+			startDesktopPolling();
+			return;
+		}
+		state.initialized = true;
 		configureExperience();
 		disableLegacyAuxiliaryModules();
 		removeLegacyBranding();
@@ -60,22 +63,101 @@
 				setStatus(setupReadyMessage());
 			}
 		}, 850);
-		state.devicePoll = window.setInterval(syncDevices, 900);
-		state.tilePoll = window.setInterval(function () {
-			if (state.previewStarted || state.joined) {
-				bindLocalVideo("poll");
-			}
-			syncRoomTiles();
-			updateDesktopControls();
-			startNativeWebRtcBridge();
-		}, 900);
+		startDesktopPolling();
 		window.addEventListener("online", function () {
+			if (!isActiveResponsiveShell()) { return; }
 			setStatus(state.joined ? "Connection restored." : "Connection restored. You can join now.");
 		});
 		window.addEventListener("offline", function () {
+			if (!isActiveResponsiveShell()) { return; }
 			setStatus("You appear to be offline. Check your connection, then rejoin.", true);
 		});
-		window.addEventListener("mcast:open-settings", openSettings);
+		window.addEventListener("mcast:open-settings", function () {
+			if (isActiveResponsiveShell()) { openSettings(); }
+		});
+		window.addEventListener("mcast:invite-lease-lost", function () {
+			if (isActiveResponsiveShell()) {
+				finishGuestSession("Your secure guest connection ended. You are free to close this page.", false);
+			}
+		});
+	}
+
+	function installResponsiveActivation() {
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", scheduleResponsiveActivation, { once: true });
+		} else {
+			scheduleResponsiveActivation();
+		}
+		window.addEventListener("resize", scheduleResponsiveActivation, { passive: true });
+		window.addEventListener("orientationchange", scheduleResponsiveActivation, { passive: true });
+		window.addEventListener("mcast:responsive-shell-activated", function (event) {
+			var shell = event && event.detail && event.detail.shell;
+			if (shell === "desktop") {
+				state.active = true;
+				startDesktopPolling();
+				return;
+			}
+			if (!state.joined) {
+				state.active = false;
+				stopDesktopPolling();
+				document.body.classList.remove("mcast-desktop-guest-active");
+				document.documentElement.classList.remove("mcast-desktop-guest-active");
+			}
+		});
+	}
+
+	function scheduleResponsiveActivation() {
+		if (state.activationFrame) {
+			window.cancelAnimationFrame(state.activationFrame);
+		}
+		state.activationFrame = window.requestAnimationFrame(function () {
+			state.activationFrame = window.requestAnimationFrame(function () {
+				state.activationFrame = 0;
+				init();
+			});
+		});
+	}
+
+	function activateResponsiveShell() {
+		var lock = window.__mcastGuestShellLock;
+		if (lock && lock !== "desktop") { return false; }
+		state.active = true;
+		window.__mcastActiveGuestShell = "desktop";
+		document.documentElement.classList.add("mcast-responsive-shell-desktop", "mcast-desktop-guest-active");
+		document.documentElement.classList.remove("mcast-responsive-shell-mobile", "mcast-mobile-guest-active");
+		document.body.classList.add("mcast-desktop-guest-active");
+		document.body.classList.remove("mcast-mobile-guest-active");
+		window.dispatchEvent(new CustomEvent("mcast:responsive-shell-activated", { detail: { shell: "desktop" } }));
+		return true;
+	}
+
+	function isActiveResponsiveShell() {
+		return state.active && window.__mcastActiveGuestShell === "desktop";
+	}
+
+	function startDesktopPolling() {
+		if (!state.initialized || !state.active) { return; }
+		if (!state.devicePoll) {
+			state.devicePoll = window.setInterval(syncDevices, 900);
+		}
+		if (!state.tilePoll) {
+			state.tilePoll = window.setInterval(function () {
+				if (!state.active) { return; }
+				if (state.previewStarted || state.joined) {
+					bindLocalVideo("poll");
+				}
+				syncRoomTiles();
+				updateDesktopControls();
+				startNativeWebRtcBridge();
+			}, 900);
+		}
+	}
+
+	function stopDesktopPolling() {
+		window.clearInterval(state.devicePoll);
+		window.clearInterval(state.tilePoll);
+		state.devicePoll = 0;
+		state.tilePoll = 0;
 	}
 
 	function configureExperience() {
@@ -175,6 +257,10 @@
 			},
 			log: logDesktop,
 			onRemoteStream: bindNativeReturnStream,
+			onRemoteStreamRemoved: clearNativeReturnStream,
+			onTerminal: function () {
+				finishGuestSession("The session has ended. You are free to close this page.", true);
+			},
 			onState: function (stage) {
 				if (stage === "media-attached") {
 					setStatus("Native studio connection is starting...");
@@ -250,6 +336,7 @@
 			return;
 		}
 		state.joining = true;
+		var leaseClaimed = false;
 		setButtonBusy("mcastDesktopJoinButton", true, "Connecting...");
 		setStatus("Preparing the secure connection...");
 		try {
@@ -265,9 +352,12 @@
 				await waitForFunction("publishWebcam", 4500);
 			}
 			bindLocalVideo("pre-publish");
+			await claimInviteLease();
+			leaseClaimed = true;
 			await window.publishWebcam(byId("gowebcam") || false);
 			await waitForLocalStream(5000);
 			state.joined = true;
+			window.__mcastGuestShellLock = "desktop";
 			document.body.classList.add("mcast-desktop-room-active");
 			root.classList.add("has-preview", "is-joined");
 			setStep("backstage");
@@ -278,8 +368,17 @@
 			startNativeWebRtcBridge();
 		} catch (error) {
 			logDesktop("join error", summarizeError(error));
-			setStatus(getPermissionMessage(error), true);
-			showMediaRecovery(error, joinRoom);
+			var tornDown = leaseClaimed ? await tearDownPublishedSession() : false;
+			if (leaseClaimed && tornDown) {
+				await releaseInviteLease();
+			}
+			if (isInviteLeaseError(error)) {
+				setStatus("This invite is already in use. Try again after the current guest disconnects.", true);
+				window.MCastGuestUi.showInviteLeaseError(error);
+			} else {
+				setStatus(getPermissionMessage(error), true);
+				showMediaRecovery(error, tornDown ? reloadGuestPage : joinRoom);
+			}
 		} finally {
 			state.joining = false;
 			setButtonBusy("mcastDesktopJoinButton", false, state.experience.primaryAction);
@@ -291,6 +390,7 @@
 			return;
 		}
 		state.joining = true;
+		var leaseClaimed = false;
 		setButtonBusy("mcastDesktopJoinButton", true, "Choose a screen...");
 		setStatus("Choose a screen, window, or browser tab in the system prompt.");
 		applyScreenAudioPreference();
@@ -298,6 +398,8 @@
 			if (typeof window.publishScreen !== "function") {
 				await waitForFunction("publishScreen", 6000);
 			}
+			await claimInviteLease();
+			leaseClaimed = true;
 			await window.publishScreen();
 			if (!getScreenStream()) {
 				var selectionError = new Error("Screen selection was not completed");
@@ -307,6 +409,7 @@
 			await waitForScreenStream(4000);
 			state.previewStarted = true;
 			state.joined = true;
+			window.__mcastGuestShellLock = "desktop";
 			document.body.classList.add("mcast-desktop-room-active");
 			root.classList.add("has-preview", "is-joined");
 			bindLocalVideo("screen-connected");
@@ -316,8 +419,17 @@
 			syncRoomTiles();
 			updateDesktopControls();
 		} catch (error) {
-			setStatus(getPermissionMessage(error), true);
-			showMediaRecovery(error, joinScreenShare);
+			var tornDown = leaseClaimed ? await tearDownPublishedSession() : false;
+			if (leaseClaimed && tornDown) {
+				await releaseInviteLease();
+			}
+			if (isInviteLeaseError(error)) {
+				setStatus("This invite is already in use. Try again after the current guest disconnects.", true);
+				window.MCastGuestUi.showInviteLeaseError(error);
+			} else {
+				setStatus(getPermissionMessage(error), true);
+				showMediaRecovery(error, tornDown ? reloadGuestPage : joinScreenShare);
+			}
 		} finally {
 			state.joining = false;
 			setButtonBusy("mcastDesktopJoinButton", false, state.experience.primaryAction);
@@ -753,7 +865,9 @@
 	function bindNativeReturnStream(uuid, stream) {
 		var room = byId("mcastDesktopRemoteTiles");
 		var grid = byId("mcastDesktopRoomGrid");
-		if (!room || !grid || !stream) {
+		var guestUi = window.MCastGuestUi;
+		if (!room || !grid || !stream || !guestUi || typeof guestUi.stageHostReturnVideo !== "function") {
+			logDesktop("host return playback unavailable", {});
 			return false;
 		}
 
@@ -761,34 +875,86 @@
 		var tile = room.querySelector("[data-source-id='" + cssEscape(id) + "']") || createRemoteTile(id);
 		tile.classList.add("mcast-desktop__tile--host-return");
 		tile.dataset.mcastNativeReturn = "true";
-		var video = tile.querySelector("video");
-		if (!video) {
-			video = document.createElement("video");
-			tile.insertBefore(video, tile.firstChild);
-		}
-		video.autoplay = true;
-		video.playsInline = true;
-		video.muted = false;
-		video.controls = false;
-		video.dataset.mcastDesktopClone = "true";
-		video.dataset.mcastNativeReturn = "true";
-		video.dataset.label = "Host feed";
-		if (video.srcObject !== stream) {
-			video.srcObject = stream;
-		}
-		video.play().catch(function () {});
 		var label = tile.querySelector(".mcast-desktop__tile-label");
 		if (label) {
 			label.textContent = "Host feed";
 		}
-		var tileCount = Math.max(1, room.querySelectorAll("[data-source-id]").length + 1);
-		grid.dataset.tileCount = String(tileCount);
-		setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
-		if (state.joined && state.step !== "live") {
-			setStep("live");
-			setStatus("Host feed connected.");
-		}
+		tile.dataset.mcastPlaybackState = "starting";
+		guestUi.stageHostReturnVideo({
+			key: "desktop:" + id,
+			stream: stream,
+			getCurrentVideo: function () {
+				return tile.querySelector("video");
+			},
+			createVideo: function (current) {
+				var video = current ? current.cloneNode(false) : document.createElement("video");
+				video.autoplay = true;
+				video.playsInline = true;
+				video.muted = false;
+				video.controls = false;
+				video.dataset.mcastDesktopClone = "true";
+				video.dataset.mcastNativeReturn = "true";
+				video.dataset.label = "Host feed";
+				return video;
+			},
+			promote: function (video, previous) {
+				if (previous && previous.parentNode === tile) {
+					tile.replaceChild(video, previous);
+				} else {
+					tile.insertBefore(video, tile.firstChild);
+				}
+			},
+			onRetry: function () {
+				tile.dataset.mcastPlaybackState = "retrying";
+				setStatus("Click or tap to resume the host feed.");
+				logDesktop("host return playback waiting for interaction", { uuid: String(uuid || "") });
+			},
+			onReady: function () {
+				tile.dataset.mcastPlaybackState = "playing";
+				var tileCount = Math.max(1, room.querySelectorAll("[data-source-id]").length + 1);
+				grid.dataset.tileCount = String(tileCount);
+				setText("mcastDesktopParticipantCount", tileCount + (tileCount === 1 ? " guest" : " guests"));
+				if (state.joined && state.step !== "live") {
+					setStep("live");
+				}
+				setStatus("Host feed connected.");
+				logDesktop("native return stream playing", {
+					uuid: String(uuid || ""),
+					tracks: summarizeStream(stream)
+				});
+			}
+		});
 		return true;
+	}
+
+	function clearNativeReturnStream(uuid) {
+		var room = byId("mcastDesktopRemoteTiles");
+		var grid = byId("mcastDesktopRoomGrid");
+		if (!room) {
+			return;
+		}
+		var id = uuid ? "mcast-native-return-" + String(uuid).replace(/[^a-z0-9_-]+/gi, "-") : "";
+		var tiles = room.querySelectorAll("[data-mcast-native-return='true']");
+		Array.prototype.forEach.call(tiles, function (tile) {
+			if (id && tile.dataset.sourceId !== id) { return; }
+			if (window.MCastGuestUi && typeof window.MCastGuestUi.clearHostReturnPlayback === "function") {
+				window.MCastGuestUi.clearHostReturnPlayback("desktop:" + tile.dataset.sourceId);
+			}
+			var video = tile.querySelector("video");
+			if (video) {
+				try { video.pause(); } catch (error) {}
+				video.srcObject = null;
+			}
+			tile.remove();
+		});
+		if (grid) {
+			var tileCount = Math.max(1, room.querySelectorAll("[data-source-id]").length + 1);
+			grid.dataset.tileCount = String(tileCount);
+		}
+		if (state.joined && state.step === "live" && !room.querySelector("[data-mcast-native-return='true']")) {
+			setStep("backstage");
+			setStatus("Waiting for the host feed to reconnect...");
+		}
 	}
 
 	function getRemoteLabel(source) {
@@ -958,16 +1124,76 @@
 	}
 
 	function leaveRoom() {
-		setStatus(state.capabilities.screen ? "Screen sharing stopped." : "You disconnected. You can reconnect from this page.");
-		setStep("setup");
+		finishGuestSession("You are disconnected and free to close this page.", true);
+	}
+
+	function finishGuestSession(message, shouldReleaseLease) {
+		if (state.disconnecting || state.step === "goodbye") {
+			return;
+		}
+		state.disconnecting = true;
 		state.joined = false;
+		window.__mcastGuestShellLock = "desktop";
+		stopDesktopPolling();
 		state.previewStarted = false;
 		state.screenTrack = null;
-		root.classList.remove("is-joined");
+		root.classList.remove("is-joined", "has-preview");
 		document.body.classList.remove("mcast-desktop-room-active");
-		if (typeof window.hangup === "function") {
-			window.hangup();
+		clearNativeReturnStream("");
+		hideSettings();
+		setText("mcastDesktopGoodbyeMessage", message || "You are disconnected and free to close this page.");
+		setStep("goodbye");
+		if (window.MCastNativeWebRtcBridge && typeof window.MCastNativeWebRtcBridge.stop === "function") {
+			window.MCastNativeWebRtcBridge.stop({ dispose: true });
 		}
+		Promise.resolve(tearDownPublishedSession()).then(function (tornDown) {
+			if (shouldReleaseLease && tornDown) {
+				return releaseInviteLease();
+			}
+			return false;
+		});
+	}
+
+	function tearDownPublishedSession() {
+		if (window.MCastNativeWebRtcBridge && typeof window.MCastNativeWebRtcBridge.stop === "function") {
+			window.MCastNativeWebRtcBridge.stop({ dispose: true });
+		}
+		var activeSession = window.session;
+		if (!activeSession) {
+			return Promise.resolve(true);
+		}
+		if (typeof activeSession.hangup !== "function") {
+			return Promise.resolve(false);
+		}
+		var retainedUi = captureOwnedGuestUi();
+		try {
+			activeSession.hangup(false, false);
+			restoreOwnedGuestUi(retainedUi);
+			return Promise.resolve(true);
+		} catch (error) {
+			restoreOwnedGuestUi(retainedUi);
+			logDesktop("session teardown failed", { name: error && error.name });
+			return Promise.resolve(false);
+		}
+	}
+
+	function captureOwnedGuestUi() {
+		return ["mcastDesktopGuest", "mcastMobileGuest", "mcastGuestUiRoot"].map(byId).filter(Boolean);
+	}
+
+	function restoreOwnedGuestUi(elements) {
+		if (!document.body) {
+			return;
+		}
+		elements.forEach(function (element) {
+			if (!element.isConnected) {
+				document.body.appendChild(element);
+			}
+		});
+	}
+
+	function reloadGuestPage() {
+		window.location.reload();
 	}
 
 	function watchScreenShareEnded() {
@@ -980,16 +1206,27 @@
 		state.screenTrack = track;
 		track.addEventListener("ended", function () {
 			if (!state.joined) { return; }
-			state.joined = false;
-			state.previewStarted = false;
-			state.screenTrack = null;
-			root.classList.remove("has-preview", "is-joined");
-			setStep("setup");
-			setStatus("Screen sharing stopped. Choose Start sharing to reconnect.");
-			if (window.MCastGuestUi) {
-				window.MCastGuestUi.showToast("Screen sharing stopped.", { kind: "info" });
-			}
+			finishGuestSession("Screen sharing has stopped. You are free to close this page.", true);
 		});
+	}
+
+	function claimInviteLease() {
+		if (!window.MCastGuestUi || typeof window.MCastGuestUi.claimInviteLease !== "function") {
+			return Promise.reject(new Error("Guest connection service is unavailable"));
+		}
+		return window.MCastGuestUi.claimInviteLease();
+	}
+
+	function releaseInviteLease() {
+		if (!window.MCastGuestUi || typeof window.MCastGuestUi.releaseInviteLease !== "function") {
+			return Promise.resolve(false);
+		}
+		return window.MCastGuestUi.releaseInviteLease();
+	}
+
+	function isInviteLeaseError(error) {
+		return !!(window.MCastGuestUi && typeof window.MCastGuestUi.isInviteLeaseError === "function" &&
+			window.MCastGuestUi.isInviteLeaseError(error));
 	}
 
 	function installNativeGuestControls() {

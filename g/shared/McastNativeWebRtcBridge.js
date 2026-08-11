@@ -9,13 +9,22 @@
 		attaching: {},
 		dataChannels: {},
 		peers: {},
+		peerHooks: {},
+		peerMissingTicks: {},
+		peerDisconnectTimers: {},
+		localTrackSignatures: {},
 		media: {},
 		returnStreams: {},
-		returnElements: {}
+		returnElements: {},
+		returnTrackHooks: {},
+		returnTrackTimers: {},
+		terminalNotified: {},
+		defaultPlaybackRetryInstalled: false
 	};
 
 	var mcastNativeRenegotiationAttempts = 0;
 	var nativeCreateOffer = null;
+	var installedCreateOfferHook = null;
 	var createOfferHookInstalled = false;
 
 	function isRequested() {
@@ -30,23 +39,24 @@
 	}
 
 	function start(options) {
-		if (state.started && state.timer) {
-			return false;
-		}
-
 		if (!isRequested()) {
 			return false;
 		}
 
 		options = options || {};
-		state.started = true;
-		state.attempts = 0;
 		state.getLocalStream = typeof options.getLocalStream === "function" ? options.getLocalStream : null;
 		state.log = typeof options.log === "function" ? options.log : log;
 		state.onState = typeof options.onState === "function" ? options.onState : null;
 		state.onRemoteStream = typeof options.onRemoteStream === "function" ? options.onRemoteStream : null;
-		state.maxAttempts = Math.max(10, parseInt(options.maxAttempts, 10) || 80);
+		state.onRemoteStreamRemoved = typeof options.onRemoteStreamRemoved === "function" ? options.onRemoteStreamRemoved : null;
+		state.onTerminal = typeof options.onTerminal === "function" ? options.onTerminal : null;
 		state.intervalMs = Math.max(250, parseInt(options.intervalMs, 10) || 500);
+		if (state.started && state.timer) {
+			return false;
+		}
+
+		state.started = true;
+		state.attempts = 0;
 		installCreateOfferHook();
 		state.log("MCast native WebRTC media bridge armed", {});
 		state.timer = window.setInterval(tick, state.intervalMs);
@@ -54,32 +64,38 @@
 		return true;
 	}
 
-	function stop() {
+	function stop(options) {
+		options = options || {};
 		if (state.timer) {
 			window.clearInterval(state.timer);
 			state.timer = 0;
 		}
 		state.started = false;
+		if (options.dispose) {
+			Object.keys(state.peers).forEach(function (uuid) {
+				cleanupPeer(uuid, "bridge-stopped", { terminal: false, notifyRemoved: false });
+			});
+			Object.keys(state.peerDisconnectTimers).forEach(cancelPeerTerminalTimer);
+			Object.keys(state.returnTrackTimers).forEach(cancelReturnTrackTerminal);
+			uninstallDefaultReturnPlaybackRetry();
+			uninstallCreateOfferHook();
+			state.getLocalStream = null;
+			state.onState = null;
+			state.onRemoteStream = null;
+			state.onRemoteStreamRemoved = null;
+			state.onTerminal = null;
+		}
 	}
 
 	function tick() {
 		state.attempts += 1;
-		if (state.attempts > state.maxAttempts) {
-			state.log("MCast native WebRTC media bridge timed out waiting for peer", {});
-			stop();
-			return;
-		}
-
 		if (!window.session || typeof state.getLocalStream !== "function") {
 			return;
 		}
 
 		var stream = state.getLocalStream();
-		if (!isUsableStream(stream)) {
-			return;
-		}
-
 		var peers = collectPeerConnections();
+		var seen = {};
 		if (!peers.length && state.attempts === 1) {
 			state.log("MCast native WebRTC waiting for VDO peer", {
 				pcs: countObjectKeys(window.session.pcs),
@@ -88,17 +104,62 @@
 		}
 
 		for (var index = 0; index < peers.length; index += 1) {
-			hookPeerDataChannels(peers[index].uuid, peers[index].pc);
-			hookPeerReturnTracks(peers[index].uuid, peers[index].pc);
-			attachPeerIfReady(peers[index].uuid, peers[index].pc, stream);
+			var uuid = peers[index].uuid;
+			var pc = peers[index].pc;
+			seen[uuid] = true;
+			cancelPeerTerminalTimer(uuid);
+			state.peerMissingTicks[uuid] = 0;
+			var reconnectingWithRetainedReturn = !state.peers[uuid] && !!state.returnStreams[uuid];
+			if (state.peers[uuid] && state.peers[uuid] !== pc) {
+				cleanupPeer(uuid, "peer-replaced", { terminal: false, preserveReturn: true });
+				scheduleReturnTrackRemoval(uuid, 8000);
+			}
+			state.peers[uuid] = pc;
+			if (reconnectingWithRetainedReturn) {
+				scheduleReturnTrackRemoval(uuid, 8000);
+			}
+			hookPeerLifecycle(uuid, pc);
+			if (isTerminalPeer(pc)) {
+				cleanupPeer(uuid, terminalPeerReason(pc), { terminal: true });
+				continue;
+			}
+			delete state.terminalNotified[uuid];
+			hookPeerDataChannels(uuid, pc);
+			hookPeerReturnTracks(uuid, pc);
+			reconcileExistingReturnTracks(uuid, pc);
+			if (isUsableStream(stream)) {
+				reconcileLocalTrackSignature(uuid, pc, stream);
+				attachPeerIfReady(uuid, pc, stream);
+			}
 		}
+
+		Object.keys(state.peers).forEach(function (uuid) {
+			if (seen[uuid]) { return; }
+			state.peerMissingTicks[uuid] = (state.peerMissingTicks[uuid] || 0) + 1;
+			if (state.peerMissingTicks[uuid] >= 3) {
+				cleanupPeer(uuid, "peer-removed", { terminal: false, preserveReturn: true });
+				schedulePeerTerminal(uuid, "peer-removed", 8000);
+			}
+		});
 	}
 
 	function collectPeerConnections() {
-		var peers = [];
-		collectPeerConnectionsFrom(window.session && window.session.pcs, "pcs", peers);
-		collectPeerConnectionsFrom(window.session && window.session.rpcs, "rpcs", peers);
-		return peers;
+		var candidates = [];
+		collectPeerConnectionsFrom(window.session && window.session.pcs, "pcs", candidates);
+		collectPeerConnectionsFrom(window.session && window.session.rpcs, "rpcs", candidates);
+		var selected = [];
+		var grouped = {};
+		candidates.forEach(function (candidate) {
+			grouped[candidate.uuid] = grouped[candidate.uuid] || [];
+			grouped[candidate.uuid].push(candidate);
+		});
+		Object.keys(grouped).forEach(function (uuid) {
+			var choices = grouped[uuid];
+			var current = choices.find(function (candidate) { return candidate.pc === state.peers[uuid]; });
+			var healthy = choices.find(function (candidate) { return !isTerminalPeer(candidate.pc); });
+			selected.push((current && !isTerminalPeer(current.pc)) ? current : (healthy || current || choices[0]));
+		});
+		return selected;
 	}
 
 	function collectPeerConnectionsFrom(collection, name, peers) {
@@ -112,7 +173,6 @@
 				return;
 			}
 
-			state.peers[uuid] = pc;
 			peers.push({ uuid: uuid, pc: pc, collection: name });
 		});
 	}
@@ -136,6 +196,191 @@
 		}
 	}
 
+	function hookPeerLifecycle(uuid, pc) {
+		if (!uuid || !pc || (state.peerHooks[uuid] && state.peerHooks[uuid].pc === pc)) {
+			return;
+		}
+
+		var handler = function () {
+			if (state.peers[uuid] !== pc) {
+				return;
+			}
+			if (isTerminalPeer(pc)) {
+				if (findHealthyAlternativePeer(uuid, pc)) {
+					cleanupPeer(uuid, "peer-replaced", { terminal: false, preserveReturn: true });
+					scheduleReturnTrackRemoval(uuid, 8000);
+					return;
+				}
+				cleanupPeer(uuid, terminalPeerReason(pc), { terminal: true });
+				return;
+			}
+			var connectionState = String(pc.connectionState || "").toLowerCase();
+			var iceState = String(pc.iceConnectionState || "").toLowerCase();
+			if (connectionState === "disconnected" || iceState === "disconnected" ||
+				connectionState === "connecting" || iceState === "checking") {
+				if (state.onState) {
+					state.onState("peer-reconnecting", uuid, []);
+				}
+				return;
+			}
+			if (connectionState === "connected" || iceState === "connected" || iceState === "completed") {
+				cancelPeerTerminalTimer(uuid);
+				delete state.terminalNotified[uuid];
+				if (state.onState) {
+					state.onState("peer-connected", uuid, []);
+				}
+			}
+		};
+
+		state.peerHooks[uuid] = { pc: pc, handler: handler };
+		if (typeof pc.addEventListener === "function") {
+			pc.addEventListener("connectionstatechange", handler);
+			pc.addEventListener("iceconnectionstatechange", handler);
+		}
+	}
+
+	function findHealthyAlternativePeer(uuid, excludedPeer) {
+		var collections = [window.session && window.session.pcs, window.session && window.session.rpcs];
+		for (var collectionIndex = 0; collectionIndex < collections.length; collectionIndex += 1) {
+			var collection = collections[collectionIndex];
+			if (!collection || !Object.prototype.hasOwnProperty.call(collection, uuid)) {
+				continue;
+			}
+			var candidate = collection[uuid];
+			if (candidate && candidate !== excludedPeer && isPeerConnectionLike(candidate) && !isTerminalPeer(candidate)) {
+				return candidate;
+			}
+		}
+		return null;
+	}
+
+	function isTerminalPeer(pc) {
+		if (!pc) {
+			return true;
+		}
+		var connectionState = String(pc.connectionState || "").toLowerCase();
+		var iceState = String(pc.iceConnectionState || "").toLowerCase();
+		return connectionState === "failed" || connectionState === "closed" ||
+			iceState === "failed" || iceState === "closed";
+	}
+
+	function terminalPeerReason(pc) {
+		var connectionState = String(pc && pc.connectionState || "").toLowerCase();
+		var iceState = String(pc && pc.iceConnectionState || "").toLowerCase();
+		return connectionState === "failed" || iceState === "failed" ? "peer-failed" : "peer-closed";
+	}
+
+	function cleanupPeer(uuid, reason, options) {
+		options = options || {};
+		var pc = state.peers[uuid];
+		delete state.peers[uuid];
+		delete state.peerHooks[uuid];
+		delete state.peerMissingTicks[uuid];
+		delete state.attached[uuid];
+		delete state.attaching[uuid];
+		delete state.localTrackSignatures[uuid];
+		delete state.media[uuid];
+		Object.keys(state.dataChannels).forEach(function (key) {
+			if (key.indexOf(uuid + ":") === 0) {
+				delete state.dataChannels[key];
+			}
+		});
+		if (pc) {
+			try { pc.mcastNativeMediaAttached = false; } catch (error) {}
+			try { pc.mcastNativeFallbackOfferPending = false; } catch (error) {}
+		}
+		if (!options.preserveReturn) {
+			removeReturnStream(uuid, reason, options.notifyRemoved !== false);
+		}
+		if (options.terminal) {
+			notifyTerminal(uuid, reason);
+		}
+	}
+
+	function schedulePeerTerminal(uuid, reason, delay) {
+		cancelPeerTerminalTimer(uuid);
+		state.peerDisconnectTimers[uuid] = window.setTimeout(function () {
+			delete state.peerDisconnectTimers[uuid];
+			if (!state.peers[uuid]) {
+				removeReturnStream(uuid, reason, true);
+				notifyTerminal(uuid, reason);
+			}
+		}, Math.max(1000, Number(delay) || 8000));
+	}
+
+	function scheduleReturnTrackRemoval(uuid, delay) {
+		cancelReturnTrackTerminal(uuid);
+		state.returnTrackTimers[uuid] = window.setTimeout(function () {
+			delete state.returnTrackTimers[uuid];
+			if (!hasLiveReturnTrack(uuid)) {
+				removeReturnStream(uuid, "return-track-ended", true);
+			}
+		}, Math.max(1000, Number(delay) || 2500));
+	}
+
+	function cancelReturnTrackTerminal(uuid) {
+		if (!state.returnTrackTimers[uuid]) {
+			return;
+		}
+		window.clearTimeout(state.returnTrackTimers[uuid]);
+		delete state.returnTrackTimers[uuid];
+	}
+
+	function cancelPeerTerminalTimer(uuid) {
+		if (!state.peerDisconnectTimers[uuid]) {
+			return;
+		}
+		window.clearTimeout(state.peerDisconnectTimers[uuid]);
+		delete state.peerDisconnectTimers[uuid];
+	}
+
+	function notifyTerminal(uuid, reason) {
+		if (state.terminalNotified[uuid]) {
+			return;
+		}
+		state.terminalNotified[uuid] = true;
+		if (state.onState) {
+			state.onState("session-ended", uuid, [reason || "connection-ended"]);
+		}
+		if (state.onTerminal) {
+			state.onTerminal(uuid, reason || "connection-ended");
+		}
+	}
+
+	function localTrackSignature(stream) {
+		if (!stream || typeof stream.getTracks !== "function") {
+			return "";
+		}
+		return stream.getTracks().filter(isLiveTrack).map(function (track) {
+			return String(track.kind || "") + ":" + String(track.id || "");
+		}).sort().join("|");
+	}
+
+	function reconcileLocalTrackSignature(uuid, pc, stream) {
+		var signature = localTrackSignature(stream);
+		var previous = state.localTrackSignatures[uuid];
+		state.localTrackSignatures[uuid] = signature;
+		if (!previous || previous === signature) {
+			return;
+		}
+		delete state.attached[uuid];
+		try { pc.mcastNativeMediaAttached = false; } catch (error) {}
+		try { pc.mcastNativeMediaOfferCovered = false; } catch (error) {}
+		try { pc.mcastNativeFallbackOfferSent = false; } catch (error) {}
+	}
+
+	function uninstallCreateOfferHook() {
+		if (!createOfferHookInstalled || !window.RTCPeerConnection || !window.RTCPeerConnection.prototype) {
+			return;
+		}
+		if (window.RTCPeerConnection.prototype.createOffer === installedCreateOfferHook && typeof nativeCreateOffer === "function") {
+			window.RTCPeerConnection.prototype.createOffer = nativeCreateOffer;
+		}
+		createOfferHookInstalled = false;
+		installedCreateOfferHook = null;
+		nativeCreateOffer = null;
+	}
+
 	function installCreateOfferHook() {
 		if (createOfferHookInstalled || !window.RTCPeerConnection || !window.RTCPeerConnection.prototype) {
 			return;
@@ -147,7 +392,7 @@
 		}
 
 		createOfferHookInstalled = true;
-		window.RTCPeerConnection.prototype.createOffer = function mcastNativeCreateOffer(options) {
+		installedCreateOfferHook = function mcastNativeCreateOffer(options) {
 			var pc = this;
 			var uuid = findUuidForPeer(pc);
 			if (!uuid || !state.getLocalStream || state.attached[uuid] || state.attaching[uuid] || pc.mcastNativeMediaAttached) {
@@ -164,7 +409,6 @@
 					pc.mcastNativeMediaOfferCovered = true;
 					hookPeerDataChannels(uuid, pc);
 					hookPeerReturnTracks(uuid, pc);
-					stop();
 					return nativeCreateOffer.call(pc, options);
 				})
 				.catch(function (error) {
@@ -175,6 +419,7 @@
 					return nativeCreateOffer.call(pc, options);
 				});
 		};
+		window.RTCPeerConnection.prototype.createOffer = installedCreateOfferHook;
 	}
 
 	function findUuidForPeer(pc) {
@@ -211,11 +456,9 @@
 					return;
 				}
 				if (pc.mcastNativeMediaOfferCovered) {
-					stop();
 					return;
 				}
 				renegotiate(uuid, pc);
-				stop();
 			})
 			.catch(function (error) {
 				delete state.attaching[uuid];
@@ -266,6 +509,10 @@
 		state.attaching[uuid] = true;
 		return Promise.all(pending)
 			.then(function () {
+				if (state.peers[uuid] && state.peers[uuid] !== pc) {
+					delete state.attaching[uuid];
+					return false;
+				}
 				state.attached[uuid] = true;
 				pc.mcastNativeMediaAttached = true;
 				delete state.attaching[uuid];
@@ -313,9 +560,26 @@
 		};
 	}
 
+	function reconcileExistingReturnTracks(uuid, pc) {
+		if (!pc || typeof pc.getReceivers !== "function") {
+			return;
+		}
+		var receivers;
+		try { receivers = pc.getReceivers() || []; } catch (error) { return; }
+		receivers.forEach(function (receiver) {
+			if (receiver && isLiveTrack(receiver.track)) {
+				handleReturnTrack(uuid, { track: receiver.track, streams: [] });
+			}
+		});
+	}
+
 	function handleReturnTrack(uuid, event) {
 		var track = event && event.track;
 		if (!isLiveTrack(track)) {
+			return;
+		}
+		var hookKey = uuid + ":" + String(track.id || track.kind || "track");
+		if (state.returnTrackHooks[hookKey] && state.returnTrackHooks[hookKey].track === track && state.returnStreams[uuid]) {
 			return;
 		}
 
@@ -325,6 +589,10 @@
 		}
 
 		state.returnStreams[uuid] = stream;
+		cancelPeerTerminalTimer(uuid);
+		cancelReturnTrackTerminal(uuid);
+		delete state.terminalNotified[uuid];
+		hookReturnTrackLifecycle(uuid, track, stream);
 		state.log("MCast native WebRTC return stream received", {
 			uuid: safeId(uuid),
 			kind: track.kind || "",
@@ -403,8 +671,65 @@
 			element.srcObject = stream;
 		}
 		if (typeof element.play === "function") {
-			element.play().catch(function () {});
+			playDefaultReturnElement(uuid, element);
 		}
+	}
+
+	function playDefaultReturnElement(uuid, element) {
+		if (!element || typeof element.play !== "function") { return; }
+		try {
+			Promise.resolve(element.play()).then(function () {
+				if (state.returnElements[uuid] === element) {
+					element.dataset.mcastPlaybackState = "playing";
+				}
+			}, function () {
+				markDefaultReturnPlaybackRetry(uuid, element);
+			});
+		} catch (error) {
+			markDefaultReturnPlaybackRetry(uuid, element);
+		}
+	}
+
+	function markDefaultReturnPlaybackRetry(uuid, element) {
+		if (state.returnElements[uuid] !== element) { return; }
+		element.dataset.mcastPlaybackState = "retrying";
+		state.log("MCast return playback waiting for interaction", { uuid: safeId(uuid) });
+		installDefaultReturnPlaybackRetry();
+	}
+
+	function installDefaultReturnPlaybackRetry() {
+		if (state.defaultPlaybackRetryInstalled) { return; }
+		state.defaultPlaybackRetryInstalled = true;
+		window.addEventListener("focus", retryDefaultReturnPlayback);
+		window.addEventListener("online", retryDefaultReturnPlayback);
+		window.addEventListener("pointerdown", retryDefaultReturnPlayback, true);
+		window.addEventListener("keydown", retryDefaultReturnPlayback, true);
+		document.addEventListener("visibilitychange", retryDefaultReturnPlaybackWhenVisible);
+	}
+
+	function uninstallDefaultReturnPlaybackRetry() {
+		if (!state.defaultPlaybackRetryInstalled) { return; }
+		state.defaultPlaybackRetryInstalled = false;
+		window.removeEventListener("focus", retryDefaultReturnPlayback);
+		window.removeEventListener("online", retryDefaultReturnPlayback);
+		window.removeEventListener("pointerdown", retryDefaultReturnPlayback, true);
+		window.removeEventListener("keydown", retryDefaultReturnPlayback, true);
+		document.removeEventListener("visibilitychange", retryDefaultReturnPlaybackWhenVisible);
+	}
+
+	function retryDefaultReturnPlaybackWhenVisible() {
+		if (document.visibilityState === "visible") {
+			retryDefaultReturnPlayback();
+		}
+	}
+
+	function retryDefaultReturnPlayback() {
+		Object.keys(state.returnElements).forEach(function (uuid) {
+			var element = state.returnElements[uuid];
+			if (element && element.dataset.mcastPlaybackState === "retrying") {
+				playDefaultReturnElement(uuid, element);
+			}
+		});
 	}
 
 	function hookPeerDataChannels(uuid, pc) {
@@ -453,6 +778,74 @@
 		if (channel.readyState === "open") {
 			var pc = state.peers[uuid];
 			createPostConnectOfferIfNeeded(uuid, pc);
+		}
+	}
+
+	function hookReturnTrackLifecycle(uuid, track, stream) {
+		if (!track || typeof track.addEventListener !== "function") {
+			return;
+		}
+		var key = uuid + ":" + String(track.id || track.kind || "track");
+		if (state.returnTrackHooks[key] && state.returnTrackHooks[key].track === track) {
+			return;
+		}
+		state.returnTrackHooks[key] = { track: track, stream: stream };
+		track.addEventListener("ended", function () {
+			if (!state.returnTrackHooks[key] || state.returnTrackHooks[key].track !== track) {
+				return;
+			}
+			delete state.returnTrackHooks[key];
+			if (hasLiveReturnTrack(uuid)) {
+				return;
+			}
+			scheduleReturnTrackRemoval(uuid, 2500);
+		});
+		track.addEventListener("mute", function () {
+			if (state.onState) {
+				state.onState("return-track-muted", uuid, [track.kind || "media"]);
+			}
+		});
+		track.addEventListener("unmute", function () {
+			cancelPeerTerminalTimer(uuid);
+			delete state.terminalNotified[uuid];
+			if (isLiveTrack(track)) {
+				if (state.onRemoteStream) {
+					state.onRemoteStream(uuid, stream, track.kind || "");
+				} else {
+					ensureDefaultReturnPlayback(uuid, stream);
+				}
+			}
+		});
+	}
+
+	function hasLiveReturnTrack(uuid) {
+		var stream = state.returnStreams[uuid];
+		return !!(stream && typeof stream.getTracks === "function" && stream.getTracks().some(isLiveTrack));
+	}
+
+	function removeReturnStream(uuid, reason, notifyRemoved) {
+		cancelReturnTrackTerminal(uuid);
+		var stream = state.returnStreams[uuid];
+		delete state.returnStreams[uuid];
+		Object.keys(state.returnTrackHooks).forEach(function (key) {
+			if (key.indexOf(uuid + ":") === 0) {
+				delete state.returnTrackHooks[key];
+			}
+		});
+		var element = state.returnElements[uuid];
+		if (element) {
+			try { element.pause(); } catch (error) {}
+			try { element.srcObject = null; } catch (error) {}
+			if (element.parentNode) {
+				element.parentNode.removeChild(element);
+			}
+			delete state.returnElements[uuid];
+		}
+		if (notifyRemoved && (stream || element) && state.onRemoteStreamRemoved) {
+			state.onRemoteStreamRemoved(uuid, reason || "return-stream-ended");
+		}
+		if (notifyRemoved && state.onState) {
+			state.onState("return-stream-removed", uuid, [reason || "return-stream-ended"]);
 		}
 	}
 

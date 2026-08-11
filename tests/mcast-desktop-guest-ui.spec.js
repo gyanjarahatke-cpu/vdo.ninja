@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("playwright/test");
 const { installInvite, inviteUrl } = require("./mcast-playwright-invite");
 
 const baseUrl = process.env.MCAST_TEST_URL || inviteUrl("DSK00001");
@@ -57,8 +57,17 @@ async function expectVideoToCoverSurface(page, surfaceSelector) {
 
 test("desktop setup is light, simple, and icon-first", async ({ page }) => {
 	await installInvite(page, { code: "DSK00001" });
+	const coldLoadStartedAt = Date.now();
 	await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-	await expect(page.locator("#mcastDesktopGuest")).toBeVisible();
+	await page.waitForFunction(() => {
+		const root = document.getElementById("mcastDesktopGuest");
+		const loaderTitle = document.querySelector("[data-title]");
+		return !!root || !!(loaderTitle && /preparing/i.test(loaderTitle.textContent || ""));
+	}, null, { timeout: 2000 });
+	await expect(page.locator("#mcastDesktopGuest")).toBeVisible({ timeout: 15000 });
+	const coldLoadMs = Date.now() - coldLoadStartedAt;
+	console.log(`MCast desktop cold guest load: ${coldLoadMs}ms`);
+	expect(coldLoadMs).toBeLessThan(15000);
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
 	await expect(page.locator("#mcastDesktopSetupTitle")).toHaveText("Let’s set up your studio");
 	await expect(page.locator("#mcastDesktopGuest").getByText("Backstage check")).toHaveCount(0);
@@ -109,10 +118,78 @@ test("desktop setup is light, simple, and icon-first", async ({ page }) => {
 	expect(colors.cardBg).toBe("rgb(255, 255, 255)");
 });
 
+test("desktop to mobile viewport reload initializes the visible shell", async ({ page }) => {
+	await installInvite(page, { code: "DSKSWCH1" });
+	await page.goto(inviteUrl("DSKSWCH1"), { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.reload({ waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 3000 });
+	await expect(page.locator("#mcastMobileGuest")).toBeVisible();
+	const state = await page.evaluate(() => ({
+		activeShell: window.__mcastActiveGuestShell,
+		mobileClass: document.documentElement.classList.contains("mcast-responsive-shell-mobile"),
+		desktopClass: document.documentElement.classList.contains("mcast-responsive-shell-desktop"),
+		mobileHeight: document.getElementById("mcastMobileGuest").getBoundingClientRect().height
+	}));
+	expect(state).toMatchObject({ activeShell: "mobile", mobileClass: true, desktopClass: false });
+	expect(state.mobileHeight).toBeGreaterThan(0);
+});
+
+test("mobile shell recovers when viewport state settles after initial script evaluation", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.addInitScript(() => {
+		const nativeMatchMedia = window.matchMedia.bind(window);
+		let forceDesktop = true;
+		window.matchMedia = function (query) {
+			if (!forceDesktop) {
+				return nativeMatchMedia(query);
+			}
+			const result = nativeMatchMedia(query);
+			if (String(query).includes("max-width: 920px")) {
+				Object.defineProperty(result, "matches", { configurable: true, value: false });
+			}
+			if (String(query).includes("min-width: 921px")) {
+				Object.defineProperty(result, "matches", { configurable: true, value: true });
+			}
+			return result;
+		};
+		document.addEventListener("DOMContentLoaded", () => {
+			window.setTimeout(() => {
+				forceDesktop = false;
+				window.dispatchEvent(new Event("resize"));
+			}, 100);
+		}, { once: true });
+	});
+	await installInvite(page, { code: "DSKRACE1" });
+	await page.goto(inviteUrl("DSKRACE1"), { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 3000 });
+	await expect(page.locator("#mcastMobileGuest")).toBeVisible();
+	await expect.poll(() => page.evaluate(() => ({
+		activeShell: window.__mcastActiveGuestShell,
+		mobileClass: document.documentElement.classList.contains("mcast-responsive-shell-mobile"),
+		desktopClass: document.documentElement.classList.contains("mcast-responsive-shell-desktop")
+	}))).toEqual({ activeShell: "mobile", mobileClass: true, desktopClass: false });
+});
+
 test("desktop joins backstage with compact icon controls", async ({ page }) => {
-	await installInvite(page, { code: "DSK00001" });
+	const leaseEvents = [];
+	await installInvite(page, { code: "DSK00001", leaseEvents });
 	await page.goto(baseUrl + "?case=join", { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+	await page.evaluate(() => {
+		window.__mcastTerminalOrder = [];
+		window.MCastNativeWebRtcBridge = {
+			isRequested() { return true; },
+			start(options) {
+				window.__mcastTerminalBridgeOptions = options;
+				return true;
+			},
+			stop() {
+				window.__mcastTerminalOrder.push("bridge-stop");
+			}
+		};
+	});
 	await page.locator("#mcastDesktopPreviewButton").click();
 	await expect.poll(() => page.locator("#mcastDesktopPreviewSurface video").evaluate((video) => !!video.srcObject), {
 		timeout: 10000
@@ -153,6 +230,65 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	expect(noticePlacement.noticeTop).toBeGreaterThanOrEqual(noticePlacement.topbarTop);
 	expect(noticePlacement.noticeBottom).toBeLessThanOrEqual(noticePlacement.topbarBottom);
 	expect(noticePlacement.stageTop).toBeGreaterThanOrEqual(noticePlacement.topbarBottom);
+	await page.evaluate(() => {
+		window.__mcastReturnStreams = {
+			old: new MediaStream(),
+			next: new MediaStream()
+		};
+		window.__mcastReturnStreams.old.__mcastTestId = "old";
+		window.__mcastReturnStreams.next.__mcastTestId = "next";
+		window.__mcastReturnPlayAttempts = { old: 0, next: 0 };
+		window.__mcastReturnPlayStates = [];
+		window.__mcastOriginalMediaPlay = HTMLMediaElement.prototype.play;
+		HTMLMediaElement.prototype.play = function () {
+			if (this.dataset.mcastNativeReturn === "true") {
+				const id = this.srcObject && this.srcObject.__mcastTestId;
+				window.__mcastReturnPlayAttempts[id] = (window.__mcastReturnPlayAttempts[id] || 0) + 1;
+				window.__mcastReturnPlayStates.push({
+					id,
+					attempt: window.__mcastReturnPlayAttempts[id],
+					muted: this.muted,
+					pending: this.dataset.mcastReturnPending === "true",
+					visibleId: document.querySelector("[data-mcast-native-return='true'] video")?.srcObject?.__mcastTestId,
+					visibleMuted: document.querySelector("[data-mcast-native-return='true'] video")?.muted
+				});
+				if (id === "next" && window.__mcastReturnPlayAttempts[id] === 1) {
+					return new Promise((resolve, reject) => {
+						window.__mcastRejectNextReturnPlayback = () => reject(new DOMException("Playback blocked", "NotAllowedError"));
+					});
+				}
+				return Promise.resolve();
+			}
+			return window.__mcastOriginalMediaPlay.apply(this, arguments);
+		};
+		window.__mcastTerminalBridgeOptions.onRemoteStream("host-peer", window.__mcastReturnStreams.old, "video");
+	});
+	await expect.poll(() => page.locator("[data-mcast-native-return='true'] video").evaluate((video) => (
+		video.srcObject && video.srcObject.__mcastTestId
+	))).toBe("old");
+	await page.evaluate(() => {
+		window.__mcastTerminalBridgeOptions.onRemoteStream("host-peer", window.__mcastReturnStreams.next, "video");
+	});
+	await expect.poll(() => page.evaluate(() => window.__mcastReturnPlayAttempts.next)).toBe(1);
+	expect(await page.locator("[data-mcast-native-return='true'] video").evaluate((video) => ({
+		id: video.srcObject && video.srcObject.__mcastTestId,
+		muted: video.muted
+	}))).toEqual({ id: "old", muted: false });
+	await expect(page.locator("[data-mcast-return-pending='true']")).toHaveCount(1);
+	expect(await page.locator("[data-mcast-return-pending='true']").evaluate((video) => video.muted)).toBe(true);
+	await page.evaluate(() => window.__mcastRejectNextReturnPlayback());
+	await expect(page.locator("[data-mcast-return-pending='true']")).toHaveCount(0);
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	await expect.poll(() => page.locator("[data-mcast-native-return='true'] video").evaluate((video) => (
+		video.srcObject && video.srcObject.__mcastTestId
+	))).toBe("next");
+	expect(await page.locator("[data-mcast-native-return='true'] video").evaluate((video) => video.muted)).toBe(false);
+	expect(await page.evaluate(() => window.__mcastReturnPlayAttempts.next)).toBe(3);
+	expect(await page.evaluate(() => window.__mcastReturnPlayStates.filter((state) => state.id === "next"))).toEqual([
+		{ id: "next", attempt: 1, muted: true, pending: true, visibleId: "old", visibleMuted: false },
+		{ id: "next", attempt: 2, muted: true, pending: true, visibleId: "old", visibleMuted: false },
+		{ id: "next", attempt: 3, muted: false, pending: false, visibleId: "next", visibleMuted: false }
+	]);
 	await page.waitForTimeout(10300);
 	await expect(backstageNotice).toHaveCount(0);
 	await page.evaluate(() => {
@@ -214,6 +350,98 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect.poll(() => page.evaluate(() => window.__mcastGumCallsAfterMute || 0), { timeout: 1000 }).toBe(0);
 	const logoTransform = await page.locator(".mcast-desktop__logo").evaluate((element) => getComputedStyle(element).transform);
 	expect(logoTransform).toBe("none");
+	await page.evaluate(() => {
+		HTMLMediaElement.prototype.play = window.__mcastOriginalMediaPlay;
+		const originalHangup = window.session.hangup.bind(window.session);
+		window.session.hangup = function () {
+			window.__mcastTerminalOrder.push("teardown");
+			return originalHangup.apply(this, arguments);
+		};
+		const originalFetch = window.fetch.bind(window);
+		window.fetch = function (url) {
+			if (String(url).includes("vdoShortInviteRelease")) {
+				window.__mcastTerminalOrder.push("release");
+			}
+			return originalFetch.apply(this, arguments);
+		};
+		window.__mcastTerminalBridgeOptions.onTerminal("host", "peer-closed");
+	});
+	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "goodbye");
+	await expect(page.locator("#mcastDesktopGoodbyeTitle")).toHaveText("The session has ended");
+	await expect(page.locator("#mcastDesktopGoodbyeMessage")).toContainText("free to close this page");
+	await expect.poll(() => leaseEvents.some((event) => event.type === "release")).toBe(true);
+	const terminalOrder = await page.evaluate(() => window.__mcastTerminalOrder);
+	expect(terminalOrder.indexOf("teardown")).toBeGreaterThanOrEqual(0);
+	expect(terminalOrder.indexOf("release")).toBeGreaterThan(terminalOrder.indexOf("teardown"));
+});
+
+test("desktop tears down a partial publish before releasing its invite", async ({ page }) => {
+	const leaseEvents = [];
+	await installInvite(page, { code: "DSKFAIL1", leaseEvents });
+	await page.goto(inviteUrl("DSKFAIL1"), { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+	await page.locator("#mcastDesktopPreviewButton").click();
+	await expect.poll(() => page.locator("#mcastDesktopPreviewSurface video").evaluate((video) => !!video.srcObject), {
+		timeout: 10000
+	}).toBe(true);
+	await page.locator("#mcastDesktopGuestName").fill("Partial Guest");
+	await page.evaluate(() => {
+		window.__mcastPartialOrder = [];
+		window.__mcastPartialPeerOpen = false;
+		window.__mcastReleaseRace = false;
+		window.publishWebcam = function () {
+			window.__mcastPartialPeerOpen = true;
+			window.__mcastPartialOrder.push("publish");
+			throw new Error("simulated publish failure");
+		};
+		window.session.hangup = function () {
+			window.__mcastPartialOrder.push("teardown");
+			window.__mcastPartialPeerOpen = false;
+		};
+		const originalFetch = window.fetch.bind(window);
+		window.fetch = function (url) {
+			if (String(url).includes("vdoShortInviteRelease")) {
+				window.__mcastPartialOrder.push("release");
+				window.__mcastReleaseRace = window.__mcastPartialPeerOpen;
+			}
+			return originalFetch.apply(this, arguments);
+		};
+	});
+	await page.locator("#mcastDesktopJoinButton").click();
+	await expect.poll(() => leaseEvents.some((event) => event.type === "release")).toBe(true);
+	const result = await page.evaluate(() => ({
+		order: window.__mcastPartialOrder,
+		releaseRace: window.__mcastReleaseRace,
+		peerOpen: window.__mcastPartialPeerOpen
+	}));
+	expect(result.order).toEqual(["publish", "teardown", "release"]);
+	expect(result.releaseRace).toBe(false);
+	expect(result.peerOpen).toBe(false);
+});
+
+test("one invite allows one active browser and becomes reusable after release", async ({ page }) => {
+	const sharedLease = { active: false, token: "A".repeat(43) };
+	await installInvite(page, { code: "DSKLOCK1", lease: sharedLease });
+	const secondPage = await page.context().newPage();
+	await installInvite(secondPage, { code: "DSKLOCK1", lease: sharedLease });
+	await Promise.all([
+		page.goto(inviteUrl("DSKLOCK1"), { waitUntil: "domcontentloaded" }),
+		secondPage.goto(inviteUrl("DSKLOCK1"), { waitUntil: "domcontentloaded" })
+	]);
+	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+	await expect(secondPage.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "setup", { timeout: 7000 });
+	await page.evaluate(() => window.MCastGuestUi.claimInviteLease());
+	const conflict = await secondPage.evaluate(() => window.MCastGuestUi.claimInviteLease()
+		.then(() => "unexpected-success")
+		.catch((error) => error && error.code));
+	expect(conflict).toBe("invite-in-use");
+	await page.evaluate(() => window.MCastGuestUi.releaseInviteLease());
+	const reused = await secondPage.evaluate(() => window.MCastGuestUi.claimInviteLease()
+		.then(() => true)
+		.catch(() => false));
+	expect(reused).toBe(true);
+	await secondPage.evaluate(() => window.MCastGuestUi.releaseInviteLease());
+	await secondPage.close();
 });
 
 test("desktop camera errors use the branded MCast footer recovery tray", async ({ page }) => {

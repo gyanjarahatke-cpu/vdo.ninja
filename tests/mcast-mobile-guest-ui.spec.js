@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("playwright/test");
 const fs = require("fs");
 const path = require("path");
 const { installInvite, inviteUrl } = require("./mcast-playwright-invite");
@@ -82,13 +82,18 @@ function expectInsideScroller(layout, topKey, bottomKey, context) {
 }
 
 test("mobile guest flow owns the route and reaches backstage", async ({ page }) => {
-	await installInvite(page, { code: "MOB00001" });
+	const leaseEvents = [];
+	await installInvite(page, { code: "MOB00001", leaseEvents });
+	const coldLoadStartedAt = Date.now();
 	await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 	await expect(page.locator("#mcastMobileGuest")).toBeVisible({ timeout: 10000 });
 	await expect(page.locator("#mcastGuestEntry")).toHaveCount(0);
 	await expect(page.locator("#mcastDesktopGuest")).toBeHidden();
 
 	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 6000 });
+	const coldLoadMs = Date.now() - coldLoadStartedAt;
+	console.log(`MCast mobile cold guest load: ${coldLoadMs}ms`);
+	expect(coldLoadMs).toBeLessThan(3000);
 	await page.locator("#mcastMobileAllowButton").click();
 	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup", { timeout: 12000 });
 	await expect.poll(() => page.locator("#mcastMobileSetupPreview video").evaluate((video) => !!video.srcObject), {
@@ -96,6 +101,19 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 	}).toBe(true);
 
 	await page.locator("#mcastMobileGuestName").fill("Mobile Regression Guest");
+	await page.evaluate(() => {
+		window.__mcastMobileTerminalOrder = [];
+		window.MCastNativeWebRtcBridge = {
+			isRequested() { return true; },
+			start(options) {
+				window.__mcastMobileTerminalBridgeOptions = options;
+				return true;
+			},
+			stop() {
+				window.__mcastMobileTerminalOrder.push("bridge-stop");
+			}
+		};
+	});
 	await page.locator("#mcastMobileEnterButton").click();
 	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "backstage", { timeout: 15000 });
 	await expect.poll(() => page.locator("#mcastMobileSelfPreview video").evaluate((video) => !!video.srcObject), {
@@ -128,6 +146,169 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 	expect(noticePlacement.noticeBottom).toBeLessThanOrEqual(noticePlacement.topbarBottom);
 	expect(noticePlacement.stageTop).toBeGreaterThanOrEqual(noticePlacement.topbarBottom);
 	expect(noticePlacement.overflow).toBe(false);
+	await page.evaluate(() => {
+		window.__mcastReturnStreams = {
+			old: new MediaStream(),
+			next: new MediaStream()
+		};
+		window.__mcastReturnStreams.old.__mcastTestId = "old";
+		window.__mcastReturnStreams.next.__mcastTestId = "next";
+		window.__mcastReturnPlayAttempts = { old: 0, next: 0 };
+		window.__mcastReturnPlayStates = [];
+		window.__mcastOriginalMediaPlay = HTMLMediaElement.prototype.play;
+		HTMLMediaElement.prototype.play = function () {
+			if (this.dataset.mcastNativeReturn === "true") {
+				const id = this.srcObject && this.srcObject.__mcastTestId;
+				window.__mcastReturnPlayAttempts[id] = (window.__mcastReturnPlayAttempts[id] || 0) + 1;
+				window.__mcastReturnPlayStates.push({
+					id,
+					attempt: window.__mcastReturnPlayAttempts[id],
+					muted: this.muted,
+					pending: this.dataset.mcastReturnPending === "true",
+					visibleId: document.getElementById("mcastMobileNativeReturnVideo")?.srcObject?.__mcastTestId,
+					visibleMuted: document.getElementById("mcastMobileNativeReturnVideo")?.muted
+				});
+				if (id === "next" && window.__mcastReturnPlayAttempts[id] === 1) {
+					return new Promise((resolve, reject) => {
+						window.__mcastRejectNextReturnPlayback = () => reject(new DOMException("Playback blocked", "NotAllowedError"));
+					});
+				}
+				return Promise.resolve();
+			}
+			return window.__mcastOriginalMediaPlay.apply(this, arguments);
+		};
+		window.__mcastMobileTerminalBridgeOptions.onRemoteStream("host-peer", window.__mcastReturnStreams.old, "video");
+	});
+	await expect.poll(() => page.locator("#mcastMobileNativeReturnVideo").evaluate((video) => (
+		video.srcObject && video.srcObject.__mcastTestId
+	))).toBe("old");
+	await page.evaluate(() => {
+		window.__mcastMobileTerminalBridgeOptions.onRemoteStream("host-peer", window.__mcastReturnStreams.next, "video");
+	});
+	await expect.poll(() => page.evaluate(() => window.__mcastReturnPlayAttempts.next)).toBe(1);
+	expect(await page.locator("#mcastMobileNativeReturnVideo").evaluate((video) => ({
+		id: video.srcObject && video.srcObject.__mcastTestId,
+		muted: video.muted
+	}))).toEqual({ id: "old", muted: false });
+	await expect(page.locator("[data-mcast-return-pending='true']")).toHaveCount(1);
+	expect(await page.locator("[data-mcast-return-pending='true']").evaluate((video) => video.muted)).toBe(true);
+	await page.evaluate(() => window.__mcastRejectNextReturnPlayback());
+	await expect(page.locator("[data-mcast-return-pending='true']")).toHaveCount(0);
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	await expect.poll(() => page.locator("#mcastMobileNativeReturnVideo").evaluate((video) => (
+		video.srcObject && video.srcObject.__mcastTestId
+	))).toBe("next");
+	expect(await page.locator("#mcastMobileNativeReturnVideo").evaluate((video) => video.muted)).toBe(false);
+	expect(await page.evaluate(() => window.__mcastReturnPlayAttempts.next)).toBe(3);
+	expect(await page.evaluate(() => window.__mcastReturnPlayStates.filter((state) => state.id === "next"))).toEqual([
+		{ id: "next", attempt: 1, muted: true, pending: true, visibleId: "old", visibleMuted: false },
+		{ id: "next", attempt: 2, muted: true, pending: true, visibleId: "old", visibleMuted: false },
+		{ id: "next", attempt: 3, muted: false, pending: false, visibleId: "next", visibleMuted: false }
+	]);
+	await page.evaluate(() => {
+		HTMLMediaElement.prototype.play = window.__mcastOriginalMediaPlay;
+		const originalHangup = window.session.hangup.bind(window.session);
+		window.session.hangup = function () {
+			window.__mcastMobileTerminalOrder.push("teardown");
+			return originalHangup.apply(this, arguments);
+		};
+		const originalFetch = window.fetch.bind(window);
+		window.fetch = function (url) {
+			if (String(url).includes("vdoShortInviteRelease")) {
+				window.__mcastMobileTerminalOrder.push("release");
+			}
+			return originalFetch.apply(this, arguments);
+		};
+		window.__mcastMobileTerminalBridgeOptions.onTerminal("host", "peer-closed");
+	});
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "goodbye");
+	await expect(page.locator("#mcastMobileGoodbyeTitle")).toHaveText("The session has ended");
+	await expect(page.locator("#mcastMobileGoodbyeMessage")).toContainText("free to close this page");
+	await expect.poll(() => leaseEvents.some((event) => event.type === "release")).toBe(true);
+	const terminalOrder = await page.evaluate(() => window.__mcastMobileTerminalOrder);
+	expect(terminalOrder.indexOf("teardown")).toBeGreaterThanOrEqual(0);
+	expect(terminalOrder.indexOf("release")).toBeGreaterThan(terminalOrder.indexOf("teardown"));
+});
+
+test("mobile shows setup promptly while local media is still opening", async ({ page }) => {
+	const leaseEvents = [];
+	await installInvite(page, { code: "DELAY001", leaseEvents });
+	await page.goto(inviteUrl("DELAY001"), { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 7000 });
+	await page.evaluate(() => {
+		const originalPreviewWebcam = window.previewWebcam.bind(window);
+		window.__mcastDelayedPreviewCalls = 0;
+		window.__mcastAllowClickedAt = 0;
+		document.getElementById("mcastMobileAllowButton").addEventListener("click", () => {
+			window.__mcastAllowClickedAt = performance.now();
+		}, { capture: true, once: true });
+		window.previewWebcam = async function () {
+			window.__mcastDelayedPreviewCalls += 1;
+			await new Promise((resolve) => { window.__mcastReleaseDelayedPreview = resolve; });
+			return originalPreviewWebcam.apply(this, arguments);
+		};
+	});
+	await page.locator("#mcastMobileAllowButton").click();
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup", { timeout: 700 });
+	const transitionMs = await page.evaluate(() => performance.now() - window.__mcastAllowClickedAt);
+	console.log(`MCast mobile permission-to-setup transition: ${Math.round(transitionMs)}ms`);
+	expect(transitionMs).toBeLessThan(500);
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-media-state", "opening");
+	await expect(page.locator("#mcastMobilePreviewLabel")).toContainText("Opening");
+	await expect(page.locator("#mcastMobileEnterButton")).toBeDisabled();
+	await page.waitForTimeout(900);
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup");
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-media-state", "opening");
+	expect(leaseEvents.some((event) => event.type === "claim")).toBe(false);
+	await page.evaluate(() => window.__mcastReleaseDelayedPreview());
+	await expect.poll(() => page.locator("#mcastMobileSetupPreview video").evaluate((video) => !!video.srcObject), {
+		timeout: 10000
+	}).toBe(true);
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-media-state", "ready");
+	await expect(page.locator("#mcastMobileEnterButton")).toBeEnabled();
+	await expect(page.locator("#mcastMobileEnterButton")).toHaveText("Enter studio");
+});
+
+test("mobile tears down a partial publish before releasing its invite", async ({ page }) => {
+	const leaseEvents = [];
+	await installInvite(page, { code: "MOBFAIL1", leaseEvents });
+	await page.goto(inviteUrl("MOBFAIL1"), { waitUntil: "domcontentloaded" });
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "permission", { timeout: 7000 });
+	await page.locator("#mcastMobileAllowButton").click();
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup", { timeout: 12000 });
+	await page.locator("#mcastMobileGuestName").fill("Partial Mobile Guest");
+	await page.evaluate(() => {
+		window.__mcastPartialOrder = [];
+		window.__mcastPartialPeerOpen = false;
+		window.__mcastReleaseRace = false;
+		window.publishWebcam = function () {
+			window.__mcastPartialPeerOpen = true;
+			window.__mcastPartialOrder.push("publish");
+			throw new Error("simulated publish failure");
+		};
+		window.session.hangup = function () {
+			window.__mcastPartialOrder.push("teardown");
+			window.__mcastPartialPeerOpen = false;
+		};
+		const originalFetch = window.fetch.bind(window);
+		window.fetch = function (url) {
+			if (String(url).includes("vdoShortInviteRelease")) {
+				window.__mcastPartialOrder.push("release");
+				window.__mcastReleaseRace = window.__mcastPartialPeerOpen;
+			}
+			return originalFetch.apply(this, arguments);
+		};
+	});
+	await page.locator("#mcastMobileEnterButton").click();
+	await expect.poll(() => leaseEvents.some((event) => event.type === "release")).toBe(true);
+	const result = await page.evaluate(() => ({
+		order: window.__mcastPartialOrder,
+		releaseRace: window.__mcastReleaseRace,
+		peerOpen: window.__mcastPartialPeerOpen
+	}));
+	expect(result.order).toEqual(["publish", "teardown", "release"]);
+	expect(result.releaseRace).toBe(false);
+	expect(result.peerOpen).toBe(false);
 });
 
 test("mobile setup keeps portrait preview and required actions inside the viewport", async ({ page }) => {
@@ -214,7 +395,9 @@ test("mobile action-required errors dock below content", async ({ page }) => {
 		};
 	});
 	await page.locator("#mcastMobileAllowButton").click();
-	const footer = page.locator('[data-mobile-step="permission"] [data-mcast-footer-rail]');
+	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "setup", { timeout: 700 });
+	await expect(page.locator("#mcastMobileEnterButton")).toBeDisabled();
+	const footer = page.locator('[data-mobile-step="setup"] [data-mcast-footer-rail]');
 	const recovery = footer.locator(":scope > [data-mcast-dialog-backdrop]");
 	await expect(recovery).toBeVisible({ timeout: 6000 });
 	await expect(recovery).not.toContainText("Raw internal mobile device detail");

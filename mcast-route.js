@@ -311,6 +311,7 @@
 			(routedParams.has("mcastnativewebrtc") || routedParams.has("mcastnative"));
 		window.MCastRoute = {
 			route: currentRoute,
+			inviteCode: currentRoute === "guest" ? shortCode : "",
 			mode: mode,
 			remoteSourceKind: remoteSourceKind,
 			role: role,

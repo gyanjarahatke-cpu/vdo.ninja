@@ -6,6 +6,16 @@ html.mcast-native-guest body {
 	background: #f6f8fb;
 }
 
+html.mcast-responsive-shell-desktop #mcastDesktopGuest,
+html.mcast-responsive-shell-mobile #mcastMobileGuest {
+	display: block !important;
+}
+
+html.mcast-responsive-shell-desktop #mcastMobileGuest,
+html.mcast-responsive-shell-mobile #mcastDesktopGuest {
+	display: none !important;
+}
+
 html.mcast-owned-guest-ui body > *:not(#mcastDesktopGuest):not(#mcastMobileGuest):not(#mcastGuestUiRoot):not(script):not(style):not(link) {
 	position: fixed !important;
 	left: -100000px !important;

@@ -12,6 +12,8 @@ function inviteUrl(code = "TEST0001", suffix = "") {
 
 async function installInvite(page, options = {}) {
 	const code = options.code || "TEST0001";
+	const lease = options.lease || { active: false, token: "A".repeat(43) };
+	const leaseEvents = options.leaseEvents || [];
 	const query = options.query || [
 		"room=mcast-ui-regression",
 		"push=mcast-ui-regression",
@@ -47,6 +49,55 @@ async function installInvite(page, options = {}) {
 			headers: { "Cache-Control": "no-store" },
 			body: JSON.stringify({ query, route: "guest" })
 		});
+	});
+
+	await page.route("**/api/vdoShortInviteClaim", async (route) => {
+		const body = route.request().postDataJSON();
+		leaseEvents.push({ type: "claim", code: body && body.code });
+		if (!body || body.code !== code) {
+			await route.fulfill({ status: 404, contentType: "application/json", body: '{"error":"route-not-found"}' });
+			return;
+		}
+		if (lease.active) {
+			await route.fulfill({ status: 409, contentType: "application/json", body: '{"error":"invite-in-use"}' });
+			return;
+		}
+		lease.active = true;
+		lease.token = "A".repeat(43);
+		await route.fulfill({
+			status: 201,
+			contentType: "application/json",
+			body: JSON.stringify({
+				leaseToken: lease.token,
+				expiresAt: new Date(Date.now() + 120_000).toISOString(),
+				heartbeatAfterMs: 30_000
+			})
+		});
+	});
+
+	await page.route("**/api/vdoShortInviteHeartbeat", async (route) => {
+		const body = route.request().postDataJSON();
+		leaseEvents.push({ type: "heartbeat", code: body && body.code });
+		if (!lease.active || !body || body.code !== code || body.leaseToken !== lease.token) {
+			await route.fulfill({ status: 409, contentType: "application/json", body: '{"error":"invite-lease-lost"}' });
+			return;
+		}
+		await route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ expiresAt: new Date(Date.now() + 120_000).toISOString(), heartbeatAfterMs: 30_000 })
+		});
+	});
+
+	await page.route("**/api/vdoShortInviteRelease", async (route) => {
+		const body = route.request().postDataJSON();
+		leaseEvents.push({ type: "release", code: body && body.code });
+		if (!lease.active || !body || body.code !== code || body.leaseToken !== lease.token) {
+			await route.fulfill({ status: 409, contentType: "application/json", body: '{"error":"invite-lease-lost"}' });
+			return;
+		}
+		lease.active = false;
+		await route.fulfill({ status: 204, body: "" });
 	});
 
 	return inviteUrl(code, options.suffix || "");

@@ -3,6 +3,7 @@
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const crypto = require("crypto");
 
 const root = path.resolve(__dirname, "..");
 const port = Number.parseInt(process.env.MCAST_LOCAL_PORT || "8089", 10);
@@ -13,6 +14,7 @@ const inviteQueries = new Map([
 	["BROWAUD1", "room=browser-remote&push=browser-audio&mcastmode=stream_guest&mcastremote=remote_audio&autostart&mcastautojoin"],
 	["BROWSCN1", "room=browser-remote&push=browser-screen&screenshareid=browser-screen&mcastmode=stream_guest&mcastremote=remote_screen&autostart&mcastautojoin"]
 ]);
+const inviteLeases = new Map();
 
 const contentTypes = new Map([
 	[".css", "text/css; charset=utf-8"],
@@ -28,7 +30,7 @@ const contentTypes = new Map([
 	[".webp", "image/webp"]
 ]);
 
-const server = http.createServer((request, response) => {
+const server = http.createServer(async (request, response) => {
 	try {
 		const requestUrl = new URL(request.url || "/", `http://${host}:${port}`);
 		if (requestUrl.pathname === "/api/vdoShortInviteResolve") {
@@ -39,6 +41,51 @@ const server = http.createServer((request, response) => {
 				return;
 			}
 			writeJson(response, 200, { query, route: "guest" });
+			return;
+		}
+		if (/^\/api\/vdoShortInvite(?:Claim|Heartbeat|Release)$/.test(requestUrl.pathname)) {
+			if (request.method !== "POST") {
+				writeJson(response, 405, { error: "method-not-allowed" });
+				return;
+			}
+			const body = await readJson(request);
+			const code = String(body.code || "");
+			if (!inviteQueries.has(code)) {
+				writeJson(response, 404, { error: "route-not-found" });
+				return;
+			}
+			const now = Date.now();
+			const active = inviteLeases.get(code);
+			if (requestUrl.pathname.endsWith("Claim")) {
+				if (active && active.expiresAt > now) {
+					writeJson(response, 409, { error: "invite-in-use" });
+					return;
+				}
+				const token = crypto.randomBytes(32).toString("base64url");
+				const lease = { token, expiresAt: now + 120_000 };
+				inviteLeases.set(code, lease);
+				writeJson(response, 201, {
+					leaseToken: token,
+					expiresAt: new Date(lease.expiresAt).toISOString(),
+					heartbeatAfterMs: 30_000
+				});
+				return;
+			}
+			if (!active || active.token !== body.leaseToken || active.expiresAt <= now) {
+				writeJson(response, 409, { error: "invite-lease-lost" });
+				return;
+			}
+			if (requestUrl.pathname.endsWith("Heartbeat")) {
+				active.expiresAt = now + 120_000;
+				writeJson(response, 200, {
+					expiresAt: new Date(active.expiresAt).toISOString(),
+					heartbeatAfterMs: 30_000
+				});
+				return;
+			}
+			inviteLeases.delete(code);
+			response.writeHead(204, { "Cache-Control": "no-store" });
+			response.end();
 			return;
 		}
 
@@ -79,4 +126,26 @@ function writeJson(response, status, payload) {
 function writeText(response, status, text) {
 	response.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
 	response.end(text);
+}
+
+function readJson(request) {
+	return new Promise((resolve, reject) => {
+		let raw = "";
+		request.setEncoding("utf8");
+		request.on("data", (chunk) => {
+			raw += chunk;
+			if (raw.length > 4096) {
+				reject(new Error("request-too-large"));
+				request.destroy();
+			}
+		});
+		request.on("end", () => {
+			try {
+				resolve(raw ? JSON.parse(raw) : {});
+			} catch (error) {
+				reject(error);
+			}
+		});
+		request.on("error", reject);
+	});
 }
