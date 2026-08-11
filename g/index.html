@@ -1,7 +1,7 @@
 <html lang='en' class="mcast-native-guest mcast-owned-guest-ui">
 	<head>
 		<base href="../">
-		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastGuestUi.js?v=9"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastGuestUi.js?v=12"></script>
 		<style>
 			html {
 				background-color: #0000;
@@ -28,9 +28,9 @@
 		<meta name="msapplication-TileColor" content="#da532c" />
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4044" />
-		<link rel="stylesheet" href="./g/shared/McastGuestUi.css?v=3" />
-		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=15" />
-		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=13" />
+		<link rel="stylesheet" href="./g/shared/McastGuestUi.css?v=4" />
+		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=16" />
+		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=14" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
@@ -200,6 +200,13 @@
 				</div>
 				<footer id="mcastDesktopFooterRail" class="mcast-desktop__footer-rail" data-mcast-footer-rail hidden></footer>
 			</section>
+
+			<section class="mcast-desktop__goodbye" data-desktop-step="goodbye" aria-labelledby="mcastDesktopGoodbyeTitle">
+				<div class="mcast-desktop__goodbye-mark" aria-hidden="true"></div>
+				<p class="mcast-desktop__eyebrow">MCast Studio v9</p>
+				<h1 id="mcastDesktopGoodbyeTitle">The session has ended</h1>
+				<p id="mcastDesktopGoodbyeMessage">You are disconnected and free to close this page.</p>
+			</section>
 		</main>
 		<main id="mcastMobileGuest" class="mcast-mobile" aria-label="MCast mobile guest studio">
 			<section class="mcast-mobile__light-screen" data-mobile-step="permission">
@@ -307,6 +314,13 @@
 					<button id="mcastMobileMoreButton" type="button" class="mcast-mobile__control">More</button>
 					<button id="mcastMobileLeaveButton" type="button" class="mcast-mobile__control mcast-mobile__control--leave">Leave</button>
 				</nav>
+			</section>
+
+			<section class="mcast-mobile__goodbye" data-mobile-step="goodbye" aria-labelledby="mcastMobileGoodbyeTitle">
+				<div class="mcast-mobile__goodbye-mark" aria-hidden="true"></div>
+				<p class="mcast-mobile__goodbye-brand">MCast Studio v9</p>
+				<h1 id="mcastMobileGoodbyeTitle">The session has ended</h1>
+				<p id="mcastMobileGoodbyeMessage">You are disconnected and free to close this page.</p>
 			</section>
 		</main>
 		<input id="zoomSlider" type="range" style="display: none;" />
@@ -3650,12 +3664,12 @@
 					})();
 				</script>
 
-		<script type="text/javascript" crossorigin="anonymous" src="./mcast-route.js?v=34"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./mcast-route.js?v=35"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1416"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1066"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastNativeWebRtcBridge.js?v=14"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=22"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=20"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastNativeWebRtcBridge.js?v=16"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=24"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=23"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		
 	</body>

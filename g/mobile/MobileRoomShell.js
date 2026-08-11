@@ -3,10 +3,17 @@
 
 	var root;
 	var state = {
+		initialized: false,
+		active: false,
+		activationFrame: 0,
 		step: "permission",
 		previewStarted: false,
+		previewOpening: false,
+		previewPromise: null,
+		previewSequence: 0,
 		joining: false,
 		joined: false,
+		disconnecting: false,
 		experience: null,
 		capabilities: { camera: true, microphone: true, screen: false, displayName: true },
 		devicePoll: 0,
@@ -19,6 +26,7 @@
 		lastCorrectionLog: "",
 		screenTrack: null,
 		nativeReturnConnected: false,
+		nativeReturnPlaybackKey: null,
 		boundLocalVideo: null,
 		boundLocalStream: null,
 		boundLocalSurface: null
@@ -32,19 +40,18 @@
 		leave: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 3v18"/></svg>'
 	};
 
-	if (document.readyState === "loading") {
-		document.addEventListener("DOMContentLoaded", init);
-	} else {
-		init();
-	}
+	installResponsiveActivation();
 
 	function init() {
 		root = byId("mcastMobileGuest");
-		if (!root || !isMobileGuestViewport()) {
+		if (!root || !isMobileGuestViewport() || !activateResponsiveShell()) {
 			return;
 		}
-		document.body.classList.add("mcast-mobile-guest-active");
-		document.documentElement.classList.add("mcast-mobile-guest-active");
+		if (state.initialized) {
+			startMobilePolling();
+			return;
+		}
+		state.initialized = true;
 		clearForcedBodyRotation();
 		configureExperience();
 		disableLegacyAuxiliaryModules();
@@ -55,27 +62,108 @@
 		restoreGuestName();
 		fillRoomName();
 		setStep("permission");
-		state.devicePoll = window.setInterval(function () {
-			disableLegacyAuxiliaryModules();
-			removeLegacyBranding();
-			syncDevices();
-			updateControls();
-		}, 900);
-		state.videoPoll = window.setInterval(function () {
-			if (state.previewStarted || state.joined) {
-				bindLocalVideo(state.joined ? "poll-room" : "poll-setup");
-			}
-		}, 1000);
+		updatePreviewReadiness();
+		startMobilePolling();
 		window.addEventListener("resize", scheduleVideoCorrection, { passive: true });
 		window.addEventListener("orientationchange", scheduleVideoCorrection, { passive: true });
 		window.addEventListener("online", function () {
+			if (!isActiveResponsiveShell()) { return; }
 			showStatus(state.joined ? "Connection restored." : "Connection restored. You can continue.");
 		});
 		window.addEventListener("offline", function () {
+			if (!isActiveResponsiveShell()) { return; }
 			showStatus("You appear to be offline. Check your connection and try again.", true);
 		});
-		window.addEventListener("mcast:open-settings", openSettings);
+		window.addEventListener("mcast:open-settings", function () {
+			if (isActiveResponsiveShell()) { openSettings(); }
+		});
+		window.addEventListener("mcast:invite-lease-lost", function () {
+			if (isActiveResponsiveShell()) {
+				finishGuestSession("Your secure guest connection ended. You are free to close this page.", false);
+			}
+		});
 		logMobile("mobile app initialized", getViewportDebug());
+	}
+
+	function installResponsiveActivation() {
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", scheduleResponsiveActivation, { once: true });
+		} else {
+			scheduleResponsiveActivation();
+		}
+		window.addEventListener("resize", scheduleResponsiveActivation, { passive: true });
+		window.addEventListener("orientationchange", scheduleResponsiveActivation, { passive: true });
+		window.addEventListener("mcast:responsive-shell-activated", function (event) {
+			var shell = event && event.detail && event.detail.shell;
+			if (shell === "mobile") {
+				state.active = true;
+				startMobilePolling();
+				return;
+			}
+			if (!state.joined) {
+				state.active = false;
+				stopMobilePolling();
+				document.body.classList.remove("mcast-mobile-guest-active");
+				document.documentElement.classList.remove("mcast-mobile-guest-active");
+			}
+		});
+	}
+
+	function scheduleResponsiveActivation() {
+		if (state.activationFrame) {
+			window.cancelAnimationFrame(state.activationFrame);
+		}
+		state.activationFrame = window.requestAnimationFrame(function () {
+			state.activationFrame = window.requestAnimationFrame(function () {
+				state.activationFrame = 0;
+				init();
+			});
+		});
+	}
+
+	function activateResponsiveShell() {
+		var lock = window.__mcastGuestShellLock;
+		if (lock && lock !== "mobile") { return false; }
+		state.active = true;
+		window.__mcastActiveGuestShell = "mobile";
+		document.documentElement.classList.add("mcast-responsive-shell-mobile", "mcast-mobile-guest-active");
+		document.documentElement.classList.remove("mcast-responsive-shell-desktop", "mcast-desktop-guest-active");
+		document.body.classList.add("mcast-mobile-guest-active");
+		document.body.classList.remove("mcast-desktop-guest-active");
+		window.dispatchEvent(new CustomEvent("mcast:responsive-shell-activated", { detail: { shell: "mobile" } }));
+		return true;
+	}
+
+	function isActiveResponsiveShell() {
+		return state.active && window.__mcastActiveGuestShell === "mobile";
+	}
+
+	function startMobilePolling() {
+		if (!state.initialized || !state.active) { return; }
+		if (!state.devicePoll) {
+			state.devicePoll = window.setInterval(function () {
+				if (!state.active) { return; }
+				disableLegacyAuxiliaryModules();
+				removeLegacyBranding();
+				syncDevices();
+				updateControls();
+			}, 900);
+		}
+		if (!state.videoPoll) {
+			state.videoPoll = window.setInterval(function () {
+				if (!state.active) { return; }
+				if (state.previewStarted || state.joined) {
+					bindLocalVideo(state.joined ? "poll-room" : "poll-setup");
+				}
+			}, 1000);
+		}
+	}
+
+	function stopMobilePolling() {
+		window.clearInterval(state.devicePoll);
+		window.clearInterval(state.videoPoll);
+		state.devicePoll = 0;
+		state.videoPoll = 0;
 	}
 
 	function configureExperience() {
@@ -199,6 +287,10 @@
 			},
 			log: logMobile,
 			onRemoteStream: bindNativeReturnStream,
+			onRemoteStreamRemoved: clearNativeReturnStream,
+			onTerminal: function () {
+				finishGuestSession("The session has ended. You are free to close this page.", true);
+			},
 			onState: function (stage) {
 				if (stage === "media-attached") {
 					showStatus("Native studio connection is starting.");
@@ -213,40 +305,73 @@
 		document.body.classList.toggle("mcast-mobile-room-active", step === "backstage");
 	}
 
-	async function startPreview() {
+	function startPreview() {
 		if (state.capabilities.screen) {
 			return joinScreenShare();
 		}
 		if (state.previewStarted) {
 			setStep("setup");
 			bindLocalVideo("preview-existing");
-			return;
+			updatePreviewReadiness();
+			return Promise.resolve(true);
 		}
+		if (state.previewPromise) {
+			return state.previewPromise;
+		}
+
+		state.previewOpening = true;
+		var previewSequence = ++state.previewSequence;
+		setStep("setup");
+		setText("mcastMobilePreviewLabel", state.capabilities.camera ? "Opening camera preview..." : "Opening microphone...");
 		setButtonBusy("mcastMobileAllowButton", true, state.capabilities.camera ? "Opening devices..." : "Opening microphone...");
 		setStatus(state.capabilities.camera
-			? "Requesting camera and microphone access..."
-			: "Requesting microphone access...");
+			? "Opening your camera and microphone. You can finish your name while they get ready."
+			: "Opening your microphone. You can continue setup while it gets ready.");
+		updatePreviewReadiness();
+		state.previewPromise = openLocalPreview(previewSequence);
+		return state.previewPromise;
+	}
+
+	async function openLocalPreview(previewSequence) {
 		try {
 			if (typeof window.previewWebcam !== "function") {
 				await waitForFunction("previewWebcam", 4500);
 			}
 			await window.previewWebcam(false);
 			await waitForLocalMedia(9000);
+			if (previewSequence !== state.previewSequence || state.disconnecting) {
+				return false;
+			}
 			state.previewStarted = true;
 			root.classList.add("has-preview");
-			setStep("setup");
-			setStatus("");
+			root.dataset.mediaState = "ready";
+			setText("mcastMobilePreviewLabel", state.experience.previewLabel);
 			bindLocalVideo("permission-granted");
 			syncDevices();
 			startAudioMeter();
 			showStatus(state.experience.kind === "remote_audio" ? "Microphone is ready." : "Camera and microphone are ready.");
+			return true;
 		} catch (error) {
+			if (previewSequence !== state.previewSequence || state.disconnecting) {
+				return false;
+			}
+			state.previewStarted = false;
+			root.classList.remove("has-preview");
+			root.dataset.mediaState = "error";
+			setText("mcastMobilePreviewLabel", state.capabilities.camera ? "Camera preview unavailable" : "Microphone unavailable");
 			setStatus(getPermissionMessage(error), true);
 			logMobile("getUserMedia error", { name: error && error.name });
 			showMediaRecovery(error, startPreview);
 			throw error;
 		} finally {
-			setButtonBusy("mcastMobileAllowButton", false, state.experience.permissionAction);
+			if (previewSequence === state.previewSequence) {
+				state.previewOpening = false;
+				state.previewPromise = null;
+				setButtonBusy("mcastMobileAllowButton", false, state.experience.permissionAction);
+				if (!state.disconnecting) {
+					updatePreviewReadiness();
+				}
+			}
 		}
 	}
 
@@ -257,22 +382,31 @@
 		if (state.joining || (state.capabilities.displayName && !validateName())) {
 			return;
 		}
+		if (state.previewOpening) {
+			showStatus("Your camera and microphone are still opening. Enter when they are ready.");
+			return;
+		}
+		if (!state.previewStarted) {
+			showStatus("Finish camera and microphone setup before entering.", true);
+			return;
+		}
 		state.joining = true;
+		var leaseClaimed = false;
 		setButtonBusy("mcastMobileEnterButton", true, "Connecting...");
 		setStatus("Preparing the secure connection...");
 		try {
-			if (!state.previewStarted) {
-				await startPreview();
-			}
 			if (state.capabilities.displayName) { applyGuestName(); }
 			bindLocalVideo("pre-publish");
 			if (typeof window.publishWebcam !== "function") {
 				await waitForFunction("publishWebcam", 4500);
 			}
 			await waitForReadyButton(9000);
+			await claimInviteLease();
+			leaseClaimed = true;
 			await window.publishWebcam(byId("gowebcam") || false);
 			await waitForLocalStream(6000);
 			state.joined = true;
+			window.__mcastGuestShellLock = "mobile";
 			setStep("backstage");
 			bindLocalVideo("joined");
 			updateControls();
@@ -280,12 +414,21 @@
 			showToast(connectedNotice());
 			logMobile("joined backstage", summarizeStream(getLocalStream(getLocalVideoElement())));
 		} catch (error) {
-			setStatus(getPermissionMessage(error), true);
+			var tornDown = leaseClaimed ? await tearDownPublishedSession() : false;
+			if (leaseClaimed && tornDown) {
+				await releaseInviteLease();
+			}
+			if (isInviteLeaseError(error)) {
+				setStatus("This invite is already in use. Try again after the current guest disconnects.", true);
+				window.MCastGuestUi.showInviteLeaseError(error);
+			} else {
+				setStatus(getPermissionMessage(error), true);
+				showMediaRecovery(error, tornDown ? reloadGuestPage : joinRoom);
+			}
 			logMobile("join error", { name: error && error.name });
-			showMediaRecovery(error, joinRoom);
 		} finally {
 			state.joining = false;
-			setButtonBusy("mcastMobileEnterButton", false, state.experience.primaryAction);
+			updatePreviewReadiness();
 		}
 	}
 
@@ -294,6 +437,7 @@
 			return;
 		}
 		state.joining = true;
+		var leaseClaimed = false;
 		setButtonBusy("mcastMobileAllowButton", true, "Choose a screen...");
 		setButtonBusy("mcastMobileEnterButton", true, "Choose a screen...");
 		setStatus("Choose a screen, window, or browser tab in the system prompt.");
@@ -302,6 +446,8 @@
 			if (typeof window.publishScreen !== "function") {
 				await waitForFunction("publishScreen", 6000);
 			}
+			await claimInviteLease();
+			leaseClaimed = true;
 			await window.publishScreen();
 			if (!getScreenStream()) {
 				var selectionError = new Error("Screen selection was not completed");
@@ -311,14 +457,24 @@
 			await waitForScreenStream(4000);
 			state.previewStarted = true;
 			state.joined = true;
+			window.__mcastGuestShellLock = "mobile";
 			root.classList.add("has-preview", "is-joined");
 			bindLocalVideo("screen-connected");
 			watchScreenShareEnded();
 			setStep("backstage");
 			showToast(connectedNotice());
 		} catch (error) {
-			setStatus(getPermissionMessage(error), true);
-			showMediaRecovery(error, joinScreenShare);
+			var tornDown = leaseClaimed ? await tearDownPublishedSession() : false;
+			if (leaseClaimed && tornDown) {
+				await releaseInviteLease();
+			}
+			if (isInviteLeaseError(error)) {
+				setStatus("This invite is already in use. Try again after the current guest disconnects.", true);
+				window.MCastGuestUi.showInviteLeaseError(error);
+			} else {
+				setStatus(getPermissionMessage(error), true);
+				showMediaRecovery(error, tornDown ? reloadGuestPage : joinScreenShare);
+			}
 		} finally {
 			state.joining = false;
 			setButtonBusy("mcastMobileAllowButton", false, state.experience.permissionAction);
@@ -407,40 +563,83 @@
 
 	function bindNativeReturnStream(uuid, stream) {
 		var stage = root && root.querySelector(".mcast-mobile__stage-card");
-		if (!stage || !stream) {
+		var guestUi = window.MCastGuestUi;
+		if (!stage || !stream || !guestUi || typeof guestUi.stageHostReturnVideo !== "function") {
+			logMobile("host return playback unavailable", {});
 			return false;
 		}
 
-		var video = byId("mcastMobileNativeReturnVideo");
-		if (!video) {
-			video = document.createElement("video");
-			video.id = "mcastMobileNativeReturnVideo";
-			video.autoplay = true;
-			video.playsInline = true;
-			video.controls = false;
-			video.dataset.mcastNativeReturn = "true";
-			video.dataset.label = "Host feed";
+		var peer = String(uuid || "peer");
+		var playbackKey = "mobile:" + peer;
+		if (state.nativeReturnPlaybackKey && state.nativeReturnPlaybackKey !== playbackKey) {
+			guestUi.clearHostReturnPlayback(state.nativeReturnPlaybackKey);
 		}
-		video.setAttribute("playsinline", "");
-		video.setAttribute("autoplay", "");
-		video.muted = false;
-		if (video.srcObject !== stream) {
-			video.srcObject = stream;
-		}
-		if (video.parentNode !== stage) {
-			stage.insertBefore(video, stage.firstChild);
-		}
-		root.classList.add("has-native-return");
-		video.play().catch(function () {});
-		if (!state.nativeReturnConnected) {
-			state.nativeReturnConnected = true;
-			showToast("Host feed connected.");
-		}
-		logMobile("native return stream bound", {
-			uuid: String(uuid || ""),
-			tracks: summarizeStream(stream)
+		state.nativeReturnPlaybackKey = playbackKey;
+		guestUi.stageHostReturnVideo({
+			key: playbackKey,
+			stream: stream,
+			getCurrentVideo: function () {
+				return byId("mcastMobileNativeReturnVideo");
+			},
+			createVideo: function (current) {
+				var video = current ? current.cloneNode(false) : document.createElement("video");
+				video.autoplay = true;
+				video.playsInline = true;
+				video.controls = false;
+				video.muted = false;
+				video.setAttribute("playsinline", "");
+				video.setAttribute("autoplay", "");
+				video.dataset.mcastNativeReturn = "true";
+				video.dataset.mcastNativeReturnPeer = peer;
+				video.dataset.label = "Host feed";
+				return video;
+			},
+			promote: function (video, previous) {
+				video.id = "mcastMobileNativeReturnVideo";
+				video.dataset.mcastNativeReturnPeer = peer;
+				if (previous && previous.parentNode === stage) {
+					stage.replaceChild(video, previous);
+				} else {
+					stage.insertBefore(video, stage.firstChild);
+				}
+			},
+			onRetry: function () {
+				showStatus("Tap the screen to resume the host feed.");
+				logMobile("host return playback waiting for interaction", { uuid: String(uuid || "") });
+			},
+			onReady: function () {
+				root.classList.add("has-native-return");
+				if (!state.nativeReturnConnected) {
+					state.nativeReturnConnected = true;
+					showToast("Host feed connected.");
+				}
+				logMobile("native return stream playing", {
+					uuid: String(uuid || ""),
+					tracks: summarizeStream(stream)
+				});
+			}
 		});
 		return true;
+	}
+
+	function clearNativeReturnStream(uuid) {
+		var video = byId("mcastMobileNativeReturnVideo");
+		var peer = String(uuid || "");
+		if (uuid && state.nativeReturnPlaybackKey !== "mobile:" + peer &&
+			(!video || video.dataset.mcastNativeReturnPeer !== peer)) {
+			return;
+		}
+		if (window.MCastGuestUi && typeof window.MCastGuestUi.clearHostReturnPlayback === "function") {
+			window.MCastGuestUi.clearHostReturnPlayback(state.nativeReturnPlaybackKey || "");
+		}
+		state.nativeReturnPlaybackKey = null;
+		if (video) {
+			try { video.pause(); } catch (error) {}
+			video.srcObject = null;
+			video.remove();
+		}
+		state.nativeReturnConnected = false;
+		if (root) { root.classList.remove("has-native-return"); }
 	}
 
 	function ensureNameLabelOnTop(surface) {
@@ -793,6 +992,35 @@
 		toggleClass("mcastMobileSelfPreview", "is-camera-off", cameraOff);
 	}
 
+	function updatePreviewReadiness() {
+		if (!root || !state.experience || state.capabilities.screen) { return; }
+		var ready = !!state.previewStarted;
+		var opening = !!state.previewOpening;
+		var busy = opening || state.joining;
+		root.dataset.mediaState = ready ? "ready" : opening ? "opening" : root.dataset.mediaState === "error" ? "error" : "idle";
+		var preview = byId("mcastMobileSetupPreview");
+		if (preview) {
+			preview.setAttribute("aria-busy", opening ? "true" : "false");
+		}
+		var enterLabel = state.joining
+			? "Connecting..."
+			: opening
+				? (state.capabilities.camera ? "Opening devices..." : "Opening microphone...")
+				: ready
+					? state.experience.primaryAction
+					: (state.capabilities.camera ? "Camera and microphone not ready" : "Microphone not ready");
+		setButtonBusy("mcastMobileEnterButton", busy, enterLabel);
+		var enter = byId("mcastMobileEnterButton");
+		if (enter) {
+			enter.disabled = busy || !ready;
+			enter.setAttribute("aria-disabled", enter.disabled ? "true" : "false");
+		}
+		["mcastMobileSetupMicButton", "mcastMobileSetupCameraButton", "mcastMobileSetupSettingsButton"].forEach(function (id) {
+			var button = byId(id);
+			if (button) { button.disabled = opening || !ready; }
+		});
+	}
+
 	function toggleSettings() {
 		var panel = byId("mcastMobileSettingsPanel");
 		if (!panel) {
@@ -840,16 +1068,79 @@
 	}
 
 	function leaveRoom() {
-		showToast(state.capabilities.screen ? "Screen sharing stopped." : "You disconnected.");
-		state.joined = false;
-		state.previewStarted = false;
-		state.screenTrack = null;
-		root.classList.remove("is-joined");
-		setStep(state.capabilities.screen ? "permission" : "setup");
-		if (typeof window.hangup === "function") {
-			window.hangup();
+		finishGuestSession("You are disconnected and free to close this page.", true);
+	}
+
+	function finishGuestSession(message, shouldReleaseLease) {
+		if (state.disconnecting || state.step === "goodbye") {
+			return;
 		}
+		state.disconnecting = true;
+		state.joined = false;
+		window.__mcastGuestShellLock = "mobile";
+		stopMobilePolling();
+		state.previewStarted = false;
+		state.previewOpening = false;
+		state.previewPromise = null;
+		state.previewSequence += 1;
+		state.screenTrack = null;
+		root.classList.remove("is-joined", "has-preview");
+		clearNativeReturnStream("");
+		closeSettings();
+		setText("mcastMobileGoodbyeMessage", message || "You are disconnected and free to close this page.");
+		setStep("goodbye");
 		updateControls();
+		if (window.MCastNativeWebRtcBridge && typeof window.MCastNativeWebRtcBridge.stop === "function") {
+			window.MCastNativeWebRtcBridge.stop({ dispose: true });
+		}
+		Promise.resolve(tearDownPublishedSession()).then(function (tornDown) {
+			if (shouldReleaseLease && tornDown) {
+				return releaseInviteLease();
+			}
+			return false;
+		});
+	}
+
+	function tearDownPublishedSession() {
+		if (window.MCastNativeWebRtcBridge && typeof window.MCastNativeWebRtcBridge.stop === "function") {
+			window.MCastNativeWebRtcBridge.stop({ dispose: true });
+		}
+		var activeSession = window.session;
+		if (!activeSession) {
+			return Promise.resolve(true);
+		}
+		if (typeof activeSession.hangup !== "function") {
+			return Promise.resolve(false);
+		}
+		var retainedUi = captureOwnedGuestUi();
+		try {
+			activeSession.hangup(false, false);
+			restoreOwnedGuestUi(retainedUi);
+			return Promise.resolve(true);
+		} catch (error) {
+			restoreOwnedGuestUi(retainedUi);
+			logMobile("session teardown failed", { name: error && error.name });
+			return Promise.resolve(false);
+		}
+	}
+
+	function captureOwnedGuestUi() {
+		return ["mcastDesktopGuest", "mcastMobileGuest", "mcastGuestUiRoot"].map(byId).filter(Boolean);
+	}
+
+	function restoreOwnedGuestUi(elements) {
+		if (!document.body) {
+			return;
+		}
+		elements.forEach(function (element) {
+			if (!element.isConnected) {
+				document.body.appendChild(element);
+			}
+		});
+	}
+
+	function reloadGuestPage() {
+		window.location.reload();
 	}
 
 	function watchScreenShareEnded() {
@@ -860,14 +1151,27 @@
 		state.screenTrack = track;
 		track.addEventListener("ended", function () {
 			if (!state.joined) { return; }
-			state.joined = false;
-			state.previewStarted = false;
-			state.screenTrack = null;
-			root.classList.remove("has-preview", "is-joined");
-			setStep("permission");
-			setStatus("Screen sharing stopped. Choose what to share to reconnect.");
-			showToast("Screen sharing stopped.");
+			finishGuestSession("Screen sharing has stopped. You are free to close this page.", true);
 		});
+	}
+
+	function claimInviteLease() {
+		if (!window.MCastGuestUi || typeof window.MCastGuestUi.claimInviteLease !== "function") {
+			return Promise.reject(new Error("Guest connection service is unavailable"));
+		}
+		return window.MCastGuestUi.claimInviteLease();
+	}
+
+	function releaseInviteLease() {
+		if (!window.MCastGuestUi || typeof window.MCastGuestUi.releaseInviteLease !== "function") {
+			return Promise.resolve(false);
+		}
+		return window.MCastGuestUi.releaseInviteLease();
+	}
+
+	function isInviteLeaseError(error) {
+		return !!(window.MCastGuestUi && typeof window.MCastGuestUi.isInviteLeaseError === "function" &&
+			window.MCastGuestUi.isInviteLeaseError(error));
 	}
 
 	function installNativeGuestControls() {

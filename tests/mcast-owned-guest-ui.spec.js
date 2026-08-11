@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("playwright/test");
 const { installInvite, inviteUrl } = require("./mcast-playwright-invite");
 
 const mediaLaunchOptions = {
@@ -26,11 +26,15 @@ test.describe("desktop MCast UI ownership", () => {
 			await expect(page.locator(selector)).toBeHidden();
 		}
 		await expect(page.locator(".alertModal:visible, .promptModal:visible, .customModelPopup:visible")).toHaveCount(0);
+		const dialog = page.locator("#mcastDesktopFooterRail > [data-mcast-dialog-backdrop]");
+		await page.evaluate(() => {
+			window.warnUser("Info: Only AlphaNumeric characters should be used for the room name.\n\nThe offending characters have been replaced by an underscore");
+		});
+		await expect(dialog).toBeHidden();
 
 		await page.evaluate(() => {
 			window.warnUser("NotReadableError: camera device raw-internal-driver-detail");
 		});
-		const dialog = page.locator("#mcastDesktopFooterRail > [data-mcast-dialog-backdrop]");
 		await expect(dialog).toBeVisible();
 		await expect(dialog).toContainText("The camera could not start");
 		await expect(dialog).not.toContainText("raw-internal-driver-detail");
@@ -61,8 +65,8 @@ test.describe("desktop MCast UI ownership", () => {
 		});
 		const quarantined = page.locator('.alertModal[data-mcast-upstream-ui="quarantined"]');
 		await expect(quarantined).toBeHidden();
-		await expect(dialog).toBeVisible();
-		await expect(dialog).not.toContainText("opaque internal socket detail");
+		await expect(dialog).toBeHidden();
+		await expect(page.getByText("Upstream branding and opaque internal socket detail", { exact: true })).toBeHidden();
 	});
 
 	const remoteCases = [

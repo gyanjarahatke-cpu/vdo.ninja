@@ -15,6 +15,13 @@
 		toastSequence: 0,
 		activeToast: null,
 		toastTimer: 0,
+		inviteLease: null,
+		inviteLeaseClaim: null,
+		inviteLeaseHeartbeatRequest: null,
+		inviteLeaseHeartbeatTimer: 0,
+		inviteLeaseLifecycleInstalled: false,
+		hostReturnPlaybacks: Object.create(null),
+		hostReturnPlaybackRetryInstalled: false,
 		engineMessageSignatures: Object.create(null),
 		legacyBrowserDialogsInstalled: false
 	};
@@ -106,7 +113,14 @@
 		confirmEngineAction: confirmEngineAction,
 		promptEngineAction: promptEngineAction,
 		openSettings: openSettings,
-		safeErrorMessage: safeErrorMessage
+		safeErrorMessage: safeErrorMessage,
+		claimInviteLease: claimInviteLease,
+		releaseInviteLease: releaseInviteLease,
+		hasInviteLease: hasInviteLease,
+		isInviteLeaseError: isInviteLeaseError,
+		showInviteLeaseError: showInviteLeaseError,
+		stageHostReturnVideo: stageHostReturnVideo,
+		clearHostReturnPlayback: clearHostReturnPlayback
 	};
 
 	window.MCastGuestUi = api;
@@ -123,6 +137,7 @@
 		}
 		ensureRoot();
 		installLegacyUiQuarantine();
+		installInviteLeaseLifecycle();
 	}
 
 	function isOwnedRoute() {
@@ -152,6 +167,503 @@
 		var route = state.configuredRoute || window.MCastRoute || {};
 		var kind = normalizeExperienceKind(route.remoteSourceKind || route.mode || "guest");
 		return experiences[kind] || experiences.guest;
+	}
+
+	function claimInviteLease() {
+		var code = inviteCode();
+		if (!code) {
+			return Promise.reject(createInviteLeaseError("invalid-invite-code", 400));
+		}
+		if (state.inviteLease && state.inviteLease.code === code && state.inviteLease.token) {
+			return Promise.resolve(state.inviteLease);
+		}
+		if (state.inviteLeaseClaim) {
+			return state.inviteLeaseClaim;
+		}
+
+		state.inviteLeaseClaim = postInviteLease("/api/vdoShortInviteClaim", { code: code }, false)
+			.then(function (payload) {
+				var token = String(payload && payload.leaseToken || "");
+				var expiresAt = Date.parse(payload && payload.expiresAt || "");
+				if (!/^[A-Za-z0-9_-]{43}$/.test(token) || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+					throw createInviteLeaseError("invalid-lease-response", 502);
+				}
+				state.inviteLease = {
+					code: code,
+					token: token,
+					expiresAt: expiresAt,
+					heartbeatAfterMs: normalizeHeartbeatDelay(payload.heartbeatAfterMs)
+				};
+				scheduleInviteLeaseHeartbeat(state.inviteLease.heartbeatAfterMs);
+				return state.inviteLease;
+			})
+			.finally(function () {
+				state.inviteLeaseClaim = null;
+			});
+		return state.inviteLeaseClaim;
+	}
+
+	function releaseInviteLease(options) {
+		options = options || {};
+		window.clearTimeout(state.inviteLeaseHeartbeatTimer);
+		state.inviteLeaseHeartbeatTimer = 0;
+		var lease = state.inviteLease;
+		state.inviteLease = null;
+		if (!lease || !lease.code || !lease.token) {
+			return Promise.resolve(false);
+		}
+
+		var payload = JSON.stringify({ code: lease.code, leaseToken: lease.token });
+		if (options.beacon && window.navigator && typeof window.navigator.sendBeacon === "function" && typeof window.Blob === "function") {
+			try {
+				if (window.navigator.sendBeacon("/api/vdoShortInviteRelease", new window.Blob([payload], { type: "application/json" }))) {
+					return Promise.resolve(true);
+				}
+			} catch (error) {}
+		}
+		return postInviteLease("/api/vdoShortInviteRelease", JSON.parse(payload), true)
+			.then(function () { return true; })
+			.catch(function () { return false; });
+	}
+
+	function hasInviteLease() {
+		return !!(state.inviteLease && state.inviteLease.token && state.inviteLease.expiresAt > Date.now());
+	}
+
+	function heartbeatInviteLease() {
+		var lease = state.inviteLease;
+		if (!lease || state.inviteLeaseHeartbeatRequest) {
+			return;
+		}
+		window.clearTimeout(state.inviteLeaseHeartbeatTimer);
+		state.inviteLeaseHeartbeatTimer = 0;
+		var request = postInviteLease("/api/vdoShortInviteHeartbeat", {
+			code: lease.code,
+			leaseToken: lease.token
+		}, false);
+		state.inviteLeaseHeartbeatRequest = request;
+		request.then(function (payload) {
+			if (state.inviteLease !== lease) {
+				return;
+			}
+			var expiresAt = Date.parse(payload && payload.expiresAt || "");
+			if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+				markInviteLeaseLost("invalid-lease-response");
+				return;
+			}
+			lease.expiresAt = expiresAt;
+			lease.heartbeatAfterMs = normalizeHeartbeatDelay(payload.heartbeatAfterMs);
+			scheduleInviteLeaseHeartbeat(lease.heartbeatAfterMs);
+		}).catch(function (error) {
+			if (state.inviteLease !== lease) {
+				return;
+			}
+			if (isAuthoritativeInviteLeaseLoss(error) || Date.now() + 1000 >= lease.expiresAt) {
+				markInviteLeaseLost(error && error.code || "invite-lease-lost");
+				return;
+			}
+			var remaining = Math.max(1000, lease.expiresAt - Date.now() - 1000);
+			scheduleInviteLeaseHeartbeat(Math.min(3000, remaining));
+		}).finally(function () {
+			if (state.inviteLeaseHeartbeatRequest === request) {
+				state.inviteLeaseHeartbeatRequest = null;
+			}
+		});
+	}
+
+	function scheduleInviteLeaseHeartbeat(delay) {
+		window.clearTimeout(state.inviteLeaseHeartbeatTimer);
+		if (!state.inviteLease) {
+			state.inviteLeaseHeartbeatTimer = 0;
+			return;
+		}
+		state.inviteLeaseHeartbeatTimer = window.setTimeout(heartbeatInviteLease, normalizeHeartbeatDelay(delay));
+	}
+
+	function markInviteLeaseLost(code) {
+		window.clearTimeout(state.inviteLeaseHeartbeatTimer);
+		state.inviteLeaseHeartbeatTimer = 0;
+		state.inviteLease = null;
+		state.inviteLeaseHeartbeatRequest = null;
+		window.dispatchEvent(new CustomEvent("mcast:invite-lease-lost", {
+			detail: { code: safePlainText(code, "invite-lease-lost") }
+		}));
+	}
+
+	function installInviteLeaseLifecycle() {
+		if (state.inviteLeaseLifecycleInstalled) {
+			return;
+		}
+		state.inviteLeaseLifecycleInstalled = true;
+		window.addEventListener("pagehide", function () {
+			releaseInviteLease({ beacon: true });
+		});
+		window.addEventListener("focus", heartbeatInviteLeaseIfActive);
+		window.addEventListener("online", heartbeatInviteLeaseIfActive);
+		document.addEventListener("visibilitychange", function () {
+			if (document.visibilityState === "visible") {
+				heartbeatInviteLeaseIfActive();
+			}
+		});
+	}
+
+	function heartbeatInviteLeaseIfActive() {
+		if (state.inviteLease && state.inviteLease.expiresAt > Date.now()) {
+			heartbeatInviteLease();
+		}
+	}
+
+	function postInviteLease(url, body, keepalive) {
+		var controller = typeof window.AbortController === "function" ? new window.AbortController() : null;
+		var timeout = window.setTimeout(function () {
+			if (controller) { controller.abort(); }
+		}, 8000);
+		return window.fetch(url, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+			cache: "no-store",
+			credentials: "same-origin",
+			keepalive: !!keepalive,
+			signal: controller ? controller.signal : undefined
+		}).then(function (response) {
+			return response.text().then(function (text) {
+				var payload = {};
+				try { payload = text ? JSON.parse(text) : {}; } catch (error) {}
+				if (!response.ok) {
+					throw createInviteLeaseError(payload.error || "invite-lease-request-failed", response.status);
+				}
+				return payload;
+			});
+		}).catch(function (error) {
+			if (error && error.mcastInviteLeaseError) {
+				throw error;
+			}
+			throw createInviteLeaseError("invite-lease-unavailable", 0);
+		}).finally(function () {
+			window.clearTimeout(timeout);
+		});
+	}
+
+	function createInviteLeaseError(code, status) {
+		var error = new Error("The guest connection could not be reserved.");
+		error.name = "MCastInviteLeaseError";
+		error.code = safePlainText(code, "invite-lease-request-failed");
+		error.status = Number(status) || 0;
+		error.mcastInviteLeaseError = true;
+		return error;
+	}
+
+	function isInviteLeaseError(error) {
+		return !!(error && (error.mcastInviteLeaseError || error.code === "invite-in-use" || error.code === "invite-lease-lost"));
+	}
+
+	function isAuthoritativeInviteLeaseLoss(error) {
+		return !!(error && (
+			error.code === "invite-lease-lost" ||
+			error.code === "route-not-found" ||
+			error.code === "route-expired" ||
+			error.status === 404 || error.status === 409 || error.status === 410
+		));
+	}
+
+	function showInviteLeaseError(error) {
+		if (error && error.code === "invite-in-use") {
+			return showInfo(
+				"This invite is already in use",
+				"Only one guest can use this link at a time. Try again after the current guest disconnects.",
+				{ kind: "warning" }
+			);
+		}
+		return showConnectionError("The secure guest connection could not be started. Check your connection and try again.");
+	}
+
+	function inviteCode() {
+		var route = state.configuredRoute || window.MCastRoute || {};
+		var code = String(route.inviteCode || "").trim();
+		return /^[A-Za-z0-9]{8}$/.test(code) ? code : "";
+	}
+
+	function stageHostReturnVideo(options) {
+		options = options || {};
+		var key = safePlainText(options.key, "host-return");
+		if (!options.stream || typeof options.getCurrentVideo !== "function" ||
+			typeof options.createVideo !== "function" || typeof options.promote !== "function") {
+			return Promise.resolve(false);
+		}
+
+		var existing = state.hostReturnPlaybacks[key];
+		if (existing && existing.stream === options.stream) {
+			existing.options = options;
+			if (existing.retryPending && !existing.pending) {
+				existing.promise = attemptHostReturnPlayback(existing);
+			}
+			return existing.promise || Promise.resolve(existing.ready);
+		}
+
+		clearHostReturnPlayback(key);
+		var record = {
+			key: key,
+			stream: options.stream,
+			options: options,
+			pending: null,
+			timer: 0,
+			attemptSequence: 0,
+			resolveAttempt: null,
+			retryPending: false,
+			ready: false,
+			rollbackPending: null,
+			promise: null
+		};
+		state.hostReturnPlaybacks[key] = record;
+		installHostReturnPlaybackRetry();
+		record.promise = attemptHostReturnPlayback(record);
+		return record.promise;
+	}
+
+	function attemptHostReturnPlayback(record) {
+		if (!record || state.hostReturnPlaybacks[record.key] !== record || record.pending) {
+			return Promise.resolve(false);
+		}
+
+		var current = safeCurrentHostReturnVideo(record);
+		var pending;
+		try {
+			pending = record.options.createVideo(current);
+		} catch (error) {
+			return markHostReturnPlaybackRetry(record, current);
+		}
+		if (!pending || pending === current || typeof pending.play !== "function") {
+			return markHostReturnPlaybackRetry(record, current);
+		}
+
+		record.attemptSequence += 1;
+		var attemptSequence = record.attemptSequence;
+		record.pending = pending;
+		record.retryPending = false;
+		var intendedMuted = !!pending.muted;
+		pending.muted = true;
+		pending.removeAttribute("id");
+		pending.setAttribute("aria-hidden", "true");
+		pending.dataset.mcastReturnPending = "true";
+		pending.dataset.mcastPlaybackState = "starting";
+		pending.srcObject = record.stream;
+		var originalStyle = pending.getAttribute("style");
+		pending.style.position = "fixed";
+		pending.style.left = "-10000px";
+		pending.style.top = "0";
+		pending.style.width = "1px";
+		pending.style.height = "1px";
+		pending.style.opacity = "0";
+		pending.style.pointerEvents = "none";
+		(ensureRoot() || document.body).appendChild(pending);
+
+		return new Promise(function (resolve) {
+			var settled = false;
+			record.resolveAttempt = resolve;
+			function finishAttempt(value) {
+				if (record.resolveAttempt === resolve) {
+					record.resolveAttempt = null;
+				}
+				resolve(value);
+			}
+
+			function retryAttempt(current) {
+				record.pending = null;
+				cleanPendingHostReturnVideo(pending);
+				markHostReturnPlaybackRetry(record, current).then(finishAttempt);
+			}
+
+			function completePromotion(previous) {
+				if (state.hostReturnPlaybacks[record.key] !== record || record.attemptSequence !== attemptSequence) {
+					cleanPendingHostReturnVideo(pending);
+					finishAttempt(false);
+					return;
+				}
+				record.rollbackPending = null;
+				if (previous && previous !== pending) {
+					try { previous.pause(); } catch (error) {}
+					previous.srcObject = null;
+				}
+				record.pending = null;
+				record.retryPending = false;
+				record.ready = true;
+				if (typeof record.options.onReady === "function") {
+					record.options.onReady(pending);
+				}
+				finishAttempt(true);
+			}
+
+			function rollbackPromotion(previous, previousParent, previousMuted) {
+				record.rollbackPending = null;
+				pending.muted = true;
+				if (previous && previousParent) {
+					try {
+						if (pending.parentNode === previousParent) {
+							previousParent.replaceChild(previous, pending);
+						} else if (!previous.parentNode) {
+							previousParent.appendChild(previous);
+						}
+						previous.muted = previousMuted;
+					} catch (error) {}
+				}
+				retryAttempt(previous || safeCurrentHostReturnVideo(record));
+			}
+
+			function settle(ready) {
+				if (settled) { return; }
+				settled = true;
+				window.clearTimeout(record.timer);
+				record.timer = 0;
+				if (state.hostReturnPlaybacks[record.key] !== record || record.attemptSequence !== attemptSequence) {
+					cleanPendingHostReturnVideo(pending);
+					finishAttempt(false);
+					return;
+				}
+				if (!ready) {
+					retryAttempt(safeCurrentHostReturnVideo(record));
+					return;
+				}
+
+				var previous = safeCurrentHostReturnVideo(record);
+				var previousParent = previous && previous.parentNode;
+				var previousMuted = previous ? !!previous.muted : true;
+				try {
+					if (originalStyle === null) {
+						pending.removeAttribute("style");
+					} else {
+						pending.setAttribute("style", originalStyle);
+					}
+					pending.removeAttribute("aria-hidden");
+					delete pending.dataset.mcastReturnPending;
+					pending.dataset.mcastPlaybackState = "playing";
+					if (previous && previous !== pending) {
+						previous.muted = true;
+					}
+					record.options.promote(pending, previous);
+					record.rollbackPending = function () {
+						pending.muted = true;
+						if (previous && previousParent) {
+							try {
+								if (pending.parentNode === previousParent) {
+									previousParent.replaceChild(previous, pending);
+								} else if (!previous.parentNode) {
+									previousParent.appendChild(previous);
+								}
+								previous.muted = previousMuted;
+							} catch (error) {}
+						}
+					};
+					pending.muted = intendedMuted;
+					if (intendedMuted) {
+						completePromotion(previous);
+						return;
+					}
+					Promise.resolve(pending.play()).then(function () {
+						completePromotion(previous);
+					}, function () {
+						rollbackPromotion(previous, previousParent, previousMuted);
+					});
+				} catch (error) {
+					rollbackPromotion(previous, previousParent, previousMuted);
+				}
+			}
+
+			record.timer = window.setTimeout(function () { settle(false); }, Math.max(1500, Number(record.options.timeoutMs) || 5000));
+			try {
+				Promise.resolve(pending.play()).then(function () { settle(true); }, function () { settle(false); });
+			} catch (error) {
+				settle(false);
+			}
+		});
+	}
+
+	function markHostReturnPlaybackRetry(record, current) {
+		if (!record || state.hostReturnPlaybacks[record.key] !== record) {
+			return Promise.resolve(false);
+		}
+		record.retryPending = true;
+		record.ready = false;
+		if (current && current.dataset) {
+			current.dataset.mcastPlaybackState = "retrying";
+		}
+		if (typeof record.options.onRetry === "function") {
+			record.options.onRetry("playback-blocked");
+		}
+		return Promise.resolve(false);
+	}
+
+	function clearHostReturnPlayback(key) {
+		if (key === undefined || key === null || key === "") {
+			Object.keys(state.hostReturnPlaybacks).forEach(clearHostReturnPlayback);
+			return;
+		}
+		var normalizedKey = safePlainText(key, "host-return");
+		var record = state.hostReturnPlaybacks[normalizedKey];
+		if (!record) { return; }
+		delete state.hostReturnPlaybacks[normalizedKey];
+		record.attemptSequence += 1;
+		window.clearTimeout(record.timer);
+		record.timer = 0;
+		if (record.rollbackPending) {
+			var rollback = record.rollbackPending;
+			record.rollbackPending = null;
+			rollback();
+		}
+		if (record.pending) {
+			cleanPendingHostReturnVideo(record.pending);
+			record.pending = null;
+		}
+		if (record.resolveAttempt) {
+			var resolve = record.resolveAttempt;
+			record.resolveAttempt = null;
+			resolve(false);
+		}
+	}
+
+	function cleanPendingHostReturnVideo(video) {
+		if (!video) { return; }
+		try { video.pause(); } catch (error) {}
+		video.srcObject = null;
+		if (video.parentNode) {
+			video.parentNode.removeChild(video);
+		}
+	}
+
+	function safeCurrentHostReturnVideo(record) {
+		try {
+			return record.options.getCurrentVideo() || null;
+		} catch (error) {
+			return null;
+		}
+	}
+
+	function installHostReturnPlaybackRetry() {
+		if (state.hostReturnPlaybackRetryInstalled) { return; }
+		state.hostReturnPlaybackRetryInstalled = true;
+		window.addEventListener("focus", retryHostReturnPlaybacks);
+		window.addEventListener("online", retryHostReturnPlaybacks);
+		window.addEventListener("pointerdown", retryHostReturnPlaybacks, true);
+		window.addEventListener("keydown", retryHostReturnPlaybacks, true);
+		document.addEventListener("visibilitychange", function () {
+			if (document.visibilityState === "visible") {
+				retryHostReturnPlaybacks();
+			}
+		});
+	}
+
+	function retryHostReturnPlaybacks() {
+		Object.keys(state.hostReturnPlaybacks).forEach(function (key) {
+			var record = state.hostReturnPlaybacks[key];
+			if (record && record.retryPending && !record.pending) {
+				record.promise = attemptHostReturnPlayback(record);
+			}
+		});
+	}
+
+	function normalizeHeartbeatDelay(value) {
+		var delay = Number(value);
+		return Number.isFinite(delay) ? Math.max(5000, Math.min(30000, delay)) : 15000;
 	}
 
 	function normalizeExperienceKind(value) {
@@ -520,6 +1032,12 @@
 		if (!normalized) {
 			return true;
 		}
+		if (/only alphanumeric characters[\s\S]*(?:stream id|room name)[\s\S]*offending characters[\s\S]*replaced/.test(normalized)) {
+			return true;
+		}
+		if (options.legacy) {
+			return true;
+		}
 		var signature = normalized.slice(0, 180);
 		var now = Date.now();
 		if (state.engineMessageSignatures[signature] && now - state.engineMessageSignatures[signature] < 2500) {
@@ -704,7 +1222,7 @@
 			node.setAttribute("data-mcast-upstream-ui", "quarantined");
 			if (shouldCapture && !node.dataset.mcastCaptured) {
 				node.dataset.mcastCaptured = "true";
-				captureEngineMessage(node.textContent || "");
+				captureEngineMessage(node.textContent || "", { legacy: true });
 			}
 		});
 	}

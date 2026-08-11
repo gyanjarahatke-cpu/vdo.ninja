@@ -184,6 +184,7 @@ assert.ok(guestParams.has("nofileshare"));
 assert.strictEqual(guestParams.get("mcastdisableauxui"), "1");
 ["chat", "chatlite", "fileshare", "broadcasttransfer"].forEach((key) => assert.strictEqual(guestParams.has(key), false));
 assert.strictEqual(guest.route.route, "guest");
+assert.strictEqual(guest.route.inviteCode, "ABC12345", "the validated short code must be available to the owned lease client");
 assert.strictEqual(guest.route.mode, "meeting");
 assert.strictEqual(guest.route.guestName, "Guest One");
 assert.ok(guest.classes.has("mcast-route-guest"));
@@ -315,7 +316,7 @@ assert.ok(
 );
 
 const ensureRootBaseStart = guestLoader.indexOf("function ensureRootBase(html) {");
-const ensureRootBaseEnd = guestLoader.indexOf("\n\n\t\t\t\tfunction showFailure", ensureRootBaseStart);
+const ensureRootBaseEnd = guestLoader.indexOf("function showFailure", ensureRootBaseStart);
 assert.notStrictEqual(ensureRootBaseStart, -1);
 assert.notStrictEqual(ensureRootBaseEnd, -1);
 const ensureRootBaseContext = {};
@@ -347,12 +348,13 @@ assert.ok(
 );
 assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || []).length, 1);
 assert.ok(guestEngine.includes('./main.js?ver=1066'), "the private engine must request the current managed runtime revision");
-assert.ok(guestEngine.includes('./g/shared/McastGuestUi.js?v=9'));
-assert.ok(guestEngine.includes('./g/shared/McastGuestUi.css?v=3'));
-assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=15'));
-assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=22'));
-assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=13'));
-assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=20'));
+assert.ok(guestEngine.includes('./g/shared/McastGuestUi.js?v=12'));
+assert.ok(guestEngine.includes('./g/shared/McastGuestUi.css?v=4'));
+assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=16'));
+assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=24'));
+assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=14'));
+assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=23'));
+assert.ok(guestEngine.includes('./g/shared/McastNativeWebRtcBridge.js?v=16'));
 assert.strictEqual((guestEngine.match(/data-mcast-notice-rail/g) || []).length, 4, "every reachable shell header must own a notice rail");
 assert.strictEqual((guestEngine.match(/data-mcast-footer-rail/g) || []).length, 4, "every reachable shell must own a non-overlapping footer rail");
 assert.ok(!guestEngine.includes('data-mobile-step="entering"'), "the removed artificial mobile delay must not leave a dead loading screen");
@@ -372,6 +374,11 @@ assert.ok(sharedUi.includes("resolveNoticeRail"));
 assert.ok(sharedUi.includes("resolveFooterRail"));
 assert.ok(sharedUi.includes("mountDialogHost"));
 assert.ok(sharedUi.includes("clearNotices"));
+assert.ok(sharedUi.includes("/api/vdoShortInviteClaim"));
+assert.ok(sharedUi.includes("/api/vdoShortInviteHeartbeat"));
+assert.ok(sharedUi.includes("/api/vdoShortInviteRelease"));
+assert.ok(sharedUi.includes('addEventListener("visibilitychange"'));
+assert.ok(sharedUi.includes('addEventListener("pagehide"'));
 assert.ok(sharedUi.includes("clampNumber(options.duration, 1800, 30000, 10000)"), "header notices must use the ten-second lifecycle");
 assert.ok(sharedUi.includes("lockRouteErrorTitle"), "route failures must keep an MCast-owned browser title");
 assert.ok(!sharedUi.includes("g|m|c|s|p|i|rv|ra|rs"), "shared UI must not retain legacy route aliases");
@@ -386,16 +393,23 @@ assert.ok(!mainCss.includes("body.mcast-native-guest"), "main engine stylesheet 
 
 [desktopShell, mobileShell].forEach((shell) => {
 	assert.ok(shell.includes("MCastGuestUi"), "each responsive shell must use the shared branded UI authority");
+	assert.ok(shell.includes("scheduleResponsiveActivation"), "each responsive shell must recover after viewport state settles");
+	assert.ok(shell.includes("mcast:responsive-shell-activated"), "responsive shells must coordinate one active visible owner");
 	assert.ok(shell.includes('addEventListener("mcast:open-settings"'));
 	assert.ok(shell.includes("state.boundLocalVideo === video"));
 	assert.ok(shell.includes("state.boundLocalStream === stream"));
 	assert.ok(shell.includes("state.boundLocalSurface === surface"));
+	assert.ok(shell.includes("tearDownPublishedSession"), "each shell must tear down a published session before releasing its invite");
+	assert.ok(shell.includes("onTerminal"), "each shell must own terminal host/session goodbye behavior");
+	assert.ok(shell.includes('setStep("goodbye")'), "each shell must expose the owned goodbye state");
 	assert.ok(
 		!/setStatus\s*\(\s*error\.message|textContent\s*=\s*error\.message|innerHTML\s*=\s*error\.message/.test(shell),
 		"raw media errors must not be rendered by a shell"
 	);
 	assert.ok(!/VDO\.Ninja|Video\s*Ninja/i.test(shell), "custom shell copy must remain MCast-owned");
 });
+assert.ok(sharedCss.includes("mcast-responsive-shell-desktop"));
+assert.ok(sharedCss.includes("mcast-responsive-shell-mobile"));
 assert.ok(
 	desktopShell.includes("if (state.previewStarted || state.joined)"),
 	"desktop polling must not touch the private engine video before the user starts media"

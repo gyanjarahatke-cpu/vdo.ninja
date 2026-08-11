@@ -40,17 +40,60 @@
 
 .mcast-mobile[data-step="permission"] [data-mobile-step="permission"],
 .mcast-mobile[data-step="setup"] [data-mobile-step="setup"],
-.mcast-mobile[data-step="backstage"] [data-mobile-step="backstage"] {
+.mcast-mobile[data-step="backstage"] [data-mobile-step="backstage"],
+.mcast-mobile[data-step="goodbye"] [data-mobile-step="goodbye"] {
 	display: flex;
 }
 
 .mcast-mobile__light-screen,
 .mcast-mobile__setup,
-.mcast-mobile__backstage {
+.mcast-mobile__backstage,
+.mcast-mobile__goodbye {
 	position: absolute;
 	inset: 0;
 	min-height: 100vh;
 	min-height: 100dvh;
+}
+
+.mcast-mobile__goodbye {
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	padding: calc(32px + env(safe-area-inset-top)) 28px calc(32px + env(safe-area-inset-bottom));
+	text-align: center;
+	background: linear-gradient(180deg, #fff, #f6f8fb);
+}
+
+.mcast-mobile__goodbye-mark {
+	width: 72px;
+	height: 72px;
+	margin-bottom: 10px;
+	background: center / contain no-repeat url("../../media/mcast-apple-touch-icon.png");
+	filter: drop-shadow(0 14px 28px rgba(25, 103, 233, .18));
+}
+
+.mcast-mobile__goodbye-brand {
+	margin: 0;
+	color: var(--mobile-blue);
+	font-size: 12px;
+	font-weight: 900;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+}
+
+.mcast-mobile__goodbye h1 {
+	margin: 0;
+	font-size: clamp(30px, 8vw, 40px);
+	line-height: 1.08;
+}
+
+.mcast-mobile__goodbye > p:last-child {
+	max-width: 440px;
+	margin: 0;
+	color: var(--mobile-muted);
+	font-size: 17px;
+	line-height: 1.5;
 }
 
 .mcast-mobile__light-screen {

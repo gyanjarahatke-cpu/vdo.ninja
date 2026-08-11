@@ -12,11 +12,22 @@ const bridgeScript = fs.readFileSync(
 );
 
 function createTrack(kind, id) {
+	const listeners = {};
 	return {
 		kind,
 		id,
 		enabled: true,
-		readyState: "live"
+		readyState: "live",
+		addEventListener(type, handler) {
+			listeners[type] = listeners[type] || [];
+			listeners[type].push(handler);
+		},
+		emit(type) {
+			if (type === "ended") {
+				this.readyState = "ended";
+			}
+			(listeners[type] || []).forEach((handler) => handler({ target: this }));
+		}
 	};
 }
 
@@ -83,6 +94,7 @@ function createPeer(channel, options) {
 	const transceivers = [];
 	const replacements = [];
 	const iceCandidates = [];
+	const receivers = [];
 	function directionFor(kind) {
 		const transceiver = transceivers.find((candidate) => candidate.track && candidate.track.kind === kind);
 		return transceiver ? transceiver.direction : "sendonly";
@@ -105,6 +117,8 @@ function createPeer(channel, options) {
 	}
 	return {
 		signalingState: "stable",
+		connectionState: "connected",
+		iceConnectionState: "connected",
 		localDescription: null,
 		remoteDescription: null,
 		sendChannel: channel,
@@ -120,6 +134,9 @@ function createPeer(channel, options) {
 		},
 		getTransceivers() {
 			return transceivers.slice();
+		},
+		getReceivers() {
+			return receivers.slice();
 		},
 		addTransceiver(track, options) {
 			return pushTransceiver(track, options && options.direction || "sendrecv");
@@ -160,7 +177,53 @@ function createPeer(channel, options) {
 			return Promise.resolve();
 		},
 		emit(type, data) {
+			if (type === "track" && data && data.track && !receivers.some((receiver) => receiver.track === data.track)) {
+				receivers.push({ track: data.track });
+			}
 			(listeners[type] || []).forEach((handler) => handler(data));
+		},
+		setConnectionState(connectionState, iceConnectionState) {
+			this.connectionState = connectionState;
+			this.iceConnectionState = iceConnectionState || connectionState;
+			this.emit("connectionstatechange", { target: this });
+			this.emit("iceconnectionstatechange", { target: this });
+		}
+	};
+}
+
+function createTimers() {
+	let nextId = 1;
+	const timeouts = new Map();
+	const intervals = new Map();
+	return {
+		setTimeout(callback, delay) {
+			const id = nextId++;
+			timeouts.set(id, { callback, delay: Number(delay) || 0 });
+			return id;
+		},
+		clearTimeout(id) {
+			timeouts.delete(id);
+		},
+		setInterval(callback) {
+			const id = nextId++;
+			intervals.set(id, callback);
+			return id;
+		},
+		clearInterval(id) {
+			intervals.delete(id);
+		},
+		runIntervals() {
+			[...intervals.values()].forEach((callback) => callback());
+		},
+		runTimeouts(maxDelay = Infinity) {
+			const ready = [...timeouts.entries()].filter(([, timer]) => timer.delay <= maxDelay);
+			ready.forEach(([id, timer]) => {
+				timeouts.delete(id);
+				timer.callback();
+			});
+		},
+		pendingTimeouts() {
+			return timeouts.size;
 		}
 	};
 }
@@ -176,6 +239,10 @@ async function runBridge(peerOptions) {
 	const peer = createPeer(channel, peerOptions);
 	const stream = createStream();
 	const remoteStreams = [];
+	const removedStreams = [];
+	const terminalEvents = [];
+	const states = [];
+	const timers = createTimers();
 	const context = {
 		URLSearchParams,
 		JSON,
@@ -188,15 +255,10 @@ async function runBridge(peerOptions) {
 			warn() {},
 			error() {}
 		},
-		setInterval() {
-			return 1;
-		},
-		clearInterval() {},
-		setTimeout(callback) {
-			callback();
-			return 1;
-		},
-		clearTimeout() {},
+		setInterval: timers.setInterval,
+		clearInterval: timers.clearInterval,
+		setTimeout: timers.setTimeout,
+		clearTimeout: timers.clearTimeout,
 		window: {
 			location: {
 				pathname: "/g/",
@@ -241,6 +303,15 @@ async function runBridge(peerOptions) {
 		log() {},
 		onRemoteStream(uuid, remoteStream, kind) {
 			remoteStreams.push({ uuid, remoteStream, kind });
+		},
+		onRemoteStreamRemoved(uuid, reason) {
+			removedStreams.push({ uuid, reason });
+		},
+		onTerminal(uuid, reason) {
+			terminalEvents.push({ uuid, reason });
+		},
+		onState(stage, uuid, details) {
+			states.push({ stage, uuid, details });
 		}
 	});
 	assert.strictEqual(started, true, "bridge should start for native guest route");
@@ -260,11 +331,21 @@ async function runBridge(peerOptions) {
 		}
 	};
 	peer.emit("track", { track: returnTrack, streams: [returnStream] });
-	return { channel, peer, remoteStreams, session: context.window.session };
+	return {
+		bridge: context.window.MCastNativeWebRtcBridge,
+		channel,
+		peer,
+		remoteStreams,
+		removedStreams,
+		terminalEvents,
+		states,
+		session: context.window.session,
+		timers
+	};
 }
 
 runBridge()
-	.then(async ({ channel, peer, remoteStreams, session }) => {
+	.then(async ({ channel, peer, remoteStreams, removedStreams, terminalEvents, session, timers }) => {
 		const sent = session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
 		assert.ok(sent, "bridge should send a media SDP offer through VDO signaling");
 		const offer = sent.payload;
@@ -299,6 +380,43 @@ runBridge()
 		assert.strictEqual(peer.iceCandidates.length, 1, "bridge should apply queued native ICE candidates after the answer");
 		assert.strictEqual(peer.iceCandidates[0].candidate, "candidate:1 1 udp 1 127.0.0.1 9 typ host", "bridge should normalize native ICE candidates");
 
+		const replacementPeer = createPeer(createChannel());
+		session.pcs.peerA = replacementPeer;
+		timers.runIntervals();
+		await flushPromises();
+		assert.strictEqual(removedStreams.length, 0, "peer replacement must retain the last host frame until replacement media arrives");
+		const churnTrack = createTrack("video", "peer-churn-return");
+		const churnStream = {
+			id: "peer-churn-stream",
+			getTracks() { return [churnTrack]; },
+			getVideoTracks() { return [churnTrack]; },
+			getAudioTracks() { return []; }
+		};
+		replacementPeer.emit("track", { track: churnTrack, streams: [churnStream] });
+		timers.runTimeouts(8000);
+		assert.strictEqual(removedStreams.length, 0, "atomic replacement media must cancel retained-frame cleanup");
+		assert.strictEqual(terminalEvents.length, 0, "peer replacement must not end the guest session");
+
+		delete session.pcs.peerA;
+		timers.runIntervals();
+		timers.runIntervals();
+		timers.runIntervals();
+		assert.strictEqual(removedStreams.length, 0, "brief peer removal must not blank the retained host frame");
+		const reconnectedPeer = createPeer(createChannel());
+		session.pcs.peerA = reconnectedPeer;
+		timers.runIntervals();
+		const reconnectTrack = createTrack("video", "peer-reconnect-return");
+		const reconnectStream = {
+			id: "peer-reconnect-stream",
+			getTracks() { return [reconnectTrack]; },
+			getVideoTracks() { return [reconnectTrack]; },
+			getAudioTracks() { return []; }
+		};
+		reconnectedPeer.emit("track", { track: reconnectTrack, streams: [reconnectStream] });
+		timers.runTimeouts(8000);
+		assert.strictEqual(removedStreams.length, 0, "reconnected return media must replace the retained frame without a blank interval");
+		assert.strictEqual(terminalEvents.length, 0, "a peer that reconnects inside the grace period must stay live");
+
 		const replaced = await runBridge({ existingMediaSenders: true });
 		const replacedOffer = replaced.session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
 		assert.ok(replacedOffer, "bridge should renegotiate when VDO already created media senders");
@@ -309,6 +427,55 @@ runBridge()
 			"bridge should replace existing VDO sender tracks with local camera and microphone tracks"
 		);
 		assert.ok(replaced.peer.transceivers.every((transceiver) => transceiver.direction === "sendrecv"), "reused VDO transceivers should request bidirectional media");
+
+		assert.strictEqual(replaced.bridge.debugSnapshot().started, true, "bridge polling must remain active after initial attach");
+		replaced.peer.setConnectionState("disconnected", "disconnected");
+		assert.strictEqual(replaced.terminalEvents.length, 0, "transient disconnected state must not end the guest session");
+		replaced.peer.setConnectionState("connecting", "checking");
+		replaced.peer.setConnectionState("connected", "connected");
+		replaced.timers.runTimeouts();
+		assert.strictEqual(replaced.terminalEvents.length, 0, "a recovered peer must remain active");
+
+		const replacementTrack = createTrack("video", "return-video-replacement");
+		const replacementStream = {
+			id: "native-return-replacement",
+			getTracks() { return [replacementTrack]; },
+			getVideoTracks() { return [replacementTrack]; },
+			getAudioTracks() { return []; }
+		};
+		const firstReturnTrack = replaced.remoteStreams[0].remoteStream.getVideoTracks()[0];
+		firstReturnTrack.emit("ended");
+		replaced.peer.emit("track", { track: replacementTrack, streams: [replacementStream] });
+		replaced.timers.runTimeouts(2500);
+		assert.strictEqual(replaced.terminalEvents.length, 0, "a return-track replacement inside the grace period must not end the session");
+		assert.strictEqual(replaced.remoteStreams.at(-1).remoteStream, replacementStream, "replacement host feed must be surfaced");
+
+		replacementTrack.emit("ended");
+		replaced.timers.runTimeouts(2500);
+		assert.strictEqual(replaced.terminalEvents.length, 0, "an ended host-feed track must not end an otherwise live peer");
+		assert.ok(
+			replaced.removedStreams.some((event) => event.reason === "return-track-ended"),
+			"an unreplaced ended host-feed track must remove stale playback after its grace period"
+		);
+
+		const failed = await runBridge();
+		failed.peer.setConnectionState("failed", "failed");
+		assert.deepStrictEqual(
+			failed.terminalEvents.map((event) => event.reason),
+			["peer-failed"],
+			"failed peer state must immediately report an authoritative terminal session"
+		);
+		failed.timers.runIntervals();
+		failed.timers.runIntervals();
+		assert.strictEqual(failed.terminalEvents.length, 1, "a terminal peer retained by the engine must notify only once");
+
+		const alternate = await runBridge();
+		const healthyAlternatePeer = createPeer(createChannel());
+		alternate.session.rpcs.peerA = healthyAlternatePeer;
+		alternate.peer.setConnectionState("failed", "failed");
+		alternate.timers.runIntervals();
+		await flushPromises();
+		assert.strictEqual(alternate.terminalEvents.length, 0, "a healthy alternate peer for the same participant must win over a failed peer");
 		console.log("MCast native WebRTC bridge regression passed");
 	})
 	.catch((error) => {

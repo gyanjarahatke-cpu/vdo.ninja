@@ -58,7 +58,8 @@
 
 .mcast-desktop[data-step="setup"] .mcast-desktop__loading,
 .mcast-desktop[data-step="backstage"] .mcast-desktop__loading,
-.mcast-desktop[data-step="live"] .mcast-desktop__loading {
+.mcast-desktop[data-step="live"] .mcast-desktop__loading,
+.mcast-desktop[data-step="goodbye"] .mcast-desktop__loading {
 	opacity: 0;
 	visibility: hidden;
 	pointer-events: none;
@@ -178,6 +179,49 @@
 	gap: 12px;
 	min-width: 0;
 	flex: 0 0 auto;
+}
+
+.mcast-desktop__goodbye {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	align-content: center;
+	gap: 12px;
+	padding: 48px;
+	text-align: center;
+	background: linear-gradient(180deg, #fff, #f6f8fb);
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity .22s ease, visibility .22s ease;
+}
+
+.mcast-desktop[data-step="goodbye"] .mcast-desktop__goodbye {
+	opacity: 1;
+	visibility: visible;
+}
+
+.mcast-desktop__goodbye-mark {
+	width: 76px;
+	height: 76px;
+	margin-bottom: 12px;
+	background: center / contain no-repeat url("../../media/mcast-apple-touch-icon.png");
+	filter: drop-shadow(0 16px 30px rgba(23, 105, 224, .18));
+}
+
+.mcast-desktop__goodbye h1 {
+	margin: 0;
+	font-size: clamp(34px, 4.5vw, 54px);
+	line-height: 1.05;
+}
+
+.mcast-desktop__goodbye > p:last-child {
+	max-width: 540px;
+	margin: 0;
+	color: var(--desktop-muted);
+	font-size: 17px;
+	line-height: 1.5;
 }
 
 .mcast-desktop__logo {

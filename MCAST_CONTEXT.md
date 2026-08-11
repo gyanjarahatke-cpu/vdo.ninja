@@ -20,11 +20,14 @@ Token handling:
 - Public guest and remote-source paths must not accept direct `?t=`, raw media-room query strings, or route state recovered from browser storage.
 - `/vcall/` must not accept direct `?t=` or raw room query strings. Protected tokens are decrypted and validated only in Firebase Functions with the `VDO_TOKEN_PASSPHRASE` secret.
 - The decoded query is assigned to `session.decrypted` before `lib.js` runs, so the upstream VDO parser and startup flow still own room joining.
+- Resolving a short link is non-consuming. Immediately before publishing, the owned guest shell atomically claims the link through the same-origin lease API, refreshes that lease while connected, and releases it only after the published session has been torn down. A second browser receives a branded in-use message; an explicit release or bounded lease expiry makes the link reusable.
 
 Guest flow:
 - Guest and remote-source routes use the authoritative MCast desktop/mobile shells for setup, permissions, settings, status, warnings, recovery, and in-room controls.
+- Responsive shell activation is re-evaluated after the viewport settles and on viewport changes; the single active shell marker owns visibility so a stale desktop/mobile decision cannot expose an uninitialized page.
 - The upstream engine DOM remains private and quarantined; it must never become visible or provide user-facing warnings, dialogs, settings, or errors.
 - Camera, microphone, speaker, processing, and screen-audio settings are collected by MCast UI. Browser permission requests occur only after an explicit user action.
+- Host/session termination is rendered by the owned desktop or mobile goodbye state. Transient peer or return-track replacement keeps the last host frame bound during a bounded recovery window and must not be treated as session termination.
 
 Source/host flow:
 - Keep director links and browser-source capture links on `/vcall/`.
