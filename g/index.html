@@ -29,8 +29,8 @@
 		<meta name="theme-color" content="#0f131d" />
 		<link rel="stylesheet" href="./main.css?ver=4044" />
 		<link rel="stylesheet" href="./g/shared/McastGuestUi.css?v=4" />
-		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=16" />
-		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=14" />
+		<link rel="stylesheet" href="./g/desktop/DesktopRoomShell.css?v=17" />
+		<link rel="stylesheet" href="./g/mobile/MobileRoomShell.css?v=15" />
 		<script type="text/javascript" crossorigin="anonymous" src="./thirdparty/adapter.js"></script>
 		
 		<link rel="shortcut icon" href="./media/mcast-favicon-32.png" type="image/png" />
@@ -140,10 +140,16 @@
 						</div>
 
 						<div class="mcast-desktop__setup-form">
-							<label id="mcastDesktopGuestNameField" class="mcast-desktop__field" for="mcastDesktopGuestName">
-								<span>Display name</span>
-								<input id="mcastDesktopGuestName" class="mcast-desktop__input" type="text" autocomplete="name" maxlength="60" placeholder="Your name" />
-							</label>
+							<div id="mcastDesktopGuestIdentityFields" class="mcast-desktop__identity-fields">
+								<label id="mcastDesktopGuestNameField" class="mcast-desktop__field" for="mcastDesktopGuestName">
+									<span>Display name</span>
+									<input id="mcastDesktopGuestName" class="mcast-desktop__input" type="text" autocomplete="name" maxlength="60" placeholder="Your name" />
+								</label>
+								<label id="mcastDesktopGuestHeadlineField" class="mcast-desktop__field" for="mcastDesktopGuestHeadline">
+									<span>Headline (optional)</span>
+									<input id="mcastDesktopGuestHeadline" class="mcast-desktop__input" type="text" autocomplete="off" maxlength="120" placeholder="Role, company, education, or other detail" />
+								</label>
+							</div>
 							<button id="mcastDesktopJoinButton" type="button" class="mcast-desktop__button mcast-desktop__button--primary">Enter studio</button>
 						</div>
 					</div>
@@ -274,10 +280,16 @@
 						</div>
 					</div>
 					<p id="mcastMobileInfo" class="mcast-mobile__info">You will enter the studio as a guest. The host can add you to the stage at any time.</p>
-					<label id="mcastMobileGuestNameField" class="mcast-mobile__name-field" for="mcastMobileGuestName">
-						<span>Display name</span>
-						<input id="mcastMobileGuestName" type="text" autocomplete="name" maxlength="60" />
-					</label>
+					<div id="mcastMobileGuestIdentityFields" class="mcast-mobile__identity-fields">
+						<label id="mcastMobileGuestNameField" class="mcast-mobile__name-field" for="mcastMobileGuestName">
+							<span>Display name</span>
+							<input id="mcastMobileGuestName" type="text" autocomplete="name" maxlength="60" placeholder="Your name" />
+						</label>
+						<label id="mcastMobileGuestHeadlineField" class="mcast-mobile__name-field" for="mcastMobileGuestHeadline">
+							<span>Headline (optional)</span>
+							<input id="mcastMobileGuestHeadline" type="text" autocomplete="off" maxlength="120" placeholder="Role, company, education, or other detail" />
+						</label>
+					</div>
 					<button id="mcastMobileEnterButton" type="button" class="mcast-mobile__primary">Enter studio</button>
 					<p id="mcastMobileTerms" class="mcast-mobile__terms">By continuing, you agree to MCast Studio’s Terms and Privacy Policy.</p>
 				</div>
@@ -3667,9 +3679,9 @@
 		<script type="text/javascript" crossorigin="anonymous" src="./mcast-route.js?v=35"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="lib-js" src="./lib.js?ver=1416"></script>
 		<script type="text/javascript" crossorigin="anonymous" id="main-js" src="./main.js?ver=1066"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastNativeWebRtcBridge.js?v=16"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=24"></script>
-		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=23"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/shared/McastNativeWebRtcBridge.js?v=17"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/desktop/DesktopRoomShell.js?v=25"></script>
+		<script type="text/javascript" crossorigin="anonymous" src="./g/mobile/MobileRoomShell.js?v=24"></script>
 		<script type="module" src="./podcast/bootstrap.js"></script>
 		
 	</body>

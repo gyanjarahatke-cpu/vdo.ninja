@@ -196,6 +196,7 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	}).toBe(true);
 	await expectVideoToCoverSurface(page, "#mcastDesktopPreviewSurface");
 	await page.locator("#mcastDesktopGuestName").fill("Desktop Guest");
+	await page.locator("#mcastDesktopGuestHeadline").fill("Senior Engineer at Example University");
 	await page.locator("#mcastDesktopJoinButton").click();
 	await expect(page.locator("#mcastDesktopGuest")).toHaveAttribute("data-step", "backstage", { timeout: 15000 });
 	await expect(page.locator("#mcastDesktopLocalTile video")).toBeVisible();
@@ -210,6 +211,7 @@ test("desktop joins backstage with compact icon controls", async ({ page }) => {
 	await expect(page.locator(".mcast-desktop__logo")).toBeVisible();
 	await expect(page.locator("#mcastDesktopLeaveButton svg")).toBeVisible();
 	await expect(page.locator("#mcastDesktopLocalTile .mcast-desktop__tile-label")).toHaveText("Desktop Guest");
+	await expect.poll(() => page.evaluate(() => window.session && window.session.headline)).toBe("Senior Engineer at Example University");
 	await expect(page.locator("#mcastDesktopBackstageMessage")).toHaveCount(0);
 	const noticeRail = page.locator("#mcastDesktopNoticeRail");
 	const backstageNotice = noticeRail.locator(".mcast-guest-ui__toast");

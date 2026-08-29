@@ -264,9 +264,11 @@ async function runBridge(peerOptions) {
 				pathname: "/g/",
 				search: "?room=test-room&push=guest123&mcastguestkey=guest123&mcaststreamid=guest123&mcastnativewebrtc=1&mcastguestmedia=1&l=Tester"
 			},
-			session: {
-				streamID: "guest123",
-				sentMessages: [],
+				session: {
+					streamID: "guest123",
+					label: "Tester",
+					headline: "Senior Engineer at Example University",
+					sentMessages: [],
 				pcs: {
 					peerA: peer
 				},
@@ -345,12 +347,23 @@ async function runBridge(peerOptions) {
 }
 
 runBridge()
-	.then(async ({ channel, peer, remoteStreams, removedStreams, terminalEvents, session, timers }) => {
+	.then(async ({ bridge, channel, peer, remoteStreams, removedStreams, terminalEvents, session, timers }) => {
 		const sent = session.sentMessages.find((message) => message.payload.description && message.payload.description.type === "offer");
 		assert.ok(sent, "bridge should send a media SDP offer through VDO signaling");
 		const offer = sent.payload;
 		assert.strictEqual(offer.streamID, "guest123", "offer should preserve stream id");
 		assert.strictEqual(offer.mcastGuestKey, "guest123", "fallback offer should preserve guest key");
+		const identity = channel.sent.find((message) => message.type === "mcastGuestIdentity");
+		assert.ok(identity, "an open native data channel must receive the guest identity");
+		assert.strictEqual(identity.displayName, "Tester", "guest identity must preserve the display name");
+		assert.strictEqual(identity.headline, "Senior Engineer at Example University", "guest identity must preserve the headline");
+		session.headline = "  Professor\n  at Example College  ";
+		assert.strictEqual(
+			bridge.updateIdentity(),
+			true,
+			"guest identity changes must be sent to each open native data channel"
+		);
+		assert.strictEqual(channel.sent[channel.sent.length - 1].headline, "Professor at Example College");
 		assert.ok(peer.transceivers.every((transceiver) => transceiver.direction === "sendrecv"), "bridge should request bidirectional media transceivers");
 		assert.match(offer.description.sdp, /\r\nm=video\s/i, "offer should include video media section");
 		assert.match(offer.description.sdp, /\r\nm=audio\s/i, "offer should include audio media section");

@@ -101,6 +101,7 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 	}).toBe(true);
 
 	await page.locator("#mcastMobileGuestName").fill("Mobile Regression Guest");
+	await page.locator("#mcastMobileGuestHeadline").fill("University lecturer and producer");
 	await page.evaluate(() => {
 		window.__mcastMobileTerminalOrder = [];
 		window.MCastNativeWebRtcBridge = {
@@ -115,6 +116,7 @@ test("mobile guest flow owns the route and reaches backstage", async ({ page }) 
 		};
 	});
 	await page.locator("#mcastMobileEnterButton").click();
+	await expect.poll(() => page.evaluate(() => window.session && window.session.headline)).toBe("University lecturer and producer");
 	await expect(page.locator("#mcastMobileGuest")).toHaveAttribute("data-step", "backstage", { timeout: 15000 });
 	await expect.poll(() => page.locator("#mcastMobileSelfPreview video").evaluate((video) => !!video.srcObject), {
 		timeout: 8000

@@ -532,6 +532,11 @@
 	font-weight: 650;
 }
 
+.mcast-mobile__identity-fields {
+	display: grid;
+	gap: 10px;
+}
+
 .mcast-mobile__settings select,
 .mcast-mobile__name-field input {
 	width: 100%;
@@ -833,8 +838,9 @@
 		align-self: center;
 	}
 
-	.mcast-mobile__name-field {
+	.mcast-mobile__identity-fields {
 		grid-area: name;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
 	.mcast-mobile__setup-scroll > .mcast-mobile__primary {

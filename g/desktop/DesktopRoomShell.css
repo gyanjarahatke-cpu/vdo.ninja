@@ -564,11 +564,17 @@
 }
 
 .mcast-desktop__setup-form {
-	width: min(620px, 100%);
+	width: min(900px, 100%);
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 190px;
 	gap: 12px;
 	align-items: end;
+}
+
+.mcast-desktop__identity-fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
 }
 
 .mcast-desktop__field {
@@ -913,6 +919,10 @@
 	}
 
 	.mcast-desktop__room {
+		grid-template-columns: 1fr;
+	}
+
+	.mcast-desktop__identity-fields {
 		grid-template-columns: 1fr;
 	}
 

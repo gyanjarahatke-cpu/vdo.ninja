@@ -125,6 +125,7 @@ test.describe("desktop MCast UI ownership", () => {
 			await expect(page.locator("#mcastDesktopSetupTitle")).toHaveText(remote.title);
 			await expect(page.locator("#mcastDesktopJoinButton")).toContainText(remote.action);
 			await expect(page.locator("#mcastDesktopGuestNameField")).toBeHidden();
+			await expect(page.locator("#mcastDesktopGuestHeadlineField")).toBeHidden();
 			await page.locator("#mcastDesktopSettingsButton").click();
 			await expect(page.locator("#mcastDesktopSettingsPanel")).toBeVisible();
 			await expect(page.locator("#mcastDesktopCameraField"))[remote.cameraVisible ? "toBeVisible" : "toBeHidden"]();
@@ -170,7 +171,7 @@ test.describe("mobile remote-source UI", () => {
 		await expect(root).toHaveAttribute("data-experience", "remote_screen");
 		await expect(page.locator("#mcastMobilePermissionTitle")).toHaveText("Share a screen with MCast Studio");
 		await expect(page.locator("#mcastMobileAllowButton")).toContainText("Choose what to share");
-		for (const selector of ["#mcastMobileGuestNameField", "#mcastMobileCameraField", "#mcastMobileMicField"]) {
+		for (const selector of ["#mcastMobileGuestNameField", "#mcastMobileGuestHeadlineField", "#mcastMobileCameraField", "#mcastMobileMicField"]) {
 			await expect(page.locator(selector)).toBeHidden();
 		}
 		await page.waitForTimeout(1300);

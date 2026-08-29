@@ -55,6 +55,7 @@
 		guardDesktopLogo();
 		fillDesktopRouteDetails();
 		restoreGuestName();
+		restoreGuestHeadline();
 		setStep("loading");
 		setStatus(state.experience.loadingMessage);
 		window.setTimeout(function () {
@@ -188,7 +189,7 @@
 		setText("mcastDesktopPreviewLabel", state.experience.previewLabel);
 		setText("mcastDesktopPreviewHint", state.experience.previewHint);
 		setButtonText("mcastDesktopJoinButton", state.experience.primaryAction);
-		setHidden("mcastDesktopGuestNameField", !state.capabilities.displayName);
+		setHidden("mcastDesktopGuestIdentityFields", !state.capabilities.displayName);
 		setHidden("mcastDesktopCameraField", !state.capabilities.camera);
 		setHidden("mcastDesktopMicField", !state.capabilities.microphone);
 		setHidden("mcastDesktopSpeakerField", state.experience.kind !== "guest");
@@ -217,6 +218,7 @@
 		});
 		on("mcastDesktopJoinButton", "click", joinRoom);
 		on("mcastDesktopGuestName", "input", applyGuestName);
+		on("mcastDesktopGuestHeadline", "input", applyGuestHeadline);
 		on("mcastDesktopCameraSelect", "change", function (event) {
 			applyCameraSelection(event.target.value);
 		});
@@ -346,7 +348,10 @@
 			if (state.joinWithoutCamera) {
 				applyNoCameraSession();
 			}
-			if (state.capabilities.displayName) { applyGuestName(); }
+			if (state.capabilities.displayName) {
+				applyGuestName();
+				applyGuestHeadline();
+			}
 			await waitForReadyButton(9000);
 			if (typeof window.publishWebcam !== "function") {
 				await waitForFunction("publishWebcam", 4500);
@@ -1001,7 +1006,39 @@
 			document.title = name + " - MCast Studio v9";
 		} catch (error) {}
 		updateLocalTileLabel(name);
+		updateNativeGuestIdentity();
 		return name;
+	}
+
+	function applyGuestHeadline() {
+		if (document.documentElement.classList.contains("mcast-route-error")) {
+			return "";
+		}
+		var input = byId("mcastDesktopGuestHeadline");
+		var headline = normalizeSingleLine(input ? input.value : "", 120);
+		if (input && input.value !== headline) {
+			input.value = headline;
+		}
+		try {
+			if (window.session) {
+				window.session.headline = headline;
+			}
+			window.sessionStorage.setItem("mcastGuestHeadline", headline);
+		} catch (error) {}
+		updateNativeGuestIdentity();
+		return headline;
+	}
+
+	function updateNativeGuestIdentity() {
+		if (window.MCastNativeWebRtcBridge && typeof window.MCastNativeWebRtcBridge.updateIdentity === "function") {
+			window.MCastNativeWebRtcBridge.updateIdentity();
+		}
+	}
+
+	function normalizeSingleLine(value, maximumLength) {
+		return Array.from(String(value || "").replace(/[\u0000-\u001f\u007f-\u009f\s]+/g, " ").trim())
+			.slice(0, maximumLength)
+			.join("");
 	}
 
 	function updateLocalTileLabel(name) {
@@ -1040,6 +1077,17 @@
 		try {
 			input.value = (window.sessionStorage.getItem("mcastGuestName") || "").slice(0, 60);
 			applyGuestName();
+		} catch (error) {}
+	}
+
+	function restoreGuestHeadline() {
+		var input = byId("mcastDesktopGuestHeadline");
+		if (!input || input.value) {
+			return;
+		}
+		try {
+			input.value = normalizeSingleLine(window.sessionStorage.getItem("mcastGuestHeadline") || "", 120);
+			applyGuestHeadline();
 		} catch (error) {}
 	}
 

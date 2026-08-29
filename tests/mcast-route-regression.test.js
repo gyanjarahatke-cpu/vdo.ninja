@@ -310,8 +310,8 @@ assert.ok(!routeScript.includes("mcastResolvedGuestRoute"));
 assert.ok(!routeScript.includes("vdoTokenResolve"));
 assert.ok(!routeScript.includes("g|m|c|s|p|i|rv|ra|rs"), "the engine must not retain legacy route aliases");
 assert.ok(
-	engineStartup.includes('if (!document.documentElement.classList.contains("mcast-route")) {\n\t\t\t\tdocument.title = session.label;') &&
-		engineStartup.includes('if (session.label && !document.documentElement.classList.contains("mcast-route")) {'),
+	/if \(!document\.documentElement\.classList\.contains\("mcast-route"\)\) \{\s*document\.title = session\.label;/.test(engineStartup) &&
+		/if \(session\.label && !document\.documentElement\.classList\.contains\("mcast-route"\)\) \{\s*document\.title = session\.label;/.test(engineStartup),
 	"the private engine must not replace the branded browser title with a participant label"
 );
 
@@ -350,11 +350,15 @@ assert.strictEqual((guestEngine.match(/\.\/g\/shared\/McastGuestUi\.js/g) || [])
 assert.ok(guestEngine.includes('./main.js?ver=1066'), "the private engine must request the current managed runtime revision");
 assert.ok(guestEngine.includes('./g/shared/McastGuestUi.js?v=12'));
 assert.ok(guestEngine.includes('./g/shared/McastGuestUi.css?v=4'));
-assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=16'));
-assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=24'));
-assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=14'));
-assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=23'));
-assert.ok(guestEngine.includes('./g/shared/McastNativeWebRtcBridge.js?v=16'));
+assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.css?v=17'));
+assert.ok(guestEngine.includes('./g/desktop/DesktopRoomShell.js?v=25'));
+assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.css?v=15'));
+assert.ok(guestEngine.includes('./g/mobile/MobileRoomShell.js?v=24'));
+assert.ok(guestEngine.includes('./g/shared/McastNativeWebRtcBridge.js?v=17'));
+assert.match(guestEngine, /id="mcastDesktopGuestHeadline"[^>]+type="text"[^>]+maxlength="120"/);
+assert.match(guestEngine, /id="mcastMobileGuestHeadline"[^>]+type="text"[^>]+maxlength="120"/);
+assert.ok(desktopShell.includes('window.session.headline = headline'));
+assert.ok(mobileShell.includes('window.session.headline = headline'));
 assert.strictEqual((guestEngine.match(/data-mcast-notice-rail/g) || []).length, 4, "every reachable shell header must own a notice rail");
 assert.strictEqual((guestEngine.match(/data-mcast-footer-rail/g) || []).length, 4, "every reachable shell must own a non-overlapping footer rail");
 assert.ok(!guestEngine.includes('data-mobile-step="entering"'), "the removed artificial mobile delay must not leave a dead loading screen");

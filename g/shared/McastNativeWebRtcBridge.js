@@ -769,6 +769,7 @@
 		});
 		channel.addEventListener("open", function () {
 			state.log("MCast native WebRTC command channel open", { uuid: safeId(uuid), label: channel.label });
+			sendGuestIdentity(channel);
 			var pc = state.peers[uuid];
 			createPostConnectOfferIfNeeded(uuid, pc);
 		});
@@ -776,9 +777,45 @@
 			delete state.dataChannels[uuid + ":" + channel.label];
 		});
 		if (channel.readyState === "open") {
+			sendGuestIdentity(channel);
 			var pc = state.peers[uuid];
 			createPostConnectOfferIfNeeded(uuid, pc);
 		}
+	}
+
+	function readSingleLineIdentityValue(value, maximumLength) {
+		return Array.from(String(value || "").replace(/[\u0000-\u001f\u007f-\u009f\s]+/g, " ").trim())
+			.slice(0, maximumLength)
+			.join("");
+	}
+
+	function sendGuestIdentity(channel) {
+		if (!channel || channel.readyState !== "open" || typeof channel.send !== "function") {
+			return false;
+		}
+		var currentSession = window.session || {};
+		var displayName = readSingleLineIdentityValue(currentSession.label, 60);
+		if (!displayName) {
+			return false;
+		}
+		try {
+			channel.send(JSON.stringify({
+				type: "mcastGuestIdentity",
+				displayName: displayName,
+				headline: readSingleLineIdentityValue(currentSession.headline, 120)
+			}));
+			return true;
+		} catch (error) {
+			return false;
+		}
+	}
+
+	function updateIdentity() {
+		var sent = false;
+		Object.keys(state.dataChannels).forEach(function (key) {
+			sent = sendGuestIdentity(state.dataChannels[key]) || sent;
+		});
+		return sent;
 	}
 
 	function hookReturnTrackLifecycle(uuid, track, stream) {
@@ -1400,6 +1437,7 @@
 		isRequested: isRequested,
 		start: start,
 		stop: stop,
+		updateIdentity: updateIdentity,
 		debugSnapshot: function () {
 			return {
 				started: state.started,

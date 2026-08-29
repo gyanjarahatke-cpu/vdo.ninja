@@ -60,6 +60,7 @@
 		installNativeGuestControls();
 		wireUi();
 		restoreGuestName();
+		restoreGuestHeadline();
 		fillRoomName();
 		setStep("permission");
 		updatePreviewReadiness();
@@ -199,7 +200,7 @@
 			: state.experience.connectedMessage);
 		setButtonText("mcastMobileAllowButton", state.experience.permissionAction);
 		setButtonText("mcastMobileEnterButton", state.experience.primaryAction);
-		setHidden("mcastMobileGuestNameField", !state.capabilities.displayName);
+		setHidden("mcastMobileGuestIdentityFields", !state.capabilities.displayName);
 		setHidden("mcastMobileCameraField", !state.capabilities.camera);
 		setHidden("mcastMobileMicField", !state.capabilities.microphone);
 		setHidden("mcastMobileSpeakerField", state.experience.kind !== "guest");
@@ -246,6 +247,7 @@
 		});
 		on("mcastMobileEnterButton", "click", joinRoom);
 		on("mcastMobileGuestName", "input", applyGuestName);
+		on("mcastMobileGuestHeadline", "input", applyGuestHeadline);
 		on("mcastMobileSetupMicButton", "click", toggleMute);
 		on("mcastMobileRoomMicButton", "click", toggleMute);
 		on("mcastMobileSetupCameraButton", "click", toggleCamera);
@@ -395,7 +397,10 @@
 		setButtonBusy("mcastMobileEnterButton", true, "Connecting...");
 		setStatus("Preparing the secure connection...");
 		try {
-			if (state.capabilities.displayName) { applyGuestName(); }
+			if (state.capabilities.displayName) {
+				applyGuestName();
+				applyGuestHeadline();
+			}
 			bindLocalVideo("pre-publish");
 			if (typeof window.publishWebcam !== "function") {
 				await waitForFunction("publishWebcam", 4500);
@@ -1249,7 +1254,39 @@
 			document.title = name + " - MCast Studio v9";
 		} catch (error) {}
 		setSelfName();
+		updateNativeGuestIdentity();
 		return name;
+	}
+
+	function applyGuestHeadline() {
+		if (document.documentElement.classList.contains("mcast-route-error")) {
+			return "";
+		}
+		var input = byId("mcastMobileGuestHeadline");
+		var headline = normalizeSingleLine(input ? input.value : "", 120);
+		if (input && input.value !== headline) {
+			input.value = headline;
+		}
+		try {
+			if (window.session) {
+				window.session.headline = headline;
+			}
+			window.sessionStorage.setItem("mcastGuestHeadline", headline);
+		} catch (error) {}
+		updateNativeGuestIdentity();
+		return headline;
+	}
+
+	function updateNativeGuestIdentity() {
+		if (window.MCastNativeWebRtcBridge && typeof window.MCastNativeWebRtcBridge.updateIdentity === "function") {
+			window.MCastNativeWebRtcBridge.updateIdentity();
+		}
+	}
+
+	function normalizeSingleLine(value, maximumLength) {
+		return Array.from(String(value || "").replace(/[\u0000-\u001f\u007f-\u009f\s]+/g, " ").trim())
+			.slice(0, maximumLength)
+			.join("");
 	}
 
 	function restoreGuestName() {
@@ -1265,6 +1302,17 @@
 		try {
 			input.value = (window.sessionStorage.getItem("mcastGuestName") || "").slice(0, 60);
 			applyGuestName();
+		} catch (error) {}
+	}
+
+	function restoreGuestHeadline() {
+		var input = byId("mcastMobileGuestHeadline");
+		if (!input || input.value) {
+			return;
+		}
+		try {
+			input.value = normalizeSingleLine(window.sessionStorage.getItem("mcastGuestHeadline") || "", 120);
+			applyGuestHeadline();
 		} catch (error) {}
 	}
 
